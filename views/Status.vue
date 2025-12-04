@@ -242,7 +242,7 @@ const getSignalStrength = (csq) => {
   return '极强'
 }
 
-// 加载所有数据
+// 加载所有数据（首次加载，显示 loading 状态）
 const loadData = async () => {
   try {
     loading.value = true
@@ -268,14 +268,37 @@ const loadData = async () => {
   }
 }
 
+// 静默刷新数据（不显示 loading 状态，只更新对应参数）
+const refreshData = async () => {
+  try {
+    // 并行获取所有数据
+    const [status, network, misc] = await Promise.all([
+      fetchStatusData(),
+      fetchNetworkData(),
+      fetchMiscData()
+    ])
+    
+    // 只更新数据，不触发 loading 状态
+    statusInfo.value = status
+    networkInfo.value = network
+    miscInfo.value = misc
+    
+    // 清除之前可能存在的错误
+    error.value = null
+  } catch (err) {
+    // 静默刷新失败时，不覆盖当前显示的数据
+    console.error('数据刷新错误:', err)
+  }
+}
+
 // 组件挂载时加载数据
 onMounted(() => {
-  // 立即加载一次数据
+  // 立即加载一次数据（首次加载显示 loading）
   loadData()
   
-  // 每 5 秒自动刷新一次数据
+  // 每 5 秒自动静默刷新数据（不显示 loading，只更新参数）
   refreshTimer = setInterval(() => {
-    loadData()
+    refreshData()
   }, 5000)
 })
 
