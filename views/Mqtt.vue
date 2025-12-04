@@ -481,7 +481,7 @@ onMounted(() => {
 
 <style scoped>
 .description-box {
-  background-color: #ff8800; /* Orange background */
+  background-color: #0066cc; /* Blue background like Uart */
   color: white;
   padding: 10px 15px;
   margin-bottom: 20px;
@@ -503,23 +503,29 @@ onMounted(() => {
 
 .tabs {
   display: flex;
-  gap: 2px;
-  margin-bottom: 0;
-  border-bottom: 2px solid #0066cc;
+  gap: 10px;
+  margin: 20px 0;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 .tab-btn {
-  padding: 8px 30px;
-  background-color: #ff8800; /* Orange for active/default? Screenshot shows orange for active */
+  padding: 8px 20px;
+  background-color: #494641; /* Dark gray for inactive */
   color: white;
   border: none;
   cursor: pointer;
+  border-radius: 4px 4px 0 0;
   font-size: 13px;
   font-weight: 600;
+  transition: background-color 0.2s;
 }
 
-.tab-btn:not(.active) {
-    background-color: #0066cc; /* Blue for inactive */
+.tab-btn:hover {
+  background-color: #ff8800; /* Orange on hover */
+}
+
+.tab-btn.active {
+  background-color: #0066cc; /* Blue when active */
 }
 
 /* 表单区域样式 */

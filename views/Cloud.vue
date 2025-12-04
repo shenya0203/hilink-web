@@ -146,7 +146,7 @@ onMounted(() => {
 
 <style scoped>
 .description-box {
-  background-color: #ff8800;
+  background-color: #0066cc; /* Blue background like Uart */
   color: white;
   padding: 10px 15px;
   margin-bottom: 20px;
