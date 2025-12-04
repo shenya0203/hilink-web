@@ -6,6 +6,7 @@ import Uart from '../views/Uart.vue';
 import Socket from '../views/Socket.vue';
 import Mqtt from '../views/Mqtt.vue';
 import System from '../views/System.vue';
+import EdgeCompute from '../views/EdgeCompute.vue';
 
 // 简单的占位组件
 const Placeholder = { template: '<div class="main"><h3>功能开发中...</h3></div>' };
@@ -21,7 +22,7 @@ const routes = [
             { path: 'comm/Socket', name: 'Socket', component: Socket },
             { path: 'comm/MQTT', name: 'MQTT', component: Mqtt },
             { path: 'comm/USR_CLD', name: 'usr_cld', component: Placeholder },
-            { path: 'gateway/edge_gw', name: 'edge_gw', component: Placeholder },
+            { path: 'gateway/edge_gw', name: 'edge_gw', component: EdgeCompute },
             { path: 'system', name: 'system', component: System }
         ]
     }

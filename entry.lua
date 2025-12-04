@@ -94,6 +94,18 @@ local function handle_download_nv(args)
         
     elseif name == "offline_cache" then
         response = ubus_adapter.get_offline_cache_config()
+    
+    elseif name == "edge" then
+        response = ubus_adapter.get_edge_config()
+        
+    elseif name == "edge_report" then
+        response = ubus_adapter.get_edge_report_config()
+        
+    elseif name == "edge_access" then
+        response = ubus_adapter.get_edge_access_config()
+        
+    elseif name == "edge_link_ctrl" then
+        response = ubus_adapter.get_edge_link_ctrl_config()
     end
 
     -- Ensure response is not nil

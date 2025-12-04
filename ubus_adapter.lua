@@ -243,6 +243,143 @@ function _M.set_config(module, args)
         return true
     end
     
+    if module == "edge" then
+        -- 处理边缘计算配置更新
+        ngx.log(ngx.INFO, "Updating edge config...")
+        for k, v in pairs(args) do
+            if k == "n_all_en" then
+                edge_config.all_en = tonumber(v) or 0
+            elseif k == "n_refresh_frequency" then
+                edge_config.refresh_frequency = tonumber(v) or 100
+            elseif k == "n_calc_period" then
+                edge_config.calc_period = tonumber(v) or 100
+            elseif k == "n_poll_interval" then
+                edge_config.poll_interval = tonumber(v) or 100
+            end
+        end
+        return true
+    end
+    
+    return true
+end
+
+-- ==========================================================
+-- 边缘计算配置
+-- ==========================================================
+
+-- 12. Edge Config - 边缘计算基本配置
+local edge_config = {
+    all_en = 1,
+    refresh_frequency = 100,
+    calc_period = 100,
+    poll_interval = 100
+}
+
+function _M.get_edge_config()
+    return edge_config
+end
+
+function _M.set_edge_config(args)
+    for k, v in pairs(args) do
+        if k == "n_all_en" then
+            edge_config.all_en = tonumber(v) or 0
+        elseif k == "n_refresh_frequency" then
+            edge_config.refresh_frequency = tonumber(v) or 100
+        elseif k == "n_calc_period" then
+            edge_config.calc_period = tonumber(v) or 100
+        elseif k == "n_poll_interval" then
+            edge_config.poll_interval = tonumber(v) or 100
+        end
+    end
+    return true
+end
+
+-- 13. Edge Report Config - 数据上报配置
+local edge_report_config = {
+    group = {}
+}
+
+function _M.get_edge_report_config()
+    return edge_report_config
+end
+
+function _M.set_edge_report_config(data)
+    if data and data.group then
+        edge_report_config.group = data.group
+    end
+    return true
+end
+
+-- 14. Edge Access Config - 协议转换访问配置
+local edge_access_config = {
+    group = {
+        {
+            enable = 0,
+            name = "my_group1",
+            proto = 1,
+            up = {
+                link = "MQTT1",
+                topic = "/PubTopic",
+                qos = 0,
+                retention = 0
+            },
+            down = {
+                link = "MQTT1",
+                topic = "/SubTopic",
+                qos = 0
+            }
+        }
+    }
+}
+
+function _M.get_edge_access_config()
+    return edge_access_config
+end
+
+function _M.set_edge_access_config(data)
+    if data and data.group then
+        edge_access_config.group = data.group
+    end
+    return true
+end
+
+-- 15. Edge Link Control Config - 链路控制配置
+local edge_link_ctrl_config = {
+    group = {}
+}
+
+function _M.get_edge_link_ctrl_config()
+    return edge_link_ctrl_config
+end
+
+function _M.set_edge_link_ctrl_config(data)
+    if data and data.group then
+        edge_link_ctrl_config.group = data.group
+    end
+    return true
+end
+
+-- 16. Edge Points Data - 边缘计算点位数据 (CSV格式)
+local edge_points_csv = "V,V1.0,N7X0,;\nSC,Device1,1,2,1,100,0,0,192.168.0.21:2100,Device1,;\n"
+
+function _M.get_edge_points_csv()
+    return edge_points_csv
+end
+
+function _M.set_edge_points_csv(content)
+    edge_points_csv = content
+    return true
+end
+
+-- 17. Edge Proto Access Data - 协议转换点位数据 (CSV格式)
+local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
+
+function _M.get_edge_proto_access_csv()
+    return edge_proto_access_csv
+end
+
+function _M.set_edge_proto_access_csv(content)
+    edge_proto_access_csv = content
     return true
 end
 
