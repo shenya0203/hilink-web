@@ -1,14 +1,14 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- MQTT配置标题 -->
     <div class="description-box">
-      <div class="desc-title">MQTT通信链路</div>
+      <div class="desc-title">{{ t('mqtt.title') }}</div>
     </div>
 
     <!-- 标签页选择 -->
@@ -29,17 +29,17 @@
       <!-- MQTT使能设置 -->
       <div class="form-section">
         <div class="form-group">
-          <label>MQTT使能:</label>
+          <label>{{ t('mqtt.enable') }}:</label>
           <select v-model.number="mqttList[activeTab].enable">
-            <option :value="0">关闭</option>
-            <option :value="1">开启</option>
+            <option :value="0">{{ t('common.disable') }}</option>
+            <option :value="1">{{ t('common.enable') }}</option>
           </select>
         </div>
 
         <!-- 仅在MQTT使能为开启时显示配置 -->
         <template v-if="mqttList[activeTab].enable === 1">
           <div class="form-group">
-            <label>MQTT协议:</label>
+            <label>{{ t('mqtt.protocol') }}:</label>
             <select v-model.number="mqttList[activeTab].mqtt_ver">
               <option :value="3">MQTT-3.1</option>
               <option :value="4">MQTT-3.1.1</option>
@@ -47,69 +47,69 @@
           </div>
 
           <div class="form-group">
-            <label>客户ID:</label>
+            <label>{{ t('mqtt.clientId') }}:</label>
             <input v-model="mqttList[activeTab].client_id" type="text" />
           </div>
 
           <div class="form-group">
-            <label>服务器地址:</label>
+            <label>{{ t('mqtt.serverAddress') }}:</label>
             <input v-model="mqttList[activeTab].server_ip" type="text" />
           </div>
 
           <div class="form-group">
-            <label>远程端口号:</label>
+            <label>{{ t('mqtt.remotePort') }}:</label>
             <input v-model.number="mqttList[activeTab].server_port" type="number" />
           </div>
 
           <div class="form-group">
-            <label>Keepalive:</label>
+            <label>{{ t('mqtt.keepalive') }}:</label>
             <input v-model.number="mqttList[activeTab].keepalive" type="number" />
           </div>
 
           <div class="form-group">
-            <label>重连间隔时间:</label>
+            <label>{{ t('mqtt.reconnectInterval') }}:</label>
             <input v-model.number="mqttList[activeTab].reconn_space" type="number" />
           </div>
 
           <div class="form-group">
-            <label>清理会话:</label>
+            <label>{{ t('mqtt.cleanSession') }}:</label>
             <input type="checkbox" v-model="mqttList[activeTab].clean_session" :true-value="1" :false-value="0" />
           </div>
 
           <div class="form-group">
-            <label>连接验证:</label>
+            <label>{{ t('mqtt.connectionAuth') }}:</label>
             <input type="checkbox" v-model="mqttList[activeTab].conn_verify" :true-value="1" :false-value="0" />
           </div>
           
           <!-- 连接验证开启时显示 -->
           <template v-if="mqttList[activeTab].conn_verify === 1">
             <div class="form-group">
-              <label>用户名:</label>
+              <label>{{ t('mqtt.username') }}:</label>
               <input v-model="mqttList[activeTab].conn_user_name" type="text" />
             </div>
             <div class="form-group">
-              <label>密码:</label>
+              <label>{{ t('mqtt.password') }}:</label>
               <input v-model="mqttList[activeTab].conn_user_password" type="password" />
             </div>
           </template>
 
           <div class="form-group">
-            <label>遗嘱:</label>
+            <label>{{ t('mqtt.will') }}:</label>
             <input type="checkbox" v-model="mqttList[activeTab].will_flag" :true-value="1" :false-value="0" />
           </div>
 
           <!-- 遗嘱开启时显示 -->
           <template v-if="mqttList[activeTab].will_flag === 1">
             <div class="form-group">
-              <label>遗嘱Topic:</label>
+              <label>{{ t('mqtt.willTopic') }}:</label>
               <input v-model="mqttList[activeTab].will.topic" type="text" />
             </div>
             <div class="form-group">
-              <label>遗嘱消息:</label>
+              <label>{{ t('mqtt.willMessage') }}:</label>
               <input v-model="mqttList[activeTab].will.msg" type="text" />
             </div>
             <div class="form-group">
-              <label>遗嘱QoS:</label>
+              <label>{{ t('mqtt.willQos') }}:</label>
               <select v-model.number="mqttList[activeTab].will.qos">
                   <option :value="0">0</option>
                   <option :value="1">1</option>
@@ -117,48 +117,48 @@
               </select>
             </div>
             <div class="form-group">
-              <label>遗嘱保留:</label>
+              <label>{{ t('mqtt.willRetain') }}:</label>
               <select v-model.number="mqttList[activeTab].will.retention">
-                  <option :value="0">不保留</option>
-                  <option :value="1">保留</option>
+                  <option :value="0">{{ t('mqtt.noRetain') }}</option>
+                  <option :value="1">{{ t('mqtt.retain') }}</option>
               </select>
             </div>
           </template>
 
           <div class="form-group">
-            <label>断网缓存:</label>
+            <label>{{ t('mqtt.offlineCache') }}:</label>
             <select v-model.number="mqttList[activeTab].offline_cache_enable">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label>SSL加密:</label>
+            <label>{{ t('mqtt.sslEncrypt') }}:</label>
             <select v-model.number="mqttList[activeTab].ssl_mode">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label>认证方式:</label>
+            <label>{{ t('mqtt.authMethod') }}:</label>
             <select v-model.number="mqttList[activeTab].ssl_verify">
-              <option :value="0">不认证证书</option>
-              <option :value="1">认证服务器证书</option>
-              <option :value="2">双向认证</option>
+              <option :value="0">{{ t('mqtt.noAuth') }}</option>
+              <option :value="1">{{ t('mqtt.serverAuth') }}</option>
+              <option :value="2">{{ t('mqtt.mutualAuth') }}</option>
             </select>
           </div>
 
           <!-- 服务器证书上传 (ssl_verify >= 1) -->
           <template v-if="mqttList[activeTab].ssl_verify >= 1">
             <div class="form-group">
-              <label>服务器根证书上传:</label>
+              <label>{{ t('mqtt.serverCert') }}:</label>
               <input type="file" ref="serverCertInput" @change="handleServerCertSelect" accept=".crt,.pem" style="display:none" />
-              <button type="button" class="btn-upload" @click="triggerFileSelect('server')">选择文件</button>
-              <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">上传...</button>
+              <button type="button" class="btn-upload" @click="triggerFileSelect('server')">{{ t('common.selectFile') }}</button>
+              <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">{{ t('common.upload') }}...</button>
               <span v-if="mqttList[activeTab].ssl_server_name && mqttList[activeTab].ssl_server_name !== 'null'" class="file-name">
-                已选文件: {{ mqttList[activeTab].ssl_server_name }}
+                {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_server_name }}
               </span>
             </div>
           </template>
@@ -166,22 +166,22 @@
           <!-- 客户端证书和私钥上传 (ssl_verify == 2) -->
           <template v-if="mqttList[activeTab].ssl_verify === 2">
             <div class="form-group">
-              <label>客户端证书上传:</label>
+              <label>{{ t('mqtt.clientCert') }}:</label>
               <input type="file" ref="clientCertInput" @change="handleClientCertSelect" accept=".crt,.pem" style="display:none" />
-              <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">选择文件</button>
-              <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">上传...</button>
+              <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">{{ t('common.selectFile') }}</button>
+              <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">{{ t('common.upload') }}...</button>
               <span v-if="mqttList[activeTab].ssl_client_name && mqttList[activeTab].ssl_client_name !== 'null'" class="file-name">
-                已选文件: {{ mqttList[activeTab].ssl_client_name }}
+                {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_client_name }}
               </span>
             </div>
 
             <div class="form-group">
-              <label>客户端私钥上传:</label>
+              <label>{{ t('mqtt.clientKey') }}:</label>
               <input type="file" ref="clientKeyInput" @change="handleClientKeySelect" accept=".key,.pem" style="display:none" />
-              <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">选择文件</button>
-              <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">上传...</button>
+              <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">{{ t('common.selectFile') }}</button>
+              <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">{{ t('common.upload') }}...</button>
               <span v-if="mqttList[activeTab].ssl_client_key && mqttList[activeTab].ssl_client_key !== 'null'" class="file-name">
-                已选文件: {{ mqttList[activeTab].ssl_client_key }}
+                {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_client_key }}
               </span>
             </div>
           </template>
@@ -192,7 +192,7 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">应用保存</button>
+      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
   </div>
 </template>
@@ -201,6 +201,10 @@
 import { ref, onMounted } from 'vue'
 import { getCommTunnel, getOfflineCache } from '../api/services'
 import apiClient from '../api/services'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 // 响应式数据
 const loading = ref(true)
@@ -260,7 +264,7 @@ const uploadServerCert = async () => {
   const file = serverCertFile.value
   
   if (!file) {
-    alert('请先选择文件')
+    alert(t('common.selectFile'))
     return
   }
 
@@ -318,14 +322,14 @@ const uploadServerCert = async () => {
 
     // 更新本地数据
     mqttList.value[activeTab.value].ssl_server_name = filename
-    alert('证书文件上传成功')
+    alert(t('common.uploadSuccess'))
     
     // 清空文件选择
     serverCertFile.value = null
   } catch (err) {
     console.error('上传服务器证书失败，详细错误:', err)
     console.error('错误堆栈:', err.stack)
-    alert('上传失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('common.uploadFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -334,7 +338,7 @@ const uploadClientCert = async () => {
   const file = clientCertFile.value
   
   if (!file) {
-    alert('请先选择文件')
+    alert(t('common.selectFile'))
     return
   }
 
@@ -368,12 +372,12 @@ const uploadClientCert = async () => {
     })
 
     mqttList.value[activeTab.value].ssl_client_name = filename
-    alert('证书文件上传成功')
+    alert(t('common.uploadSuccess'))
     
     clientCertFile.value = null
   } catch (err) {
     console.error('上传客户端证书失败:', err)
-    alert('上传失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('common.uploadFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -382,7 +386,7 @@ const uploadClientKey = async () => {
   const file = clientKeyFile.value
   
   if (!file) {
-    alert('请先选择文件')
+    alert(t('common.selectFile'))
     return
   }
 
@@ -416,12 +420,12 @@ const uploadClientKey = async () => {
     })
 
     mqttList.value[activeTab.value].ssl_client_key = filename
-    alert('证书文件上传成功')
+    alert(t('common.uploadSuccess'))
     
     clientKeyFile.value = null
   } catch (err) {
     console.error('上传客户端私钥失败:', err)
-    alert('上传失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('common.uploadFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -458,7 +462,7 @@ const loadData = async () => {
       }
     }
   } catch (err) {
-    error.value = '加载配置失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
     console.error('配置加载错误:', err)
   } finally {
     loading.value = false
@@ -470,7 +474,7 @@ const saveConfig = () => {
   console.log('保存MQTT配置:', mqttList.value)
   // 这里需要处理保存逻辑，可能需要拆分回两个接口的格式
   // 暂时只打印
-  alert('配置已保存 (模拟)')
+  alert(t('common.saveSuccess') + ' (模拟)')
 }
 
 // 组件挂载时加载数据

@@ -7,13 +7,21 @@
         <!-- <img src="..." alt="logo" /> -->
       </div>
       <div class="logo_left">
-        <h1>工业路由网关</h1>
-        <h4>Web 配置管理系统</h4>
+        <h1>{{ t('navbar.title') }}</h1>
+        <h4>{{ t('navbar.subtitle') }}</h4>
       </div>
       <div class="logo_right">
         <div class="right_top">N720</div>
-        <div class="right_bottom">
-          <span>中文</span> | <span>English</span>
+        <div class="right_bottom language-switcher">
+          <span 
+            :class="{ active: locale === 'zh-CN' }" 
+            @click="setLocale('zh-CN')"
+          >中文</span>
+          <span class="divider">|</span>
+          <span 
+            :class="{ active: locale === 'en-US' }" 
+            @click="setLocale('en-US')"
+          >English</span>
         </div>
       </div>
     </header>
@@ -33,13 +41,13 @@
               >
                 <div class="folder-title">
                   <span class="arrow"></span>
-                  <span>{{ item.label }}</span>
+                  <span>{{ t(item.labelKey) }}</span>
                 </div>
               </div>
               <ul class="subMenu" v-show="expandedMenus.includes(item.name) || isSubmenuActive(item)">
                 <li v-for="sub in item.submenu" :key="sub.name" class="subMenu-item">
                   <div class="menu-title" :class="{ 'now-target-item': route.name === sub.name }">
-                    <div class="link" @click="navigateTo(sub.name)">{{ sub.label }}</div>
+                    <div class="link" @click="navigateTo(sub.name)">{{ t(sub.labelKey) }}</div>
                   </div>
                 </li>
               </ul>
@@ -52,7 +60,7 @@
                 :class="{ 'now-target-item': route.name === item.name }"
                 @click="navigateTo(item.name)"
             >
-              {{ item.label }}
+              {{ t(item.labelKey) }}
             </div>
 
           </div>
@@ -61,47 +69,51 @@
 
       <!-- 主内容区域 -->
       <main class="main">
-        <router-view></router-view>
+        <router-view :key="locale"></router-view>
       </main>
     </div>
 
     <!-- 底部 (根据CSS可能存在) -->
     <div class="footer">
-      Copyright © USR IOT
+      {{ t('footer.copyright') }}
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from '../i18n/useI18n.js';
 
 const router = useRouter();
 const route = useRoute();
 const expandedMenus = ref(['comm', 'port']); // 默认展开
 
-// 菜单配置（根据你的JS文件还原）
-const menuItems = [
-  { name: 'status', label: '当前状态' },
-  { name: 'network', label: '网络' },
+// 使用 i18n
+const { t, locale, setLocale } = useI18n();
+
+// 菜单配置（使用翻译键）
+const menuItems = computed(() => [
+  { name: 'status', labelKey: 'menu.status' },
+  { name: 'network', labelKey: 'menu.network' },
   { 
-    name: 'port', label: '端口', 
-    submenu: [{ name: 'uart', label: '串口' }] 
+    name: 'port', labelKey: 'menu.port', 
+    submenu: [{ name: 'uart', labelKey: 'menu.uart' }] 
   },
   { 
-    name: 'comm', label: '通信', 
+    name: 'comm', labelKey: 'menu.comm', 
     submenu: [
-      { name: 'Socket', label: 'Socket' },
-      { name: 'MQTT', label: 'MQTT' },
-      { name: 'usr_cld', label: 'USR_CLD' }
+      { name: 'Socket', labelKey: 'menu.socket' },
+      { name: 'MQTT', labelKey: 'menu.mqtt' },
+      { name: 'usr_cld', labelKey: 'menu.usrCld' }
     ] 
   },
   { 
-    name: 'gateway', label: '网关', 
-    submenu: [{ name: 'edge_gw', label: '边缘计算' }] 
+    name: 'gateway', labelKey: 'menu.gateway', 
+    submenu: [{ name: 'edge_gw', labelKey: 'menu.edgeCompute' }] 
   },
-  { name: 'system', label: '系统设置' }
-];
+  { name: 'system', labelKey: 'menu.system' }
+]);
 
 const navigateTo = (name) => {
   router.push({ name });
@@ -118,3 +130,29 @@ const isSubmenuActive = (item) => {
   return item.submenu.some(sub => sub.name === route.name);
 };
 </script>
+
+<style scoped>
+/* 语言切换器样式 */
+.language-switcher {
+  cursor: pointer;
+  user-select: none;
+}
+
+.language-switcher span {
+  transition: color 0.2s, opacity 0.2s;
+}
+
+.language-switcher span:not(.divider):hover {
+  color: #66b3ff;
+}
+
+.language-switcher span.active {
+  color: #ffcc00;
+  font-weight: bold;
+}
+
+.language-switcher .divider {
+  margin: 0 5px;
+  color: #999;
+}
+</style>

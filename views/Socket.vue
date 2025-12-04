@@ -1,15 +1,15 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- Socket配置标题 -->
     <form>
-      <legend>Socket 参数设置</legend>
-      <div class="config-subtitle">Socket通信通道的详细参数配置</div>
+      <legend>{{ t('socket.title') }}</legend>
+      <div class="config-subtitle">{{ t('socket.description') }}</div>
     </form>
 
     <!-- 标签页选择 -->
@@ -22,10 +22,10 @@
     <form v-if="socketList[activeTab]">
       <div class="form-section">
         <div class="form-group">
-          <label>Socket使能:</label>
+          <label>{{ t('socket.enable') }}:</label>
           <select v-model.number="socketList[activeTab].enable">
-            <option :value="0">关闭</option>
-            <option :value="1">开启</option>
+            <option :value="0">{{ t('common.disable') }}</option>
+            <option :value="1">{{ t('common.enable') }}</option>
           </select>
         </div>
       </div>
@@ -33,11 +33,11 @@
       <template v-if="socketList[activeTab].enable === 1">
         <div class="form-section">
           <div class="form-group">
-            <label>Socket模式:</label>
+            <label>{{ t('socket.workMode') }}:</label>
             <select v-model.number="socketList[activeTab].mode">
-              <option :value="0">TCP Client</option>
-              <option :value="1">TCP Server</option>
-              <option :value="2">UDP Client</option>
+              <option :value="0">{{ t('socket.tcpClient') }}</option>
+              <option :value="1">{{ t('socket.tcpServer') }}</option>
+              <option :value="2">{{ t('socket.udpClient') }}</option>
               <option :value="3">HTTP Client</option>
             </select>
           </div>
@@ -46,25 +46,25 @@
         <!-- TCP Client 配置 -->
         <div v-if="socketList[activeTab].mode === 0" class="form-section">
           <div class="form-group">
-            <label>远程服务器地址:</label>
+            <label>{{ t('socket.serverAddress') }}:</label>
             <input v-model="socketList[activeTab].tcpc.server_ip" type="text" />
           </div>
           <div class="form-group">
-            <label>本地端口号:</label>
+            <label>{{ t('socket.localPort') }}:</label>
             <input v-model.number="socketList[activeTab].tcpc.local_port" type="number" />
           </div>
           <div class="form-group">
-            <label>远程端口号:</label>
+            <label>{{ t('socket.remotePort') }}:</label>
             <input v-model.number="socketList[activeTab].tcpc.server_port" type="number" />
           </div>
           <div class="form-group">
-            <label>重连间隔:</label>
+            <label>{{ t('socket.reconnectInterval') }}:</label>
             <input v-model.number="socketList[activeTab].tcpc.reconn_interval" type="number" />
           </div>
           <div class="form-group">
-            <label>SSL加密:</label>
+            <label>{{ t('socket.sslEncrypt') }}:</label>
             <select v-model.number="socketList[activeTab].tcpc.ssl_mode">
-              <option :value="0">关闭</option>
+              <option :value="0">{{ t('common.disable') }}</option>
               <option :value="1">TLS1.2</option>
             </select>
           </div>
@@ -72,111 +72,109 @@
           <!-- SSL认证方式 (仅TLS1.2时可选) -->
           <template v-if="socketList[activeTab].tcpc.ssl_mode === 1">
             <div class="form-group">
-              <label>认证方式:</label>
+              <label>{{ t('socket.authMethod') }}:</label>
               <select v-model.number="socketList[activeTab].tcpc.ssl_verify">
-                <option :value="0">不认证证书</option>
-                <option :value="1">认证服务器</option>
-                <option :value="2">双向认证</option>
+                <option :value="0">{{ t('socket.noAuth') }}</option>
+                <option :value="1">{{ t('socket.serverAuth') }}</option>
+                <option :value="2">{{ t('socket.mutualAuth') }}</option>
               </select>
             </div>
 
             <!-- 服务器证书上传 -->
             <template v-if="socketList[activeTab].tcpc.ssl_verify >= 1">
               <div class="form-group">
-                <label>服务器根证书上传:</label>
+                <label>{{ t('socket.serverCert') }}:</label>
                 <input type="file" ref="serverCertInput" @change="handleServerCertSelect" accept=".crt,.pem" style="display:none" />
-                <button type="button" class="btn-upload" @click="triggerFileSelect('server')">选择文件</button>
-                <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">上传...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_server_name && socketList[activeTab].tcpc.ssl_server_name !== 'null'" class="file-name">已选择文件</span>
+                <button type="button" class="btn-upload" @click="triggerFileSelect('server')">{{ t('common.selectFile') }}</button>
+                <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">{{ t('common.upload') }}...</button>
+                <span v-if="socketList[activeTab].tcpc.ssl_server_name && socketList[activeTab].tcpc.ssl_server_name !== 'null'" class="file-name">{{ t('common.selectedFile') }}</span>
               </div>
             </template>
 
             <!-- 客户端证书和私钥上传 (双向认证) -->
             <template v-if="socketList[activeTab].tcpc.ssl_verify === 2">
               <div class="form-group">
-                <label>客户端证书上传:</label>
+                <label>{{ t('socket.clientCert') }}:</label>
                 <input type="file" ref="clientCertInput" @change="handleClientCertSelect" accept=".crt,.pem" style="display:none" />
-                <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">选择文件</button>
-                <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">上传...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_client_name && socketList[activeTab].tcpc.ssl_client_name !== 'null'" class="file-name">已选择文件</span>
+                <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">{{ t('common.selectFile') }}</button>
+                <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">{{ t('common.upload') }}...</button>
+                <span v-if="socketList[activeTab].tcpc.ssl_client_name && socketList[activeTab].tcpc.ssl_client_name !== 'null'" class="file-name">{{ t('common.selectedFile') }}</span>
               </div>
               <div class="form-group">
-                <label>客户端私钥上传:</label>
+                <label>{{ t('socket.clientKey') }}:</label>
                 <input type="file" ref="clientKeyInput" @change="handleClientKeySelect" accept=".key,.pem" style="display:none" />
-                <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">选择文件</button>
-                <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">上传...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_client_key && socketList[activeTab].tcpc.ssl_client_key !== 'null'" class="file-name">已选择文件</span>
+                <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">{{ t('common.selectFile') }}</button>
+                <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">{{ t('common.upload') }}...</button>
+                <span v-if="socketList[activeTab].tcpc.ssl_client_key && socketList[activeTab].tcpc.ssl_client_key !== 'null'" class="file-name">{{ t('common.selectedFile') }}</span>
               </div>
             </template>
           </template>
 
           <!-- 注册包配置 -->
           <div class="form-group">
-            <label>注册包使能:</label>
+            <label>{{ t('socket.registerPacket') }}:</label>
             <select v-model.number="socketList[activeTab].tcpc.regp_en">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
           <template v-if="socketList[activeTab].tcpc.regp_en === 1">
             <div class="form-group">
-              <label>注册包发送方式:</label>
+              <label>{{ t('socket.registerSendMode') }}:</label>
               <select v-model.number="socketList[activeTab].tcpc.regp_tim">
-                <option :value="0">建立连接时</option>
-                <option :value="1">发送数据时</option>
-                <option :value="2">都发送</option>
+                <option :value="0">{{ t('socket.onConnect') }}</option>
+                <option :value="1">{{ t('socket.onSend') }}</option>
+                <option :value="2">{{ t('socket.both') }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>注册包发送内容:</label>
+              <label>{{ t('socket.registerContent') }}:</label>
               <select v-model.number="socketList[activeTab].tcpc.regp_fmt">
                 <option :value="0">MAC</option>
                 <option :value="1">IMEI</option>
                 <option :value="2">SN</option>
-                <option :value="3">自定义</option>
+                <option :value="3">{{ t('socket.custom') }}</option>
               </select>
             </div>
             <div v-if="socketList[activeTab].tcpc.regp_fmt === 3" class="form-group">
-              <label>注册包自定义内容:</label>
+              <label>{{ t('socket.customContent') }}:</label>
               <input v-model="socketList[activeTab].tcpc.regp_ctx" type="text" maxlength="128" />
             </div>
           </template>
 
           <!-- 心跳包配置 -->
           <div class="form-group">
-            <label>心跳包使能:</label>
+            <label>{{ t('socket.heartbeat') }}:</label>
             <select v-model.number="socketList[activeTab].tcpc.hrtp_en">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
           <template v-if="socketList[activeTab].tcpc.hrtp_en === 1">
             <div class="form-group">
-              <label>心跳包时间(秒):</label>
+              <label>{{ t('socket.heartbeatInterval') }}:</label>
               <input v-model.number="socketList[activeTab].tcpc.hrtp_tim" type="number" min="1" />
             </div>
             <div class="form-group">
-              <label>心跳包发送内容:</label>
+              <label>{{ t('socket.heartbeatContent') }}:</label>
               <select v-model.number="socketList[activeTab].tcpc.hrtp_fmt">
                 <option :value="0">MAC</option>
                 <option :value="1">IMEI</option>
-                <option :value="2">自定义</option>
+                <option :value="2">{{ t('socket.custom') }}</option>
               </select>
             </div>
             <div v-if="socketList[activeTab].tcpc.hrtp_fmt === 2" class="form-group">
-              <label>心跳包自定义内容:</label>
-              <input v-model="socketList[activeTab].tcpc.hrtp_ctx" type="text" maxlength="128" 
-                     pattern="[a-zA-Z0-9\-_.~@]+" 
-                     title="1-128字节，支持'a'-'z'/'A'-'Z'/'0'-'9'和'-_.~@'" />
+              <label>{{ t('socket.customContent') }}:</label>
+              <input v-model="socketList[activeTab].tcpc.hrtp_ctx" type="text" maxlength="128" />
             </div>
           </template>
 
           <!-- 断网缓存 -->
           <div class="form-group">
-            <label>断网缓存:</label>
+            <label>{{ t('socket.offlineCache') }}:</label>
             <select v-model.number="offlineCacheList[activeTab]">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
         </div>
@@ -184,80 +182,80 @@
         <!-- TCP Server 配置 -->
         <div v-if="socketList[activeTab].mode === 1" class="form-section">
           <div class="form-group">
-            <label>本地端口号:</label>
+            <label>{{ t('socket.localPort') }}:</label>
             <input v-model.number="socketList[activeTab].tcps.local_port" type="number" />
           </div>
           <div class="form-group">
-            <label>TCP Server最大连接数:</label>
+            <label>{{ t('socket.maxConnections') }}:</label>
             <input v-model.number="socketList[activeTab].tcps.conn_max_num" type="number" />
           </div>
           <div class="form-group">
-            <label>超出连接数量:</label>
+            <label>{{ t('socket.overflowHandle') }}:</label>
             <select v-model.number="socketList[activeTab].tcps.timeout_handling">
               <option :value="0">KEEP</option>
               <option :value="1">KICK</option>
             </select>
           </div>
           <div class="form-group">
-            <label>断网缓存:</label>
+            <label>{{ t('socket.offlineCache') }}:</label>
             <select v-model.number="offlineCacheList[activeTab]">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
         </div>
 
         <!-- UDP Client 配置 -->
         <div v-if="socketList[activeTab].mode === 2" class="form-section">
-          <div class="section-title">UDP Client 配置</div>
+          <div class="section-title">{{ t('socket.udpClient') }} {{ t('socket.config') }}</div>
           <div class="form-group">
-            <label>远程服务器地址:</label>
+            <label>{{ t('socket.serverAddress') }}:</label>
             <input v-model="socketList[activeTab].udpc.server_ip" type="text" />
           </div>
           <div class="form-group">
-            <label>本地端口号:</label>
+            <label>{{ t('socket.localPort') }}:</label>
             <input v-model.number="socketList[activeTab].udpc.local_port" type="number" />
           </div>
           <div class="form-group">
-            <label>远程端口号:</label>
+            <label>{{ t('socket.remotePort') }}:</label>
             <input v-model.number="socketList[activeTab].udpc.server_port" type="number" />
           </div>
           <div class="form-group">
-            <label>断网缓存:</label>
+            <label>{{ t('socket.offlineCache') }}:</label>
             <select v-model.number="offlineCacheList[activeTab]">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
         </div>
 
         <!-- HTTP Client 配置 -->
         <div v-if="socketList[activeTab].mode === 3" class="form-section">
-          <div class="section-title">HTTP Client 配置</div>
+          <div class="section-title">HTTP Client {{ t('socket.config') }}</div>
           <div class="form-group">
-            <label>HTTP模式:</label>
+            <label>HTTP {{ t('socket.workMode') }}:</label>
             <select v-model.number="socketList[activeTab].httpc.mode">
               <option :value="0">GET</option>
               <option :value="1">POST</option>
             </select>
           </div>
           <div class="form-group">
-            <label>服务器地址:</label>
+            <label>{{ t('socket.serverAddress') }}:</label>
             <input v-model="socketList[activeTab].httpc.server_ip" type="text" />
           </div>
           <div class="form-group">
-            <label>服务器端口:</label>
+            <label>{{ t('socket.serverPort') }}:</label>
             <input v-model.number="socketList[activeTab].httpc.server_port" type="number" />
           </div>
           <div class="form-group">
-            <label>URL路径:</label>
+            <label>URL {{ t('socket.path') }}:</label>
             <input v-model="socketList[activeTab].httpc.url" type="text" />
           </div>
           <div class="form-group">
-            <label>断网缓存:</label>
+            <label>{{ t('socket.offlineCache') }}:</label>
             <select v-model.number="offlineCacheList[activeTab]">
-              <option :value="0">关闭</option>
-              <option :value="1">开启</option>
+              <option :value="0">{{ t('common.disable') }}</option>
+              <option :value="1">{{ t('common.enable') }}</option>
             </select>
           </div>
         </div>
@@ -266,18 +264,18 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">应用保存</button>
+      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
     <div v-if="showRestartModal" class="modal-overlay">
       <div class="modal">
-        <div class="modal-header"><h3>配置已保存</h3></div>
+        <div class="modal-header"><h3>{{ t('common.saveSuccess') }}</h3></div>
         <div class="modal-body">
-          <p>Socket配置需要重启设备才能生效。</p>
+          <p>{{ t('socket.restartRequired') }}</p>
           <div class="modal-actions">
-            <button class="btn-restart" @click="handleRestart">立即重启</button>
-            <button class="btn-continue" @click="handleContinue">继续配置</button>
+            <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
+            <button class="btn-continue" @click="handleContinue">{{ t('socket.continueConfig') }}</button>
           </div>
         </div>
       </div>
@@ -290,6 +288,10 @@ import { ref, onMounted } from 'vue'
 import { fetchSocketConfigData, fetchOfflineCacheData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 const loading = ref(true)
 const error = ref(null)
@@ -317,39 +319,39 @@ const handleClientCertSelect = (e) => { if (e.target.files?.length) clientCertFi
 const handleClientKeySelect = (e) => { if (e.target.files?.length) clientKeyFile.value = e.target.files[0] }
 
 const uploadServerCert = async () => {
-  if (!serverCertFile.value) return alert('请先选择文件')
+  if (!serverCertFile.value) return alert(t('common.selectFile'))
   try {
     const formData = new FormData()
     formData.append('c', serverCertFile.value, `SOCK${activeTab.value}`)
     await apiClient.post('/upload/scert', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     socketList.value[activeTab.value].tcpc.ssl_server_name = serverCertFile.value.name
-    alert('证书上传成功')
+    alert(t('common.uploadSuccess'))
     serverCertFile.value = null
-  } catch (err) { alert('上传失败: ' + err.message) }
+  } catch (err) { alert(t('common.uploadFailed') + ': ' + err.message) }
 }
 
 const uploadClientCert = async () => {
-  if (!clientCertFile.value) return alert('请先选择文件')
+  if (!clientCertFile.value) return alert(t('common.selectFile'))
   try {
     const formData = new FormData()
     formData.append('c', clientCertFile.value, `SOCK${activeTab.value}`)
     await apiClient.post('/upload/ccert', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     socketList.value[activeTab.value].tcpc.ssl_client_name = clientCertFile.value.name
-    alert('证书上传成功')
+    alert(t('common.uploadSuccess'))
     clientCertFile.value = null
-  } catch (err) { alert('上传失败: ' + err.message) }
+  } catch (err) { alert(t('common.uploadFailed') + ': ' + err.message) }
 }
 
 const uploadClientKey = async () => {
-  if (!clientKeyFile.value) return alert('请先选择文件')
+  if (!clientKeyFile.value) return alert(t('common.selectFile'))
   try {
     const formData = new FormData()
     formData.append('c', clientKeyFile.value, `SOCK${activeTab.value}`)
     await apiClient.post('/upload/ckey', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     socketList.value[activeTab.value].tcpc.ssl_client_key = clientKeyFile.value.name
-    alert('私钥上传成功')
+    alert(t('common.uploadSuccess'))
     clientKeyFile.value = null
-  } catch (err) { alert('上传失败: ' + err.message) }
+  } catch (err) { alert(t('common.uploadFailed') + ': ' + err.message) }
 }
 
 const loadData = async () => {
@@ -360,7 +362,7 @@ const loadData = async () => {
     if (socketConfig?.SOCK && Array.isArray(socketConfig.SOCK)) socketList.value = socketConfig.SOCK.slice(0, 2)
     if (cacheConfig?.tunnel) offlineCacheList.value = [cacheConfig.tunnel[0]?.enable || 0, cacheConfig.tunnel[1]?.enable || 0]
   } catch (err) {
-    error.value = '加载配置失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
   } finally {
     loading.value = false
   }
@@ -399,11 +401,11 @@ const saveConfig = async () => {
     const cacheParams = offlineCacheList.value.map((en, i) => `n_tunnel[${i}].enable=${en}`)
     await Promise.all([updateConfig('comm_tunnel', sockParams.join('&')), updateConfig('offline_cache', cacheParams.join('&'))])
     showRestartModal.value = true
-  } catch (err) { alert('保存失败: ' + err.message) }
+  } catch (err) { alert(t('common.saveFailed') + ': ' + err.message) }
 }
 
 const handleRestart = async () => {
-  try { await restartDevice(); alert('设备正在重启...'); showRestartModal.value = false } catch (err) { alert('重启失败: ' + err.message) }
+  try { await restartDevice(); alert(t('system.restartSuccess')); showRestartModal.value = false } catch (err) { alert(t('system.restartFailed') + ': ' + err.message) }
 }
 const handleContinue = () => { showRestartModal.value = false }
 

@@ -1,0 +1,371 @@
+/**
+ * English Language Pack
+ */
+export default {
+    // Common
+    common: {
+        loading: 'Loading...',
+        save: 'Apply & Save',
+        apply: 'Apply',
+        cancel: 'Cancel',
+        confirm: 'Confirm',
+        close: 'Close',
+        open: 'Open',
+        enable: 'Enable',
+        disable: 'Disable',
+        on: 'ON',
+        off: 'OFF',
+        yes: 'Yes',
+        no: 'No',
+        success: 'Success',
+        error: 'Error',
+        warning: 'Warning',
+        info: 'Info',
+        upload: 'Upload',
+        download: 'Download',
+        export: 'Export',
+        import: 'Import',
+        selectFile: 'Select File',
+        selectedFile: 'Selected File',
+        connected: 'Connected',
+        disconnected: 'Disconnected',
+        unknown: 'Unknown',
+        none: 'None',
+        loadError: 'Failed to load data',
+        saveSuccess: 'Saved successfully',
+        saveFailed: 'Failed to save',
+        uploadSuccess: 'Upload successful',
+        uploadFailed: 'Upload failed'
+    },
+
+    // Top Navigation Bar
+    navbar: {
+        title: 'Industrial Router Gateway',
+        subtitle: 'Web Configuration System'
+    },
+
+    // Sidebar Menu
+    menu: {
+        status: 'Status',
+        network: 'Network',
+        port: 'Port',
+        uart: 'Serial',
+        comm: 'Communication',
+        socket: 'Socket',
+        mqtt: 'MQTT',
+        usrCld: 'USR_CLD',
+        gateway: 'Gateway',
+        edgeCompute: 'Edge Computing',
+        system: 'System Settings'
+    },
+
+    // Status Page
+    status: {
+        // System Info
+        system: 'System',
+        deviceName: 'Device Name',
+        productModel: 'Product Model',
+        firmwareVersion: 'Firmware Version',
+        productType: 'Product Type',
+        runtime: 'Runtime',
+        os: 'Operating System',
+        mac: 'MAC',
+        sn: 'SN',
+        systemTime: 'System Time',
+        currentNetwork: 'Current Network',
+
+        // Ethernet
+        ethernet: 'Ethernet',
+        connectionStatus: 'Connection Status',
+        networkType: 'Network Type',
+        localIP: 'Local IP',
+        pluggedIn: 'Plugged In',
+        unplugged: 'Unplugged',
+
+        // Cellular Network
+        cellular: 'Cellular Network',
+        activeSim: 'Active SIM',
+        imei: 'IMEI',
+        iccid: 'ICCID',
+        cimi: 'CIMI',
+        signalValue: 'Signal Value',
+        signalStrength: 'Signal Strength',
+        gatewayAddress: 'Gateway Address',
+
+        // Signal Strength Descriptions
+        signalNone: 'No Signal',
+        signalVeryWeak: 'Very Weak',
+        signalWeak: 'Weak',
+        signalFair: 'Fair',
+        signalGood: 'Good',
+        signalExcellent: 'Excellent',
+        signalStrong: 'Strong',
+
+        // TCP Connection Status
+        tcpStatus: 'TCP Connection Status',
+        socket1Status: 'Socket1 Status',
+        socket1Flag: 'Socket1 Flag',
+        socket2Status: 'Socket2 Status',
+        socket2Flag: 'Socket2 Flag',
+
+        // MQTT Connection Status
+        mqttStatus: 'MQTT Connection Status',
+        mqtt1Status: 'MQTT1 Status',
+        mqtt1Flag: 'MQTT1 Flag',
+        mqtt2Status: 'MQTT2 Status',
+        mqtt2Flag: 'MQTT2 Flag',
+
+        // Cloud Connection Status
+        cloudStatus: 'Cloud Connection Status',
+        cloudConnectionStatus: 'Cloud Status',
+        cloudConnectionFlag: 'Cloud Flag'
+    },
+
+    // UART Configuration Page
+    uart: {
+        title: 'Serial Port Configuration',
+        description: 'Configure serial port parameters',
+        portName: 'Port',
+        baudRate: 'Baud Rate',
+        dataBits: 'Data Bits',
+        stopBits: 'Stop Bits',
+        parity: 'Parity',
+        flowControl: 'Flow Control',
+        parityNone: 'None',
+        parityOdd: 'Odd',
+        parityEven: 'Even',
+        flowNone: 'None',
+        flowHardware: 'Hardware',
+        flowSoftware: 'Software',
+        restartRequired: 'Serial port settings require a device restart to take effect.',
+        continueConfig: 'Continue Configuration'
+    },
+
+    // Socket Configuration Page
+    socket: {
+        title: 'Socket Communication',
+        description: 'Socket channel detailed configuration',
+        enable: 'Socket Enable',
+        workMode: 'Work Mode',
+        serverAddress: 'Server Address',
+        serverPort: 'Server Port',
+        remotePort: 'Remote Port',
+        localPort: 'Local Port',
+        keepalive: 'Keepalive',
+        reconnectInterval: 'Reconnect Interval',
+        offlineCache: 'Offline Cache',
+        sslEncrypt: 'SSL Encryption',
+        authMethod: 'Auth Method',
+        noAuth: 'No Auth',
+        serverAuth: 'Server Auth',
+        mutualAuth: 'Mutual Auth',
+        serverCert: 'Server Root Certificate',
+        clientCert: 'Client Certificate',
+        clientKey: 'Client Private Key',
+        registerPacket: 'Register Packet',
+        registerSendMode: 'Register Send Mode',
+        registerContent: 'Register Content',
+        customContent: 'Custom Content',
+        onConnect: 'On Connect',
+        onSend: 'On Send Data',
+        both: 'Both',
+        custom: 'Custom',
+        heartbeat: 'Heartbeat',
+        heartbeatInterval: 'Heartbeat Interval (s)',
+        heartbeatContent: 'Heartbeat Content',
+        tcpClient: 'TCP Client',
+        tcpServer: 'TCP Server',
+        udpClient: 'UDP Client',
+        udpServer: 'UDP Server',
+        maxConnections: 'Max Connections',
+        overflowHandle: 'Overflow Handle',
+        config: 'Config',
+        path: 'Path',
+        restartRequired: 'Socket configuration requires a device restart to take effect.',
+        continueConfig: 'Continue Configuration'
+    },
+
+    // MQTT Configuration Page
+    mqtt: {
+        title: 'MQTT Communication',
+        enable: 'MQTT Enable',
+        protocol: 'MQTT Protocol',
+        clientId: 'Client ID',
+        serverAddress: 'Server Address',
+        remotePort: 'Remote Port',
+        keepalive: 'Keepalive',
+        reconnectInterval: 'Reconnect Interval',
+        cleanSession: 'Clean Session',
+        connectionAuth: 'Connection Auth',
+        username: 'Username',
+        password: 'Password',
+        will: 'Last Will',
+        willTopic: 'Will Topic',
+        willMessage: 'Will Message',
+        willQos: 'Will QoS',
+        willRetain: 'Will Retain',
+        retain: 'Retain',
+        noRetain: 'No Retain',
+        offlineCache: 'Offline Cache',
+        sslEncrypt: 'SSL Encryption',
+        authMethod: 'Auth Method',
+        noAuth: 'No Certificate Auth',
+        serverAuth: 'Server Certificate Auth',
+        mutualAuth: 'Mutual Auth',
+        serverCert: 'Server Root Certificate',
+        clientCert: 'Client Certificate',
+        clientKey: 'Client Private Key'
+    },
+
+    // Cloud Platform Configuration Page
+    cloud: {
+        title: 'USR Cloud Configuration',
+        enable: 'USR Cloud Enable',
+        deviceId: 'Device ID',
+        password: 'Device Password',
+        serverAddress: 'Server Address',
+        serverPort: 'Server Port'
+    },
+
+    // Edge Computing Page
+    edge: {
+        title: 'Edge Computing Configuration',
+        description: 'Configure edge computing rules and scripts',
+        scriptUpload: 'Script Upload',
+        scriptList: 'Script List',
+        scriptName: 'Script Name',
+        actions: 'Actions',
+        run: 'Run',
+        stop: 'Stop',
+        delete: 'Delete',
+        edit: 'Edit'
+    },
+
+    // System Settings Page
+    system: {
+        title: 'System Settings',
+        description: 'Configure system parameters',
+
+        // Tabs
+        tabParams: 'Parameters',
+        tabTime: 'System Time',
+        tabDevice: 'Device Management',
+        tabTfCard: 'TF Card Management',
+
+        // Parameter Settings
+        hostName: 'Host Name',
+        username: 'Username',
+        password: 'Password',
+        webPort: 'Web Port',
+        exportParams: 'Export Parameters',
+        importParams: 'Import Parameters',
+
+        // System Time
+        timezone: 'Timezone',
+        ntpEnable: 'NTP Enable',
+        ntpServer: 'NTP Server',
+        ntpServer2: 'NTP Server 2',
+        ntpServer3: 'NTP Server 3',
+        ntpServer4: 'NTP Server 4',
+        currentTime: 'Current Time',
+        sync: 'Sync',
+        timeSettings: 'Time Settings',
+        setTime: 'Set Time',
+
+        // Device Management
+        firmwareUpgrade: 'Firmware Upgrade',
+        selectFirmware: 'Select File',
+        flashFirmware: 'Flash Firmware',
+        factoryReset: 'Factory Reset',
+        restart: 'Restart',
+        restartNow: 'Restart Now',
+        scheduledRestart: 'Scheduled Restart',
+        timeSelect: 'Time Selection',
+
+        // TF Card Management
+        spaceUsed: 'Used Space / Total Space',
+        tfStatus: 'TF Card Status',
+        inserted: 'Inserted',
+        notInserted: 'Not Inserted',
+        formatTf: 'Format TF Card',
+        format: 'Format',
+
+        // Confirmation Dialogs
+        confirmUpgrade: 'Are you sure you want to upgrade the firmware? Do not power off or close this page during the upgrade.',
+        confirmFactoryReset: 'Are you sure you want to factory reset? All configurations will be erased!',
+        confirmRestart: 'Are you sure you want to restart the device?',
+        confirmFormat: 'Are you sure you want to format the TF card? All data will be erased!',
+
+        // Operation Results
+        exportSuccess: 'Parameters exported successfully',
+        exportFailed: 'Failed to export parameters',
+        importSuccess: 'Parameters imported successfully',
+        importFailed: 'Failed to import parameters',
+        configFormatError: 'Invalid configuration file format',
+        syncSuccess: 'Time synchronized successfully',
+        syncFailed: 'Failed to synchronize time',
+        timeSetSuccess: 'Time set successfully',
+        timeSetFailed: 'Failed to set time',
+        upgradeSuccess: 'Firmware uploaded successfully. Device will restart for upgrade...',
+        upgradeFailed: 'Firmware upgrade failed',
+        factoryResetSuccess: 'Factory reset successful. Device will restart...',
+        factoryResetFailed: 'Factory reset failed',
+        restartSuccess: 'Device is restarting...',
+        restartFailed: 'Failed to restart device',
+        formatSuccess: 'TF card formatted successfully',
+        formatFailed: 'Failed to format TF card',
+        saveParamsSuccess: 'Parameters saved successfully',
+        saveTimeSuccess: 'Time configuration saved successfully',
+        saveDeviceSuccess: 'Device configuration saved successfully'
+    },
+
+    // Network Configuration Page
+    network: {
+        title: 'Network Configuration',
+        description: 'Configure network parameters',
+        // Tabs
+        tabPriority: 'Network Priority',
+        tabEthernet: 'Ethernet',
+        tabLte: 'LTE/CAT1',
+        // Network Priority
+        prioritySelect: 'Network Priority Selection',
+        networkPriority: 'Network Priority',
+        ethernetFirst: 'Ethernet First',
+        cellularFirst: 'Cellular First',
+        ethernetOnly: 'Ethernet Only',
+        probePeriod: 'Probe Period',
+        probeServer1: 'Probe Server 1',
+        probeServer2: 'Probe Server 2',
+        // Ethernet
+        ethernet: 'Ethernet',
+        workMode: 'Work Mode',
+        staticMode: 'Static',
+        dhcpMode: 'DHCP',
+        dnsMode: 'DNS Mode',
+        manualDns: 'Manual',
+        autoDns: 'Auto',
+        lanIp: 'LAN IP',
+        subnetMask: 'Subnet Mask',
+        gatewayAddress: 'Gateway Address',
+        primaryDns: 'Primary DNS',
+        backupDns: 'Backup DNS',
+        // LTE/CAT1
+        simSwitch: 'SIM Switch',
+        externalSimFirst: 'External SIM First',
+        internalSimOnly: 'Internal SIM Only',
+        externalSimOnly: 'External SIM Only',
+        dualSimBackup: 'Dual SIM Backup',
+        apnName: 'APN Name',
+        username: 'Username',
+        password: 'Password',
+        authMethod: 'Auth Method',
+        // Modal
+        restartRequired: 'Network configuration requires a device restart to take effect.',
+        continueConfig: 'Continue Configuration'
+    },
+
+    // Footer
+    footer: {
+        copyright: 'Copyright © USR IOT'
+    }
+}

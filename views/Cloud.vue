@@ -1,33 +1,33 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- Cloud配置标题 -->
     <div class="description-box">
-      <div class="desc-title">海凌科云</div>
-      <div class="desc-content">海凌科云通信链路</div>
+      <div class="desc-title">{{ t('cloud.title') }}</div>
+      <div class="desc-content">{{ t('cloud.description') }}</div>
     </div>
 
     <!-- Cloud配置表单 -->
     <form v-if="cloudConfig">
       <div class="form-section">
         <div class="form-group">
-          <label>Cloud使能:</label>
+          <label>{{ t('cloud.enable') }}:</label>
           <select v-model.number="cloudConfig.enable">
-            <option :value="0">关闭</option>
-            <option :value="1">开启</option>
+            <option :value="0">{{ t('common.disable') }}</option>
+            <option :value="1">{{ t('common.enable') }}</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label>断网缓存:</label>
+          <label>{{ t('socket.offlineCache') }}:</label>
           <select v-model.number="offlineCacheEnable">
-            <option :value="0">关闭</option>
-            <option :value="1">开启</option>
+            <option :value="0">{{ t('common.disable') }}</option>
+            <option :value="1">{{ t('common.enable') }}</option>
           </select>
         </div>
       </div>
@@ -35,7 +35,7 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">应用保存</button>
+      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
   </div>
 </template>
@@ -44,6 +44,10 @@
 import { ref, onMounted } from 'vue'
 import { getCommTunnel, getOfflineCache } from '../api/services'
 import apiClient from '../api/services'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 // 响应式数据
 const loading = ref(true)
@@ -92,7 +96,7 @@ const loadData = async () => {
     }
     
   } catch (err) {
-    error.value = '加载配置失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
     console.error('配置加载错误:', err)
   } finally {
     loading.value = false
@@ -131,10 +135,10 @@ const saveConfig = async () => {
       offlineCacheEnable: offlineCacheEnable.value
     })
     
-    alert('配置保存成功')
+    alert(t('common.saveSuccess'))
   } catch (err) {
     console.error('保存配置失败:', err)
-    alert('保存失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('common.saveFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -146,7 +150,7 @@ onMounted(() => {
 
 <style scoped>
 .description-box {
-  background-color: #0066cc; /* Blue background like Uart */
+  background-color: #0066cc;
   color: white;
   padding: 10px 15px;
   margin-bottom: 20px;

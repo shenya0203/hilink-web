@@ -1,15 +1,15 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- 网络配置标题 -->
     <form>
-      <legend>网络配置</legend>
-      <div class="config-subtitle">配置网络参数</div>
+      <legend>{{ t('network.title') }}</legend>
+      <div class="config-subtitle">{{ t('network.description') }}</div>
     </form>
 
     <!-- 标签页选择 -->
@@ -19,14 +19,14 @@
         :class="{ active: activeTab === 'ethernet' }"
         @click="activeTab = 'ethernet'"
       >
-        网络优先
+        {{ t('network.tabPriority') }}
       </button>
       <button 
         class="tab-btn" 
         :class="{ active: activeTab === 'lte' }"
         @click="activeTab = 'lte'"
       >
-        以太网
+        {{ t('network.tabEthernet') }}
       </button>
       <button 
         v-if="config.net_select !== '2'"
@@ -34,32 +34,32 @@
         :class="{ active: activeTab === 'ltecat' }"
         @click="activeTab = 'ltecat'"
       >
-        LTE/CAT1
+        {{ t('network.tabLte') }}
       </button>
     </div>
 
     <!-- 网络优先选择部分 -->
     <form v-if="activeTab === 'ethernet'">
-      <legend>网络优先选择</legend>
+      <legend>{{ t('network.prioritySelect') }}</legend>
       <div class="form-section">
         <div class="form-group">
-          <label>网络优先:</label>
+          <label>{{ t('network.networkPriority') }}:</label>
           <select v-model="config.net_select">
-            <option value="0">以太网优先</option>
-            <option value="1">蜂窝网络优先</option>
-            <option value="2">仅以太网</option>
+            <option value="0">{{ t('network.ethernetFirst') }}</option>
+            <option value="1">{{ t('network.cellularFirst') }}</option>
+            <option value="2">{{ t('network.ethernetOnly') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>探测周期:</label>
+          <label>{{ t('network.probePeriod') }}:</label>
           <input v-model="config.probe_period" type="text" placeholder="-" />
         </div>
         <div class="form-group">
-          <label>探测服务器地址1:</label>
+          <label>{{ t('network.probeServer1') }}:</label>
           <input v-model="config.probe_server1" type="text" placeholder="-" />
         </div>
         <div class="form-group">
-          <label>探测服务器地址2:</label>
+          <label>{{ t('network.probeServer2') }}:</label>
           <input v-model="config.probe_server2" type="text" placeholder="-" />
         </div>
       </div>
@@ -67,40 +67,40 @@
 
     <!-- 以太网配置部分 -->
     <form v-if="activeTab === 'lte'" style="margin-top: 20px;">
-      <legend>以太网</legend>
+      <legend>{{ t('network.ethernet') }}</legend>
       <div class="form-section">
         <div class="form-group">
-          <label>工作模式:</label>
+          <label>{{ t('network.workMode') }}:</label>
           <select v-model="config.eth_mode">
-            <option value="0">静态设置</option>
-            <option value="1">DHCP</option>
+            <option value="0">{{ t('network.staticMode') }}</option>
+            <option value="1">{{ t('network.dhcpMode') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>DNS获取方式:</label>
+          <label>{{ t('network.dnsMode') }}:</label>
           <select v-model="config.eth_dns_mode">
-            <option value="0">手动设置</option>
-            <option value="1">自动获取</option>
+            <option value="0">{{ t('network.manualDns') }}</option>
+            <option value="1">{{ t('network.autoDns') }}</option>
           </select>
         </div>
         <div v-if="config.eth_mode === '0'" class="form-group">
-          <label>LAN IP:</label>
+          <label>{{ t('network.lanIp') }}:</label>
           <input v-model="config.eth_ip" type="text" placeholder="" />
         </div>
         <div v-if="config.eth_mode === '0'" class="form-group">
-          <label>子网掩码:</label>
+          <label>{{ t('network.subnetMask') }}:</label>
           <input v-model="config.eth_netmask" type="text" placeholder="" />
         </div>
         <div v-if="config.eth_mode === '0'" class="form-group">
-          <label>网关地址:</label>
+          <label>{{ t('network.gatewayAddress') }}:</label>
           <input v-model="config.eth_gw" type="text" placeholder="" />
         </div>
         <div class="form-group">
-          <label>首选DNS地址:</label>
+          <label>{{ t('network.primaryDns') }}:</label>
           <input v-model="config.eth_dns" type="text" placeholder="" :disabled="config.eth_dns_mode === '1'" />
         </div>
         <div class="form-group">
-          <label>备用DNS地址:</label>
+          <label>{{ t('network.backupDns') }}:</label>
           <input v-model="config.eth_sdns" type="text" placeholder="" :disabled="config.eth_dns_mode === '1'" />
         </div>
       </div>
@@ -108,31 +108,31 @@
 
     <!-- LTE/CAT1 配置部分 -->
     <form v-if="activeTab === 'ltecat' && config.net_select !== '2'" style="margin-top: 20px;">
-      <legend>LTE/CAT1</legend>
+      <legend>{{ t('network.tabLte') }}</legend>
       <div class="form-section">
         <div class="form-group">
-          <label>SIM卡切换:</label>
+          <label>{{ t('network.simSwitch') }}:</label>
           <select v-model="config.lte_sim">
-            <option value="0">外置SIM优先</option>
-            <option value="1">仅内置SIM</option>
-            <option value="2">仅外置SIM</option>
-            <option value="3">双卡备份</option>
+            <option value="0">{{ t('network.externalSimFirst') }}</option>
+            <option value="1">{{ t('network.internalSimOnly') }}</option>
+            <option value="2">{{ t('network.externalSimOnly') }}</option>
+            <option value="3">{{ t('network.dualSimBackup') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>APN名称:</label>
+          <label>{{ t('network.apnName') }}:</label>
           <input v-model="config.lte_apn" type="text" placeholder="" />
         </div>
         <div class="form-group">
-          <label>用户名:</label>
+          <label>{{ t('network.username') }}:</label>
           <input v-model="config.lte_user" type="text" placeholder="" />
         </div>
         <div class="form-group">
-          <label>密码:</label>
+          <label>{{ t('network.password') }}:</label>
           <input v-model="config.lte_pwd" type="password" placeholder="" />
         </div>
         <div class="form-group">
-          <label>鉴权方式:</label>
+          <label>{{ t('network.authMethod') }}:</label>
           <select v-model="config.lte_auth">
             <option value="0">NONE</option>
             <option value="1">PAP</option>
@@ -140,18 +140,18 @@
           </select>
         </div>
         <div class="form-group">
-          <label>DNS获取方式:</label>
+          <label>{{ t('network.dnsMode') }}:</label>
           <select v-model="config.lte_dns_mode">
-            <option value="0">手动设置</option>
-            <option value="1">自动获取</option>
+            <option value="0">{{ t('network.manualDns') }}</option>
+            <option value="1">{{ t('network.autoDns') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>首选DNS地址:</label>
+          <label>{{ t('network.primaryDns') }}:</label>
           <input v-model="config.lte_dns" type="text" placeholder="" :disabled="config.lte_dns_mode === '1'" />
         </div>
         <div class="form-group">
-          <label>备用DNS地址:</label>
+          <label>{{ t('network.backupDns') }}:</label>
           <input v-model="config.lte_sdns" type="text" placeholder="" :disabled="config.lte_dns_mode === '1'" />
         </div>
       </div>
@@ -159,20 +159,20 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">应用保存</button>
+      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
     <div v-if="showRestartModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3>配置已保存</h3>
+          <h3>{{ t('common.saveSuccess') }}</h3>
         </div>
         <div class="modal-body">
-          <p>网络配置需要重启设备才能生效。</p>
+          <p>{{ t('network.restartRequired') }}</p>
           <div class="modal-actions">
-            <button class="btn-restart" @click="handleRestart">立即重启</button>
-            <button class="btn-continue" @click="handleContinue">继续配置</button>
+            <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
+            <button class="btn-continue" @click="handleContinue">{{ t('network.continueConfig') }}</button>
           </div>
         </div>
       </div>
@@ -184,6 +184,10 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { fetchNetworkConfigData, fetchNetworkData, fetchStatusData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 // 响应式数据
 const loading = ref(true)
@@ -276,7 +280,7 @@ const loadData = async () => {
     console.log('最终配置对象:', config.value)
     
   } catch (err) {
-    error.value = '加载配置失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
     console.error('配置加载错误:', err)
   } finally {
     loading.value = false
@@ -321,7 +325,7 @@ const saveConfig = async () => {
     showRestartModal.value = true
     
   } catch (err) {
-    alert('保存失败: ' + err.message)
+    alert(t('common.saveFailed') + ': ' + err.message)
     console.error(err)
   }
 }
@@ -329,10 +333,10 @@ const saveConfig = async () => {
 const handleRestart = async () => {
   try {
     await restartDevice()
-    alert('设备正在重启...')
+    alert(t('system.restartSuccess'))
     showRestartModal.value = false
   } catch (err) {
-    alert('重启失败: ' + err.message)
+    alert(t('system.restartFailed') + ': ' + err.message)
   }
 }
 

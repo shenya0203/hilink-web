@@ -1,15 +1,15 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- 串口配置标题 -->
     <form>
-      <legend>串口配置</legend>
-      <div class="config-subtitle">设置串口参数配置</div>
+      <legend>{{ t('uart.title') }}</legend>
+      <div class="config-subtitle">{{ t('uart.description') }}</div>
     </form>
 
     <!-- 标签页选择 -->
@@ -19,7 +19,7 @@
         :class="{ active: activeTab === 0 }"
         @click="activeTab = 0"
       >
-        串口1
+        {{ t('uart.portName') }}1
       </button>
       <button 
         v-if="uartList.length > 1"
@@ -27,7 +27,7 @@
         :class="{ active: activeTab === 1 }"
         @click="activeTab = 1"
       >
-        串口2
+        {{ t('uart.portName') }}2
       </button>
     </div>
 
@@ -35,7 +35,7 @@
     <form v-if="uartList[activeTab]">
       <div class="form-section">
         <div class="form-group">
-          <label>波特率:</label>
+          <label>{{ t('uart.baudRate') }}:</label>
           <select v-model.number="uartList[activeTab].baud_rate">
             <option :value="300">300</option>
             <option :value="600">600</option>
@@ -51,23 +51,23 @@
           </select>
         </div>
         <div class="form-group">
-          <label>数据位:</label>
+          <label>{{ t('uart.dataBits') }}:</label>
           <select v-model.number="uartList[activeTab].data_bit">
             <option :value="7">7</option>
             <option :value="8">8</option>
           </select>
         </div>
         <div class="form-group">
-          <label>校验位:</label>
+          <label>{{ t('uart.parity') }}:</label>
           <select v-model.number="uartList[activeTab].parity">
-            <option :value="0">无</option>
-            <option :value="1">奇校验</option>
-            <option :value="2">偶校验</option>
+            <option :value="0">{{ t('uart.parityNone') }}</option>
+            <option :value="1">{{ t('uart.parityOdd') }}</option>
+            <option :value="2">{{ t('uart.parityEven') }}</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label>停止位:</label>
+          <label>{{ t('uart.stopBits') }}:</label>
           <select v-model.number="uartList[activeTab].stop_bit">
             <option :value="1">1</option>
             <option :value="2">2</option>
@@ -78,20 +78,20 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">应用保存</button>
+      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
     <div v-if="showRestartModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3>配置已保存</h3>
+          <h3>{{ t('common.saveSuccess') }}</h3>
         </div>
         <div class="modal-body">
-          <p>设置串口参数需要重启设备才能生效。</p>
+          <p>{{ t('uart.restartRequired') }}</p>
           <div class="modal-actions">
-            <button class="btn-restart" @click="handleRestart">立即重启</button>
-            <button class="btn-continue" @click="handleContinue">继续配置</button>
+            <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
+            <button class="btn-continue" @click="handleContinue">{{ t('uart.continueConfig') }}</button>
           </div>
         </div>
       </div>
@@ -102,6 +102,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getUartConfig, updateConfig, restartDevice } from '../api/services'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 // 响应式数据
 const loading = ref(true)
@@ -127,7 +131,7 @@ const loadData = async () => {
       console.log('处理后的串口列表:', uartList.value)
     }
   } catch (err) {
-    error.value = '加载串口配置失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
     console.error('串口配置加载错误:', err)
   } finally {
     loading.value = false
@@ -155,7 +159,7 @@ const saveConfig = async () => {
     showRestartModal.value = true
     
   } catch (err) {
-    alert('保存失败: ' + err.message)
+    alert(t('common.saveFailed') + ': ' + err.message)
     console.error(err)
   }
 }
@@ -163,10 +167,10 @@ const saveConfig = async () => {
 const handleRestart = async () => {
   try {
     await restartDevice()
-    alert('设备正在重启...')
+    alert(t('system.restartSuccess'))
     showRestartModal.value = false
   } catch (err) {
-    alert('重启失败: ' + err.message)
+    alert(t('system.restartFailed') + ': ' + err.message)
   }
 }
 

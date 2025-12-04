@@ -1,54 +1,54 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- 第一部分：当前状态 -->
     <form>
-      <legend>系统</legend>
+      <legend>{{ t('status.system') }}</legend>
       <table>
         <tbody>
           <tr>
-            <td class="title">设备名称:</td>
+            <td class="title">{{ t('status.deviceName') }}:</td>
             <td>{{ miscInfo.host_name || '-' }}</td>
           </tr>
           <tr>
-            <td class="title">产品型号:</td>
+            <td class="title">{{ t('status.productModel') }}:</td>
             <td>{{ miscInfo.host_name || '-' }}</td>
           </tr>
           <tr>
-            <td class="title">固件版本:</td>
+            <td class="title">{{ t('status.firmwareVersion') }}:</td>
             <td>{{ statusInfo.soft_ver || '-' }}</td>
           </tr>
           <tr>
-            <td class="title">产品类型:</td>
+            <td class="title">{{ t('status.productType') }}:</td>
             <td>{{ getProductType() }}</td>
           </tr>
           <tr>
-            <td class="title">运行时间:</td>
+            <td class="title">{{ t('status.runtime') }}:</td>
             <td>{{ formatSeconds(statusInfo.runtime) }}</td>
           </tr>
           <tr>
-            <td class="title">操作系统:</td>
+            <td class="title">{{ t('status.os') }}:</td>
             <td>OpenHarmonyOS</td>
           </tr>
           <tr>
-            <td class="title">MAC:</td>
+            <td class="title">{{ t('status.mac') }}:</td>
             <td>{{ formatMac(statusInfo.mac) }}</td>
           </tr>
           <tr>
-            <td class="title">SN:</td>
+            <td class="title">{{ t('status.sn') }}:</td>
             <td>{{ statusInfo.sn || '-' }}</td>
           </tr>
           <tr>
-            <td class="title">系统时间:</td>
+            <td class="title">{{ t('status.systemTime') }}:</td>
             <td>{{ formatTimestamp(statusInfo.systime) }}</td>
           </tr>
           <tr>
-            <td class="title">当前运行网络:</td>
+            <td class="title">{{ t('status.currentNetwork') }}:</td>
             <td>{{ networkInfo.netdev || '-' }}</td>
           </tr>
         </tbody>
@@ -57,19 +57,19 @@
 
     <!-- 第二部分：以太网 -->
     <form>
-      <legend>以太网</legend>
+      <legend>{{ t('status.ethernet') }}</legend>
       <table>
         <tbody>
           <tr>
-            <td class="title">连接状态:</td>
-            <td>{{ networkInfo.eth?.link_sta === 1 ? '已接入' : '未接入' }}</td>
+            <td class="title">{{ t('status.connectionStatus') }}:</td>
+            <td>{{ networkInfo.eth?.link_sta === 1 ? t('status.pluggedIn') : t('status.unplugged') }}</td>
           </tr>
           <tr>
-            <td class="title">网络类型:</td>
+            <td class="title">{{ t('status.networkType') }}:</td>
             <td>{{ networkInfo.eth?.ip_mode === 0 ? 'Static IP' : 'DHCP' }}</td>
           </tr>
           <tr>
-            <td class="title">本地IP:</td>
+            <td class="title">{{ t('status.localIP') }}:</td>
             <td>{{ networkInfo.eth?.ip }}</td>
           </tr>
         </tbody>
@@ -78,43 +78,43 @@
 
     <!-- 第三部分：蜂窝网络 -->
     <form>
-      <legend>蜂窝网络</legend>
+      <legend>{{ t('status.cellular') }}</legend>
       <table>
         <tbody>
           <tr>
-            <td class="title">联网SIM:</td>
+            <td class="title">{{ t('status.activeSim') }}:</td>
             <td>{{ networkInfo.lte?.sim === 1 ? 'SIM1' : 'SIM2' }}</td>
           </tr>
           <tr>
-            <td class="title">IMEI:</td>
+            <td class="title">{{ t('status.imei') }}:</td>
             <td>{{ networkInfo.lte?.imei }}</td>
           </tr>
           <tr>
-            <td class="title">ICCID:</td>
+            <td class="title">{{ t('status.iccid') }}:</td>
             <td>{{ networkInfo.lte?.iccid }}</td>
           </tr>
           <tr>
-            <td class="title">CIMI:</td>
+            <td class="title">{{ t('status.cimi') }}:</td>
             <td>{{ networkInfo.lte?.cimi }}</td>
           </tr>
           <tr>
-            <td class="title">信号值:</td>
+            <td class="title">{{ t('status.signalValue') }}:</td>
             <td>{{ networkInfo.lte?.csq }}</td>
           </tr>
           <tr>
-            <td class="title">信号强度:</td>
+            <td class="title">{{ t('status.signalStrength') }}:</td>
             <td>{{ getSignalStrength(networkInfo.lte?.csq) }}</td>
           </tr>
           <tr>
-            <td class="title">本地IP:</td>
+            <td class="title">{{ t('status.localIP') }}:</td>
             <td>{{ networkInfo.lte?.lte_ip }}</td>
           </tr>
           <tr>
-            <td class="title">网关地址:</td>
+            <td class="title">{{ t('status.gatewayAddress') }}:</td>
             <td>{{ networkInfo.lte?.lte_netmask }}</td>
           </tr>
           <tr>
-            <td class="title">连接状态:</td>
+            <td class="title">{{ t('status.connectionStatus') }}:</td>
             <td>{{ networkInfo.lte?.lte_sta || '-' }}</td>
           </tr>
         </tbody>
@@ -123,24 +123,24 @@
 
     <!-- 第四部分：TCP 连接状态 -->
     <form>
-      <legend>TCP 连接状态</legend>
+      <legend>{{ t('status.tcpStatus') }}</legend>
       <table>
         <tbody>
           <tr>
-            <td class="title">socket1 连接状态:</td>
+            <td class="title">{{ t('status.socket1Status') }}:</td>
             <td>{{ getConnectionStatus(statusInfo.socketa_sta) }}</td>
           </tr>
           <tr>
-            <td class="title">socket1 连接标识:</td>
-            <td>{{ statusInfo.socketa_sta === 0 ? 'OFF' : 'ON' }}</td>
+            <td class="title">{{ t('status.socket1Flag') }}:</td>
+            <td>{{ statusInfo.socketa_sta === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
           <tr>
-            <td class="title">socket2 连接状态:</td>
+            <td class="title">{{ t('status.socket2Status') }}:</td>
             <td>{{ getConnectionStatus(statusInfo.socketb_sta) }}</td>
           </tr>
           <tr>
-            <td class="title">socket2 连接标识:</td>
-            <td>{{ statusInfo.socketb_sta === 0 ? 'OFF' : 'ON' }}</td>
+            <td class="title">{{ t('status.socket2Flag') }}:</td>
+            <td>{{ statusInfo.socketb_sta === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
         </tbody>
       </table>
@@ -148,24 +148,24 @@
 
     <!-- 第五部分：MQTT 连接状态 -->
     <form>
-      <legend>MQTT 连接状态</legend>
+      <legend>{{ t('status.mqttStatus') }}</legend>
       <table>
         <tbody>
           <tr>
-            <td class="title">MQTT1 连接状态:</td>
+            <td class="title">{{ t('status.mqtt1Status') }}:</td>
             <td>{{ getConnectionStatus(statusInfo.mqtt1_sta) }}</td>
           </tr>
           <tr>
-            <td class="title">MQTT1 连接标识:</td>
-            <td>{{ statusInfo.mqtt1_sta === 0 ? 'OFF' : 'ON' }}</td>
+            <td class="title">{{ t('status.mqtt1Flag') }}:</td>
+            <td>{{ statusInfo.mqtt1_sta === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
           <tr>
-            <td class="title">MQTT2 连接状态:</td>
+            <td class="title">{{ t('status.mqtt2Status') }}:</td>
             <td>{{ getConnectionStatus(statusInfo.mqtt2_sta) }}</td>
           </tr>
           <tr>
-            <td class="title">MQTT2 连接标识:</td>
-            <td>{{ statusInfo.mqtt2_sta === 0 ? 'OFF' : 'ON' }}</td>
+            <td class="title">{{ t('status.mqtt2Flag') }}:</td>
+            <td>{{ statusInfo.mqtt2_sta === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
         </tbody>
       </table>
@@ -173,16 +173,16 @@
 
     <!-- 第六部分：Cloud 连接状态 -->
     <form>
-      <legend>Cloud 连接状态</legend>
+      <legend>{{ t('status.cloudStatus') }}</legend>
       <table>
         <tbody>
           <tr>
-            <td class="title">Cloud 连接状态:</td>
+            <td class="title">{{ t('status.cloudConnectionStatus') }}:</td>
             <td>{{ getConnectionStatus(statusInfo.cloud_sta) }}</td>
           </tr>
           <tr>
-            <td class="title">Cloud 连接标识:</td>
-            <td>{{ statusInfo.cloud_sta === 0 ? 'OFF' : 'ON' }}</td>
+            <td class="title">{{ t('status.cloudConnectionFlag') }}:</td>
+            <td>{{ statusInfo.cloud_sta === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
         </tbody>
       </table>
@@ -199,6 +199,10 @@ import {
   formatSeconds,
   formatTimestamp 
 } from '../api/mockData'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 // 响应式数据
 const statusInfo = ref({})
@@ -224,8 +228,8 @@ const formatMac = (macStr) => {
 
 // 辅助函数：获取连接状态描述
 const getConnectionStatus = (status) => {
-  if (status === 0) return 'Disconnected'
-  if (status === 1) return 'Connected'
+  if (status === 0) return t('common.disconnected')
+  if (status === 1) return t('common.connected')
   return '-'
 }
 
@@ -233,13 +237,13 @@ const getConnectionStatus = (status) => {
 const getSignalStrength = (csq) => {
   if (!csq) return '-'
   const strength = parseInt(csq)
-  if (strength === 0) return '无信号'
-  if (strength <= 5) return '极弱'
-  if (strength <= 10) return '弱'
-  if (strength <= 15) return '一般'
-  if (strength <= 20) return '良好'
-  if (strength <= 30) return '优秀'
-  return '极强'
+  if (strength === 0) return t('status.signalNone')
+  if (strength <= 5) return t('status.signalVeryWeak')
+  if (strength <= 10) return t('status.signalWeak')
+  if (strength <= 15) return t('status.signalFair')
+  if (strength <= 20) return t('status.signalGood')
+  if (strength <= 30) return t('status.signalExcellent')
+  return t('status.signalStrong')
 }
 
 // 加载所有数据（首次加载，显示 loading 状态）
@@ -261,7 +265,7 @@ const loadData = async () => {
     const misc = await fetchMiscData()
     miscInfo.value = misc
   } catch (err) {
-    error.value = '加载数据失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
     console.error('数据加载错误:', err)
   } finally {
     loading.value = false
@@ -309,4 +313,3 @@ onUnmounted(() => {
   }
 })
 </script>
-
