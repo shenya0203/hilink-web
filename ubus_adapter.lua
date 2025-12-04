@@ -55,9 +55,39 @@ function _M.get_network_config()
     }
 end
 
--- 4. Misc Config Data
+-- 4. Misc Config Data (完整配置)
 function _M.get_misc_config()
-    return { host_name = "N720", web_lang = 1 }
+    return {
+        web_lang = 2,
+        host_name = "N720",
+        websock_port = 6432,
+        websocket_point = 9,
+        web_port = 80,
+        web_user = "admin",
+        web_psw = "admin",
+        cache_buf = 0,
+        reset_time = 0,
+        telnet_en = 0,
+        telnet_port = 22,
+        ntp_sync_en = 1,
+        ntp_url = {
+            "ntp1.aliyun.com",
+            "time1.cloud.tencent.com",
+            "time.ustc.edu.cn",
+            "cn.pool.ntp.org"
+        },
+        ntp_utc = 8,
+        f485_en = 0,
+        f485_t = 10,
+        port_max = 2,
+        port_view = 0,
+        timing_reset = {
+            enable = 0,
+            hh = 0,
+            mm = 0,
+            ss = 0
+        }
+    }
 end
 
 -- 5. Comm Tunnel Config
@@ -137,7 +167,36 @@ function _M.get_offline_cache_config()
     return offline_cache_config
 end
 
--- 8. Set Config
+-- 8. TF Card Info
+function _M.get_tf_info()
+    -- 模拟TF卡信息
+    -- status: 0=未插入, 1=已插入
+    -- err: 0=正常, 1=错误
+    return {
+        status = 1,
+        err = 0,
+        total = 16 * 1024 * 1024 * 1024,  -- 16GB
+        used = 2 * 1024 * 1024 * 1024      -- 2GB used
+    }
+end
+
+-- 9. Format TF Card
+function _M.format_tf_card()
+    -- 模拟格式化TF卡
+    ngx.log(ngx.INFO, "Formatting TF card...")
+    -- 实际应该调用系统命令: os.execute("mkfs.vfat /dev/mmcblk0p1")
+    return true
+end
+
+-- 10. Set System Time
+function _M.set_system_time(timestamp)
+    -- 设置系统时间
+    ngx.log(ngx.INFO, "Setting system time to: " .. tostring(timestamp))
+    -- 实际应该调用: os.execute("date -s @" .. timestamp)
+    return true
+end
+
+-- 11. Set Config
 function _M.set_config(module, args)
     if module == "uart" then
         for k, v in pairs(args) do
@@ -171,6 +230,15 @@ function _M.set_config(module, args)
                     offline_cache_config.tunnel[index][key] = tonumber(v) or v
                 end
             end
+        end
+        return true
+    end
+    
+    if module == "misc" then
+        -- 处理misc配置更新
+        ngx.log(ngx.INFO, "Updating misc config...")
+        for k, v in pairs(args) do
+            ngx.log(ngx.INFO, "misc: " .. k .. " = " .. tostring(v))
         end
         return true
     end

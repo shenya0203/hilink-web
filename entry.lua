@@ -241,6 +241,72 @@ local function handle_restart()
     ngx.exit(ngx.HTTP_OK)
 end
 
+-- 处理 /action_tf.cgi (TF卡操作)
+local function handle_tf_action(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_tf_action args: ", cjson.encode(args))
+    local act = args.act
+    local response = {}
+    
+    if act == "getinfo" then
+        -- 获取TF卡信息
+        response = ubus_adapter.get_tf_info()
+    elseif act == "format" then
+        -- 格式化TF卡
+        local success = ubus_adapter.format_tf_card()
+        if success then
+            response = { err = 0 }
+        else
+            response = { err = 1, msg = "Format failed" }
+        end
+    else
+        response = { err = 1, msg = "Unknown action" }
+    end
+    
+    send_json(response)
+end
+
+-- 处理 /action_time.cgi (时间操作)
+local function handle_time_action(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_time_action args: ", cjson.encode(args))
+    local act = args.act
+    local timestamp = tonumber(args.time)
+    local response = {}
+    
+    if act == "sync" or act == "set" then
+        if timestamp then
+            -- 设置系统时间
+            local success = ubus_adapter.set_system_time(timestamp)
+            if success then
+                response = { err = 0 }
+            else
+                response = { err = 1, msg = "Failed to set time" }
+            end
+        else
+            response = { err = 1, msg = "Invalid timestamp" }
+        end
+    else
+        response = { err = 1, msg = "Unknown action" }
+    end
+    
+    send_json(response)
+end
+
+-- 处理 /action_reset.cgi (恢复出厂)
+local function handle_reset(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_reset args: ", cjson.encode(args))
+    local act = args.act
+    
+    if act == "factory" then
+        ngx.say(cjson.encode({ err = 0 }))
+        ngx.flush(true)
+        -- 执行恢复出厂设置
+        os.execute("sleep 1 && factory_reset &")
+        ngx.exit(ngx.HTTP_OK)
+    else
+        send_error("Unknown action")
+    end
+end
+
 -- ==========================================================
 -- 3. 主路由入口
 -- ==========================================================
@@ -270,6 +336,15 @@ elseif uri == "/download_file.cgi" then
 elseif uri == "/action_restart.cgi" then
     handle_restart()
 
+elseif uri == "/action_tf.cgi" then
+    handle_tf_action(args)
+
+elseif uri == "/action_time.cgi" then
+    handle_time_action(args)
+
+elseif uri == "/action_reset.cgi" then
+    handle_reset(args)
+
 -- 匹配 /upload/ 开头的 URI
 elseif string.sub(uri, 1, 8) == "/upload/" then
     if method == "POST" then
@@ -283,3 +358,4 @@ else
     ngx.say("Not Found")
     ngx.exit(404)
 end
+
