@@ -1,0 +1,274 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Navbar Styles */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #003366;
+  color: white;
+  padding: 20px;
+  border-bottom: 3px solid #0066cc;
+}
+
+.top_logo_default {
+  flex: 0 0 60px;
+}
+
+.logo_left h1 {
+  font-size: 20px;
+  margin-bottom: 5px;
+}
+
+.logo_left h4 {
+  font-size: 12px;
+  font-weight: normal;
+  color: #ccc;
+}
+
+.logo_right {
+  text-align: right;
+}
+
+.right_top {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.right_bottom {
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+/* Container Styles */
+.containerInner {
+  display: flex;
+  min-height: calc(100vh - 100px - 40px);
+}
+
+.containerInner_have_bottom {
+  min-height: calc(100vh - 100px - 40px - 40px);
+}
+
+/* Aside (Sidebar) */
+.aside {
+  width: 200px;
+  background-color: #f9f9f9;
+  border-right: 1px solid #ddd;
+  padding: 10px 0;
+  overflow-y: auto;
+}
+
+.menu-list {
+  list-style: none;
+}
+
+.menu-item {
+  margin: 5px 0;
+}
+
+.menu-title {
+  padding: 10px 15px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.menu-title:hover {
+  background-color: #e8e8e8;
+}
+
+.menu-title.now-target-item,
+.menu-title.now-target-folder {
+  background-color: #0066cc;
+  color: white;
+}
+
+.folder-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arrow {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.3s;
+}
+
+.menu-title.now-target-folder .arrow {
+  transform: rotate(45deg);
+}
+
+.subMenu {
+  list-style: none;
+  background-color: #f0f0f0;
+}
+
+.subMenu-item .menu-title {
+  padding-left: 30px;
+  font-size: 13px;
+}
+
+.link {
+  cursor: pointer;
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  padding: 20px;
+  background-color: #f5f5f5;
+  overflow-y: auto;
+}
+
+/* Loading and Error States */
+.loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  font-size: 14px;
+}
+
+.error {
+  background-color: #ffebee;
+  border: 1px solid #ffcdd2;
+  color: #c62828;
+  padding: 12px 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+/* Form Styles */
+form {
+  background-color: #f9f9f9;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+legend {
+  font-weight: bold;
+  font-size: 14px;
+  color: white;
+  padding: 12px 15px;
+  margin: 0;
+  background-color: #0059ff;
+  width: 100%;
+  margin-bottom: 0;
+  border: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+  table-layout: fixed;
+}
+
+table tr {
+  border-bottom: 1px solid #e8e8e8;
+}
+
+table tr:last-child {
+  border-bottom: none;
+}
+
+table td {
+  padding: 12px 15px;
+  text-align: left;
+  font-size: 13px;
+  color: #333;
+  vertical-align: middle;
+  min-height: 40px;
+  display: table-cell;
+  word-break: break-word;
+}
+
+table .title {
+  font-weight: 600;
+  background-color: #f5f5f5;
+  color: #333;
+  width: 45%;
+  border-right: 1px solid #e8e8e8;
+}
+
+/* Form Input Styles */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: Arial, sans-serif;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+select:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+}
+
+/* Button Styles */
+button {
+  font-family: Arial, sans-serif;
+}
+
+.btn-save,
+.btn-submit {
+  padding: 10px 40px;
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.btn-save:hover,
+.btn-submit:hover {
+  background-color: #0052a3;
+}
+
+.btn-save:active,
+.btn-submit:active {
+  background-color: #003d7a;
+}
+
+/* Footer */
+.footer {
+  background-color: #f5f5f5;
+  text-align: center;
+  padding: 15px;
+  border-top: 1px solid #ddd;
+  font-size: 12px;
+  color: #666;
+}
