@@ -22,7 +22,7 @@ const routes = [
             { path: 'port/uart', name: 'uart', component: Uart },
             { path: 'comm/Socket', name: 'Socket', component: Socket },
             { path: 'comm/MQTT', name: 'MQTT', component: Mqtt },
-            { path: 'comm/USR_CLD', name: 'usr_cld', component: Cloud },
+            { path: 'comm/HLK_CLD', name: 'hlk_cld', component: Cloud },
             { path: 'gateway/edge_gw', name: 'edge_gw', component: EdgeCompute },
             { path: 'system', name: 'system', component: System }
         ]

@@ -53,7 +53,7 @@ export default {
         comm: 'Communication',
         socket: 'Socket',
         mqtt: 'MQTT',
-        usrCld: 'USR_CLD',
+        usrCld: 'HLK_CLD',
         gateway: 'Gateway',
         edgeCompute: 'Edge Computing',
         system: 'System Settings'
@@ -220,7 +220,7 @@ export default {
     // Cloud Platform Configuration Page
     cloud: {
         title: 'USR Cloud Configuration',
-        enable: 'USR Cloud Enable',
+        enable: 'HiLink Cloud Enable',
         deviceId: 'Device ID',
         password: 'Device Password',
         serverAddress: 'Server Address',
@@ -229,16 +229,103 @@ export default {
 
     // Edge Computing Page
     edge: {
-        title: 'Edge Computing Configuration',
-        description: 'Configure edge computing rules and scripts',
-        scriptUpload: 'Script Upload',
-        scriptList: 'Script List',
-        scriptName: 'Script Name',
-        actions: 'Actions',
-        run: 'Run',
-        stop: 'Stop',
+        title: 'Edge Computing',
+        description: 'Edge Computing Gateway',
+        
+        // Tabs
+        tabGatewayEnable: 'Gateway Enable',
+        tabDataCollection: 'Data Collection',
+        tabDataReport: 'Data Report',
+        tabProtocolConvert: 'Protocol Convert',
+        
+        // Gateway Enable
+        gatewayEnable: 'Gateway Enable',
+        close: 'Close',
+        open: 'Open',
+        saveCurrentPage: 'Save Current Page',
+        nextStep: 'Next Step',
+        
+        // Point Import
+        pointImport: 'Point Import',
+        selectFile: 'Select File',
+        import: 'Import',
+        export: 'Export',
+        pleaseSelectFile: 'Please select file (.csv)',
+        importTip: '(When importing consecutive files with the same name, press shift+f5 to refresh before importing)',
+        pointsAdded: 'Points Added',
+        pointsRemaining: 'Points Remaining',
+        
+        // Slave Table
+        slaveNumber: 'No.',
+        slaveName: 'Name',
+        slaveSource: 'Point Source',
+        slaveAddress: 'Slave Address',
+        operation: 'Operation',
+        empty: 'Empty',
+        edit: 'Edit',
         delete: 'Delete',
-        edit: 'Edit'
+        
+        // Data Point Table
+        pointNumber: 'No.',
+        pointName: 'Name',
+        register: 'Register',
+        dataType: 'Data Type',
+        value: 'Value',
+        
+        // Buttons
+        addSlave: 'Add Slave',
+        addDataPoint: 'Add Data Point',
+        
+        // Slave Dialog
+        addSlaveTitle: 'Add Slave',
+        editSlaveTitle: 'Edit Slave',
+        name: 'Name',
+        detail: 'Detail',
+        protocolType: 'Protocol Type',
+        modbusRtu: 'Modbus RTU',
+        modbusTcp: 'Modbus TCP',
+        remoteAddress: 'Remote Server Address',
+        remotePort: 'Remote Port',
+        serialConfig: 'Serial Config',
+        serial1: 'Serial 1',
+        serial2: 'Serial 2',
+        pollInterval: 'Poll Interval',
+        mergeCollect: 'Merge Collect',
+        save: 'Save',
+        cancel: 'Cancel',
+        
+        // Data Point Dialog
+        addPointTitle: 'Add Data Point',
+        editPointTitle: 'Edit Data Point',
+        registerType: 'Register',
+        decimalPlaces: 'Decimal Places',
+        timeout: 'Timeout',
+        collectFormula: 'Collect Formula',
+        controlFormula: 'Control Formula',
+        reportOnChange: 'Report on Change',
+        
+        // Data Types
+        dataTypeString: 'String',
+        dataTypeBool: 'Bool',
+        dataTypeUnsigned: 'Unsigned',
+        dataTypeSigned: 'Signed',
+        
+        // Placeholder
+        dataReportConfig: 'Data Report Configuration',
+        protocolConvertConfig: 'Protocol Conversion Configuration',
+        inDevelopment: 'Under Development...',
+        
+        // Messages
+        pleaseSelectFileFirst: 'Please select a file first',
+        importSuccess: 'Import successful',
+        importFailed: 'Import failed',
+        exportFailed: 'Export failed',
+        pleaseInputSlaveName: 'Please enter slave name',
+        confirmDeleteSlave: 'Are you sure you want to delete slave',
+        pleaseInputPointName: 'Please enter data point name',
+        confirmDeletePoint: 'Are you sure you want to delete data point',
+        saveSuccess: 'Save successful',
+        saveFailed: 'Save failed'
     },
 
     // System Settings Page

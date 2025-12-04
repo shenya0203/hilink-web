@@ -105,7 +105,7 @@ const menuItems = computed(() => [
     submenu: [
       { name: 'Socket', labelKey: 'menu.socket' },
       { name: 'MQTT', labelKey: 'menu.mqtt' },
-      { name: 'usr_cld', labelKey: 'menu.usrCld' }
+      { name: 'hlk_cld', labelKey: 'menu.usrCld' }
     ] 
   },
   { 

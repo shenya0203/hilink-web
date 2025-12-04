@@ -53,7 +53,7 @@ export default {
         comm: '通信',
         socket: 'Socket',
         mqtt: 'MQTT',
-        usrCld: 'USR_CLD',
+        usrCld: 'HLK_CLD',
         gateway: '网关',
         edgeCompute: '边缘计算',
         system: '系统设置'
@@ -230,16 +230,103 @@ export default {
 
     // 边缘计算页面
     edge: {
-        title: '边缘计算配置',
-        description: '配置边缘计算规则和脚本',
-        scriptUpload: '脚本上传',
-        scriptList: '脚本列表',
-        scriptName: '脚本名称',
-        actions: '操作',
-        run: '运行',
-        stop: '停止',
+        title: '边缘计算',
+        description: '边缘计算网关',
+        
+        // 标签页
+        tabGatewayEnable: '网关使能',
+        tabDataCollection: '数据采集',
+        tabDataReport: '数据上报',
+        tabProtocolConvert: '协议转换',
+        
+        // 网关使能
+        gatewayEnable: '网关使能',
+        close: '关闭',
+        open: '开启',
+        saveCurrentPage: '保存当前页',
+        nextStep: '下一步',
+        
+        // 点表导入
+        pointImport: '点表导入',
+        selectFile: '选择文件',
+        import: '导入',
+        export: '导出',
+        pleaseSelectFile: '请选择文件(.csv)',
+        importTip: '(连续导入的文件名称一致时，需要shift+f5刷新后导入)',
+        pointsAdded: '已添加点位数量',
+        pointsRemaining: '还可添加点位',
+        
+        // 从机表格
+        slaveNumber: '序号',
+        slaveName: '名称',
+        slaveSource: '点位来源',
+        slaveAddress: '从机地址',
+        operation: '操作',
+        empty: '空',
+        edit: '编辑',
         delete: '删除',
-        edit: '编辑'
+        
+        // 数据点表格
+        pointNumber: '序号',
+        pointName: '名称',
+        register: '寄存器',
+        dataType: '数值类型',
+        value: '值',
+        
+        // 按钮
+        addSlave: '添加从机',
+        addDataPoint: '添加数据点',
+        
+        // 从机对话框
+        addSlaveTitle: '添加从机',
+        editSlaveTitle: '编辑从机',
+        name: '名称',
+        detail: '详细信息',
+        protocolType: '协议类型',
+        modbusRtu: 'Modbus RTU',
+        modbusTcp: 'Modbus TCP',
+        remoteAddress: '远程服务器地址',
+        remotePort: '远程端口号',
+        serialConfig: '串口配置',
+        serial1: '串口1',
+        serial2: '串口2',
+        pollInterval: '轮询间隔',
+        mergeCollect: '合并采集',
+        save: '保存',
+        cancel: '取消',
+        
+        // 数据点对话框
+        addPointTitle: '添加数据点',
+        editPointTitle: '编辑数据点',
+        registerType: '寄存器',
+        decimalPlaces: '小数位数',
+        timeout: '超时时间',
+        collectFormula: '采集公式',
+        controlFormula: '控制公式',
+        reportOnChange: '变化上报',
+        
+        // 数据类型
+        dataTypeString: '字符串',
+        dataTypeBool: 'Bool',
+        dataTypeUnsigned: 'Unsigned',
+        dataTypeSigned: 'Signed',
+        
+        // 占位符
+        dataReportConfig: '数据上报配置',
+        protocolConvertConfig: '协议转换配置',
+        inDevelopment: '功能开发中...',
+        
+        // 提示信息
+        pleaseSelectFileFirst: '请先选择文件',
+        importSuccess: '导入成功',
+        importFailed: '导入失败',
+        exportFailed: '导出失败',
+        pleaseInputSlaveName: '请输入从机名称',
+        confirmDeleteSlave: '确定要删除从机',
+        pleaseInputPointName: '请输入数据点名称',
+        confirmDeletePoint: '确定要删除数据点',
+        saveSuccess: '保存成功',
+        saveFailed: '保存失败'
     },
 
     // 系统设置页面

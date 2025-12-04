@@ -1,15 +1,15 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- 边缘计算标题 -->
     <div class="description-box">
-      <div class="desc-title">边缘计算</div>
-      <div class="desc-content">边缘计算网关</div>
+      <div class="desc-title">{{ t('edge.title') }}</div>
+      <div class="desc-content">{{ t('edge.description') }}</div>
     </div>
 
     <!-- 标签页选择 -->
@@ -29,17 +29,17 @@
     <div v-if="activeTab === 0" class="tab-content">
       <div class="form-section">
         <div class="form-group">
-          <label>网关使能:</label>
+          <label>{{ t('edge.gatewayEnable') }}:</label>
           <select v-model.number="edgeConfig.all_en">
-            <option :value="0">关闭</option>
-            <option :value="1">开启</option>
+            <option :value="0">{{ t('edge.close') }}</option>
+            <option :value="1">{{ t('edge.open') }}</option>
           </select>
         </div>
       </div>
       
       <div class="button-group">
-        <button class="btn-save" @click="saveCurrentPage">保存当前页</button>
-        <button v-if="edgeConfig.all_en === 1" class="btn-next" @click="nextTab">下一步</button>
+        <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
+        <button v-if="edgeConfig.all_en === 1" class="btn-next" @click="nextTab">{{ t('edge.nextStep') }}</button>
       </div>
     </div>
 
@@ -47,19 +47,19 @@
     <div v-if="activeTab === 1" class="tab-content">
       <!-- 点表导入区域 -->
       <div class="import-section">
-        <span class="label">点表导入</span>
-        <button class="btn-outline" @click="triggerFileSelect">选择文件</button>
-        <button class="btn-outline" @click="importCsv" :disabled="!selectedCsvFile">导入</button>
-        <button class="btn-outline" @click="exportCsv">导出</button>
-        <span class="file-hint">请选择文件(.csv)</span>
+        <span class="label">{{ t('edge.pointImport') }}</span>
+        <button class="btn-outline" @click="triggerFileSelect">{{ t('edge.selectFile') }}</button>
+        <button class="btn-outline" @click="importCsv" :disabled="!selectedCsvFile">{{ t('edge.import') }}</button>
+        <button class="btn-outline" @click="exportCsv">{{ t('edge.export') }}</button>
+        <span class="file-hint">{{ t('edge.pleaseSelectFile') }}</span>
         <input type="file" ref="csvFileInput" @change="handleCsvSelect" accept=".csv" style="display:none" />
       </div>
       
       <div class="import-tips">
-        <span class="tip-warning">(连续导入的文件名称一致时，需要shift+f5刷新后导入)</span>
+        <span class="tip-warning">{{ t('edge.importTip') }}</span>
         <br/>
-        <span class="tip-info">已添加点位数量:{{ totalPoints }}</span>
-        <span class="tip-info" style="margin-left: 20px;">还可添加点位:{{ 1000 - totalPoints }}</span>
+        <span class="tip-info">{{ t('edge.pointsAdded') }}:{{ totalPoints }}</span>
+        <span class="tip-info" style="margin-left: 20px;">{{ t('edge.pointsRemaining') }}:{{ 1000 - totalPoints }}</span>
       </div>
 
       <!-- 从机和数据点表格区域 -->
@@ -69,11 +69,11 @@
           <table>
             <thead>
               <tr>
-                <th>序号</th>
-                <th>名称</th>
-                <th>点位来源</th>
-                <th>从机地址</th>
-                <th>操作</th>
+                <th>{{ t('edge.slaveNumber') }}</th>
+                <th>{{ t('edge.slaveName') }}</th>
+                <th>{{ t('edge.slaveSource') }}</th>
+                <th>{{ t('edge.slaveAddress') }}</th>
+                <th>{{ t('edge.operation') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -86,11 +86,11 @@
                 <td>{{ index + 1 }}</td>
                 <td class="name-cell">{{ slave.name }}</td>
                 <td>{{ getSlaveSource(slave) }}</td>
-                <td>{{ slave.slaveAddress || '空' }}</td>
+                <td>{{ slave.slaveAddress || t('edge.empty') }}</td>
                 <td class="action-cell">
                   <template v-if="!slave.isSystem">
-                    <button class="btn-small" @click.stop="editSlave(index)">编辑</button>
-                    <button class="btn-small btn-danger" @click.stop="deleteSlave(index)">删除</button>
+                    <button class="btn-small" @click.stop="editSlave(index)">{{ t('edge.edit') }}</button>
+                    <button class="btn-small btn-danger" @click.stop="deleteSlave(index)">{{ t('edge.delete') }}</button>
                   </template>
                 </td>
               </tr>
@@ -103,12 +103,12 @@
           <table>
             <thead>
               <tr>
-                <th>序号</th>
-                <th>名称</th>
-                <th>寄存器</th>
-                <th>数值类型</th>
-                <th>值</th>
-                <th>操作</th>
+                <th>{{ t('edge.pointNumber') }}</th>
+                <th>{{ t('edge.pointName') }}</th>
+                <th>{{ t('edge.register') }}</th>
+                <th>{{ t('edge.dataType') }}</th>
+                <th>{{ t('edge.value') }}</th>
+                <th>{{ t('edge.operation') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -125,8 +125,8 @@
                 <td>{{ point.value !== undefined ? point.value : '-' }}</td>
                 <td class="action-cell">
                   <template v-if="!currentSlave?.isSystem">
-                    <button class="btn-small" @click.stop="editPoint(index)">编辑</button>
-                    <button class="btn-small btn-danger" @click.stop="deletePoint(index)">删除</button>
+                    <button class="btn-small" @click.stop="editPoint(index)">{{ t('edge.edit') }}</button>
+                    <button class="btn-small btn-danger" @click.stop="deletePoint(index)">{{ t('edge.delete') }}</button>
                   </template>
                 </td>
               </tr>
@@ -137,65 +137,65 @@
 
       <!-- 按钮组 -->
       <div class="button-group">
-        <button class="btn-action" @click="showAddSlaveModal">添加从机</button>
-        <button class="btn-action" @click="showAddPointModal" :disabled="!currentSlave || currentSlave.isSystem">添加数据点</button>
-        <button class="btn-save" @click="saveCurrentPage">保存当前页</button>
-        <button class="btn-next" @click="nextTab">下一步</button>
+        <button class="btn-action" @click="showAddSlaveModal">{{ t('edge.addSlave') }}</button>
+        <button class="btn-action" @click="showAddPointModal" :disabled="!currentSlave || currentSlave.isSystem">{{ t('edge.addDataPoint') }}</button>
+        <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
+        <button class="btn-next" @click="nextTab">{{ t('edge.nextStep') }}</button>
       </div>
     </div>
 
     <!-- Tab 3: 数据上报 -->
     <div v-if="activeTab === 2" class="tab-content">
       <div class="placeholder">
-        <h3>数据上报配置</h3>
-        <p>功能开发中...</p>
+        <h3>{{ t('edge.dataReportConfig') }}</h3>
+        <p>{{ t('edge.inDevelopment') }}</p>
       </div>
       <div class="button-group">
-        <button class="btn-save" @click="saveCurrentPage">保存当前页</button>
-        <button class="btn-next" @click="nextTab">下一步</button>
+        <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
+        <button class="btn-next" @click="nextTab">{{ t('edge.nextStep') }}</button>
       </div>
     </div>
 
     <!-- Tab 4: 协议转换 -->
     <div v-if="activeTab === 3" class="tab-content">
       <div class="placeholder">
-        <h3>协议转换配置</h3>
-        <p>功能开发中...</p>
+        <h3>{{ t('edge.protocolConvertConfig') }}</h3>
+        <p>{{ t('edge.inDevelopment') }}</p>
       </div>
       <div class="button-group">
-        <button class="btn-save" @click="saveCurrentPage">保存当前页</button>
+        <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
       </div>
     </div>
 
     <!-- 添加从机对话框 -->
     <div v-if="showSlaveModal" class="modal-overlay" @click.self="closeSlaveModal">
       <div class="modal">
-        <h3>{{ isEditingSlave ? '编辑从机' : '添加从机' }}</h3>
+        <h3>{{ isEditingSlave ? t('edge.editSlaveTitle') : t('edge.addSlaveTitle') }}</h3>
         <div class="modal-form">
           <div class="form-group">
-            <label>名称:</label>
+            <label>{{ t('edge.name') }}:</label>
             <input v-model="slaveForm.name" type="text" placeholder="Device1" />
           </div>
           <div class="form-group">
-            <label>详细信息:</label>
+            <label>{{ t('edge.detail') }}:</label>
             <input v-model="slaveForm.detail" type="text" />
           </div>
           <div class="form-group">
-            <label>协议类型:</label>
+            <label>{{ t('edge.protocolType') }}:</label>
             <select v-model.number="slaveForm.protocol">
-              <option :value="0">Modbus RTU</option>
-              <option :value="1">Modbus TCP</option>
+              <option :value="0">{{ t('edge.modbusRtu') }}</option>
+              <option :value="1">{{ t('edge.modbusTcp') }}</option>
             </select>
           </div>
           
           <!-- Modbus TCP 选项 -->
           <template v-if="slaveForm.protocol === 1">
             <div class="form-group">
-              <label>远程服务器地址:</label>
+              <label>{{ t('edge.remoteAddress') }}:</label>
               <input v-model="slaveForm.remoteAddress" type="text" placeholder="192.168.0.21" />
             </div>
             <div class="form-group">
-              <label>远程端口号:</label>
+              <label>{{ t('edge.remotePort') }}:</label>
               <input v-model.number="slaveForm.remotePort" type="number" placeholder="2100" />
             </div>
           </template>
@@ -203,33 +203,33 @@
           <!-- Modbus RTU 选项 -->
           <template v-if="slaveForm.protocol === 0">
             <div class="form-group">
-              <label>串口配置:</label>
+              <label>{{ t('edge.serialConfig') }}:</label>
               <select v-model.number="slaveForm.serialPort">
-                <option :value="1">串口1</option>
-                <option :value="2">串口2</option>
+                <option :value="1">{{ t('edge.serial1') }}</option>
+                <option :value="2">{{ t('edge.serial2') }}</option>
               </select>
             </div>
           </template>
           
           <div class="form-group">
-            <label>从机地址:</label>
+            <label>{{ t('edge.slaveAddress') }}:</label>
             <input v-model.number="slaveForm.slaveAddress" type="number" placeholder="1" />
           </div>
           <div class="form-group">
-            <label>轮询间隔:</label>
+            <label>{{ t('edge.pollInterval') }}:</label>
             <div class="input-with-unit">
               <input v-model.number="slaveForm.pollInterval" type="number" placeholder="100" />
               <span class="unit">ms</span>
             </div>
           </div>
           <div class="form-group">
-            <label>合并采集:</label>
+            <label>{{ t('edge.mergeCollect') }}:</label>
             <input type="checkbox" v-model="slaveForm.mergeCollect" />
           </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="saveSlave">保存</button>
-          <button class="btn-cancel" @click="closeSlaveModal">取消</button>
+          <button class="btn-save" @click="saveSlave">{{ t('edge.save') }}</button>
+          <button class="btn-cancel" @click="closeSlaveModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -237,18 +237,18 @@
     <!-- 添加数据点对话框 -->
     <div v-if="showPointModal" class="modal-overlay" @click.self="closePointModal">
       <div class="modal">
-        <h3>{{ isEditingPoint ? '编辑数据点' : '添加数据点' }}</h3>
+        <h3>{{ isEditingPoint ? t('edge.editPointTitle') : t('edge.addPointTitle') }}</h3>
         <div class="modal-form">
           <div class="form-group">
-            <label>名称:</label>
+            <label>{{ t('edge.name') }}:</label>
             <input v-model="pointForm.name" type="text" placeholder="node0101" />
           </div>
           <div class="form-group">
-            <label>详细信息:</label>
+            <label>{{ t('edge.detail') }}:</label>
             <input v-model="pointForm.detail" type="text" />
           </div>
           <div class="form-group">
-            <label>寄存器:</label>
+            <label>{{ t('edge.registerType') }}:</label>
             <div class="register-input">
               <select v-model.number="pointForm.registerType">
                 <option :value="0">0</option>
@@ -261,40 +261,40 @@
             <span class="register-display">{{ computedRegisterAddress }}</span>
           </div>
           <div class="form-group">
-            <label>数值类型:</label>
+            <label>{{ t('edge.dataType') }}:</label>
             <select v-model="pointForm.dataType">
               <option v-for="type in availableDataTypes" :key="type" :value="type">{{ type }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>小数位数:</label>
+            <label>{{ t('edge.decimalPlaces') }}:</label>
             <select v-model.number="pointForm.decimalPlaces">
               <option v-for="n in 7" :key="n-1" :value="n-1">{{ n - 1 }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>超时时间:</label>
+            <label>{{ t('edge.timeout') }}:</label>
             <div class="input-with-unit">
               <input v-model.number="pointForm.timeout" type="number" placeholder="200" />
               <span class="unit">ms</span>
             </div>
           </div>
           <div class="form-group">
-            <label>采集公式:</label>
+            <label>{{ t('edge.collectFormula') }}:</label>
             <input v-model="pointForm.collectFormula" type="text" />
           </div>
           <div class="form-group">
-            <label>控制公式:</label>
+            <label>{{ t('edge.controlFormula') }}:</label>
             <input v-model="pointForm.controlFormula" type="text" />
           </div>
           <div class="form-group">
-            <label>变化上报:</label>
+            <label>{{ t('edge.reportOnChange') }}:</label>
             <input type="checkbox" v-model="pointForm.reportOnChange" />
           </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="savePoint">保存</button>
-          <button class="btn-cancel" @click="closePointModal">取消</button>
+          <button class="btn-save" @click="savePoint">{{ t('edge.save') }}</button>
+          <button class="btn-cancel" @click="closePointModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -304,6 +304,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import apiClient from '../api/services'
+import { useI18n } from '../i18n/useI18n.js'
+
+// 使用 i18n
+const { t } = useI18n()
 
 // 响应式数据
 const loading = ref(true)
@@ -312,10 +316,10 @@ const activeTab = ref(0)
 
 // 标签页配置
 const tabList = ref([
-  { name: '网关使能' },
-  { name: '数据采集' },
-  { name: '数据上报' },
-  { name: '协议转换' }
+  { name: t('edge.tabGatewayEnable') },
+  { name: t('edge.tabDataCollection') },
+  { name: t('edge.tabDataReport') },
+  { name: t('edge.tabProtocolConvert') }
 ])
 
 // 边缘计算配置
@@ -337,19 +341,19 @@ const csvFileInput = ref(null)
 const selectedCsvFile = ref(null)
 
 // 系统默认数据点
-const systemPoints = [
-  { id: 'sys_local_time', name: 'sys_local_time', dataType: '字符串', value: null },
-  { id: 'sys_timestamp', name: 'sys_timestamp', dataType: '字符串', value: null },
-  { id: 'sys_timestamp_ms', name: 'sys_timestamp_ms', dataType: '字符串', value: null },
-  { id: 'sys_mac', name: 'sys_mac', dataType: '字符串', value: 0 },
-  { id: 'sys_imei', name: 'sys_imei', dataType: '字符串', value: null },
-  { id: 'sys_sn', name: 'sys_sn', dataType: '字符串', value: null },
-  { id: 'sys_iccid', name: 'sys_iccid', dataType: '字符串', value: null },
-  { id: 'sys_ver', name: 'sys_ver', dataType: '字符串', value: null },
-  { id: 'sys_csq', name: 'sys_csq', dataType: '字符串', value: null },
-  { id: 'sys_utc_time', name: 'sys_utc_time', dataType: '字符串', value: null },
-  { id: 'sys_model', name: 'sys_model', dataType: '字符串', value: null }
-]
+const systemPoints = computed(() => [
+  { id: 'sys_local_time', name: 'sys_local_time', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_timestamp', name: 'sys_timestamp', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_timestamp_ms', name: 'sys_timestamp_ms', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_mac', name: 'sys_mac', dataType: t('edge.dataTypeString'), value: 0 },
+  { id: 'sys_imei', name: 'sys_imei', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_sn', name: 'sys_sn', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_iccid', name: 'sys_iccid', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_ver', name: 'sys_ver', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_csq', name: 'sys_csq', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_utc_time', name: 'sys_utc_time', dataType: t('edge.dataTypeString'), value: null },
+  { id: 'sys_model', name: 'sys_model', dataType: t('edge.dataTypeString'), value: null }
+])
 
 // 从机列表
 const slaveList = ref([
@@ -358,7 +362,7 @@ const slaveList = ref([
     name: 'System_Sla..System',
     isSystem: true,
     slaveAddress: '',
-    points: [...systemPoints]
+    points: [] // 初始化为空数组，后续填充
   }
 ])
 
@@ -510,7 +514,7 @@ const handleCsvSelect = (event) => {
 // 导入CSV
 const importCsv = async () => {
   if (!selectedCsvFile.value) {
-    alert('请先选择文件')
+    alert(t('edge.pleaseSelectFileFirst'))
     return
   }
   
@@ -522,12 +526,12 @@ const importCsv = async () => {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
-    alert('导入成功')
+    alert(t('edge.importSuccess'))
     selectedCsvFile.value = null
     await loadData()
   } catch (err) {
     console.error('导入失败:', err)
-    alert('导入失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('edge.importFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -548,7 +552,7 @@ const exportCsv = async () => {
     window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('导出失败:', err)
-    alert('导出失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('edge.exportFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -586,7 +590,7 @@ const closeSlaveModal = () => {
 
 const saveSlave = () => {
   if (!slaveForm.value.name) {
-    alert('请输入从机名称')
+    alert(t('edge.pleaseInputSlaveName'))
     return
   }
   
@@ -611,7 +615,7 @@ const deleteSlave = (index) => {
   const slave = slaveList.value[index]
   if (slave.isSystem) return
   
-  if (confirm(`确定要删除从机 "${slave.name}" 吗？`)) {
+  if (confirm(`${t('edge.confirmDeleteSlave')} "${slave.name}" 吗？`)) {
     slaveList.value.splice(index, 1)
     if (selectedSlaveIndex.value >= slaveList.value.length) {
       selectedSlaveIndex.value = slaveList.value.length - 1
@@ -656,7 +660,7 @@ const closePointModal = () => {
 
 const savePoint = () => {
   if (!pointForm.value.name) {
-    alert('请输入数据点名称')
+    alert(t('edge.pleaseInputPointName'))
     return
   }
   
@@ -680,7 +684,7 @@ const deletePoint = (index) => {
   if (!currentSlave.value || currentSlave.value.isSystem) return
   
   const point = currentSlave.value.points[index]
-  if (confirm(`确定要删除数据点 "${point.name}" 吗？`)) {
+  if (confirm(`${t('edge.confirmDeletePoint')} "${point.name}" 吗？`)) {
     currentSlave.value.points.splice(index, 1)
   }
 }
@@ -715,10 +719,10 @@ const saveCurrentPage = async () => {
       })
     }
     
-    alert('保存成功')
+    alert(t('edge.saveSuccess'))
   } catch (err) {
     console.error('保存失败:', err)
-    alert('保存失败: ' + (err.response?.data?.msg || err.message))
+    alert(t('edge.saveFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
 }
 
@@ -836,7 +840,7 @@ const loadData = async () => {
     }
     
   } catch (err) {
-    error.value = '加载配置失败: ' + err.message
+    error.value = t('common.loadError') + ': ' + err.message
     console.error('配置加载错误:', err)
   } finally {
     loading.value = false
@@ -845,6 +849,11 @@ const loadData = async () => {
 
 // 组件挂载时加载数据
 onMounted(() => {
+  // 初始化系统从机的数据点
+  if (slaveList.value[0] && slaveList.value[0].isSystem) {
+    slaveList.value[0].points = [...systemPoints.value]
+  }
+  
   loadData()
 })
 </script>
