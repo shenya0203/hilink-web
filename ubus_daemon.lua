@@ -79,6 +79,115 @@ local function save_uart_config_to_uci(config)
     return true
 end
 
+-- 从UCI读取通讯通道配置到内存
+local function load_comm_tunnel_config_from_uci()
+    local cursor = uci_lib.cursor()
+    local config = {
+        SOCK = {},
+        MQTT = {},
+        UCLOUD = nil
+    }
+    
+    -- 读取SOCK配置
+    cursor:foreach("comm_tunnel", "SOCK", function(section)
+        local sock_item = {
+            enable = tonumber(section.enable) or 0,
+            name = section.name or section[".name"],
+            mode = tonumber(section.mode) or 0,
+            tcpc = {
+                server_ip = section.tcpc_server_ip or "192.168.0.201",
+                local_port = tonumber(section.tcpc_local_port) or 0,
+                server_port = tonumber(section.tcpc_server_port) or 8234,
+                dns_timeout = tonumber(section.tcpc_dns_timeout) or 30,
+                reconn_interval = tonumber(section.tcpc_reconn_interval) or 5,
+                ssl_mode = tonumber(section.tcpc_ssl_mode) or 0,
+                ssl_verify = tonumber(section.tcpc_ssl_verify) or 0,
+                ssl_server_name = section.tcpc_ssl_server_name or "null",
+                ssl_client_name = section.tcpc_ssl_client_name or "null",
+                ssl_client_key = section.tcpc_ssl_client_key or "null",
+                regp_en = tonumber(section.tcpc_regp_en) or 0,
+                regp_fmt = tonumber(section.tcpc_regp_fmt) or 0,
+                regp_ctx = section.tcpc_regp_ctx or "",
+                regp_tim = tonumber(section.tcpc_regp_tim) or 0,
+                hrtp_en = tonumber(section.tcpc_hrtp_en) or 0,
+                hrtp_fmt = tonumber(section.tcpc_hrtp_fmt) or 0,
+                hrtp_ctx = section.tcpc_hrtp_ctx or "",
+                hrtp_tim = tonumber(section.tcpc_hrtp_tim) or 60
+            },
+            tcps = {
+                local_port = tonumber(section.tcps_local_port) or 8029,
+                conn_max_num = tonumber(section.tcps_conn_max_num) or 4,
+                timeout_handling = tonumber(section.tcps_timeout_handling) or 0,
+                idle_handling = tonumber(section.tcps_idle_handling) or 0,
+                idle_timeout = tonumber(section.tcps_idle_timeout) or 3600
+            },
+            udpc = {
+                server_ip = section.udpc_server_ip or "192.168.20.21",
+                local_port = tonumber(section.udpc_local_port) or 0,
+                server_port = tonumber(section.udpc_server_port) or 1593,
+                dns_timeout = tonumber(section.udpc_dns_timeout) or 30,
+                ip_port_verify = tonumber(section.udpc_ip_port_verify) or 0
+            },
+            httpc = {
+                mode = tonumber(section.httpc_mode) or 0,
+                url = section.httpc_url or "/1.php?",
+                header = section.httpc_header or "Accept:text/html",
+                cut_header = tonumber(section.httpc_cut_header) or 1,
+                server_ip = section.httpc_server_ip or "test.usr.cn",
+                server_port = tonumber(section.httpc_server_port) or 80,
+                resp_timeout = tonumber(section.httpc_resp_timeout) or 10,
+                local_port = tonumber(section.httpc_local_port) or 0
+            }
+        }
+        table.insert(config.SOCK, sock_item)
+    end)
+    
+    -- 读取MQTT配置
+    cursor:foreach("comm_tunnel", "MQTT", function(section)
+        local mqtt_item = {
+            enable = tonumber(section.enable) or 0,
+            name = section.name or section[".name"],
+            mqtt_ver = tonumber(section.mqtt_ver) or 4,
+            server_ip = section.server_ip or "192.168.0.201",
+            server_port = tonumber(section.server_port) or 1883,
+            loacl_port = tonumber(section.local_port) or 0,
+            keepalive = tonumber(section.keepalive) or 60,
+            reconn_space = tonumber(section.reconn_space) or 5,
+            clean_session = tonumber(section.clean_session) or 0,
+            client_id = section.client_id or "",
+            conn_verify = tonumber(section.conn_verify) or 0,
+            conn_user_name = section.conn_user_name or "",
+            conn_user_password = section.conn_password or "",
+            ssl_mode = tonumber(section.ssl_mode) or 0,
+            ssl_verify = tonumber(section.ssl_verify) or 0,
+            ssl_server_name = section.ssl_server_name or "null",
+            ssl_client_name = section.ssl_client_name or "null",
+            ssl_client_key = section.ssl_client_key or "null",
+            will_flag = tonumber(section.will_flag) or 0,
+            will = {
+                topic = section.will_topic or "/will",
+                msg = section.will_msg or "offline",
+                qos = tonumber(section.will_qos) or 0,
+                retention = tonumber(section.will_retention) or 0
+            }
+        }
+        table.insert(config.MQTT, mqtt_item)
+    end)
+    
+    -- 读取Cloud配置
+    cursor:foreach("comm_tunnel", "cloud", function(section)
+        config.UCLOUD = {
+            enable = tonumber(section.enable) or 0,
+            name = section.name or "Cloud",
+            pvt_deploy_enable = tonumber(section.pvt_deploy_enable) or 0,
+            server_ip = section.server_ip or "192.168.0.201",
+            server_port = tonumber(section.server_port) or 1234
+        }
+    end)
+    
+    return config
+end
+
 -- 1. 状态数据
 local status_data = {
     systime = os.time(),
@@ -162,29 +271,148 @@ local misc_config = {
 --[[
     /etc/config/comm_tunnel
     config comm_tunnel 'SOCK'
-        option enable '1'
-        option name 'SOCKA'
-        option mode '0'
-    config comm_tunnel 'TCPC'
-        option tcpc_server_ip '192.168.0.201'
-        option tcpc_dns_timeout '30'
-        option tcpc_reconn_interval '5'
-        option tcpc_server_port '8234'
-        option tcpc_local_port '0'
-        option tcpc_ssl_mode '0'
-        option tcpc_ssl_verify '0'
-        option tcpc_ssl_server_name 'null'
-        option tcpc_ssl_client_name 'null'
-        option tcpc_ssl_client_key 'null'
-        option tcpc_regp_en '0'
-        option tcpc_regp_fmt '0'
-        option tcpc_regp_ctx ''
-        option tcpc_regp_tim '0'
-        option tcpc_hrtp_en '0'
-        option tcpc_hrtp_fmt '0'
-        option tcpc_hrtp_ctx ''
-        option tcpc_hrtp_tim '60'
-    config comm_tunnel 'UDP'
+        option enable '1'                       #socket 使能 0：禁用 1：启用
+        option name 'SOCKA'                     #socket 通道名称
+        option mode '0'                         #socket 模式 0：TCP client 1: TCP Server 2:UDP client 3 http client
+        #以tcpc_开头的参数 
+        option tcpc_server_ip '192.168.0.201'   #tcp client  连接的服务器IP/域名
+        option tcpc_local_port '0'              #tcp client  tcp client本地使用的端口 0表示系统选择 非0表示指定端口
+        option tcpc_server_port '8234'          #tcp client  tcp client连接的服务器端口
+        option tcpc_dns_timeout '30'            #tcp client  dns超时时间    用在tcpc_server_ip为域名时
+        option tcpc_reconn_interval '5'         #tcp client  重连间隔
+        option tcpc_ssl_mode '0'                #tcp client  ssl模式 0：不使用ssl 1：使用ssl TLS1.2
+        option tcpc_ssl_verify '0'              #tcp client  ssl验证 0：不验证 1：验证   不知道干啥的？？
+        option tcpc_ssl_server_name 'null'      #服务器证书名称 证书存放在指定的目录下/etc/config/tcpc/
+        option tcpc_ssl_client_name 'null'      #客户端证书名称
+        option tcpc_ssl_client_key 'null'       #客户端证书密钥
+        option tcpc_regp_en '0'                 #tcp client  注册包协议使能 0：禁用 1：启用
+        option tcpc_regp_fmt '0'                #tcp client  注册包协议格式 0：不使用 1：使用
+        option tcpc_regp_ctx ''                 #tcp client  注册包协议上下文
+        option tcpc_regp_tim '0'                #tcp client  注册包协议超时时间
+        option tcpc_hrtp_en '0'                 #tcp client  心跳包协议使能 0：禁用 1：启用
+        option tcpc_hrtp_fmt '0'                #tcp client  心跳包协议格式 0：不使用 1：使用
+        option tcpc_hrtp_ctx ''                 #tcp client  心跳包协议上下文
+        option tcpc_hrtp_tim '60'               #tcp client  心跳包协议超时时间
+        #以tcps_开头的参数
+        option tcps_local_port '8029'           #tcp server  tcp server本地使用的端口
+        option tcps_conn_max_num '4'            #tcp server  tcp server最大连接数
+        option tcps_timeout_handling '0'        #tcp server  超出连接数量后的处理 0：KEEP 保持 1：KICK 踢掉
+        #以udpc_开头的参数
+        option udpc_server_ip '192.168.20.21'   #udp client  udp client连接的服务器IP/域名
+        option udpc_local_port '0'              #udp client  udp client本地使用的端口 0表示系统选择 非0表示指定端口
+        option udpc_server_port '1593'          #udp client  udp client连接的服务器端口
+        option udpc_dns_timeout '30'            #udp client  dns超时时间    用在udpc_server_ip为域名时
+        option udpc_ip_port_verify '0'          #udp client  ip端口验证 0：不验证 1：验证
+        #以httpc_开头的参数
+        option httpc_mode '0'                   #http client  http client模式 0：http 1：https
+        option httpc_url '/1.php?'              #http client  http client连接的URL
+        option httpc_header 'Accept:text/html'  #http client  http client连接的header
+        option httpc_cut_header '1'             #http client  http client连接的cut_header
+        option httpc_server_ip 'test.usr.cn'    #http client  http client连接的服务器IP/域名
+        option httpc_server_port '80'           #http client  http client连接的服务器端口
+        option httpc_resp_timeout '10'          #http client  http client连接的响应超时时间
+        option httpc_local_port '0'             #http client  http client本地使用的端口 0表示系统选择 非0表示指定端口
+    config comm_tunnel 'SOCK'
+        option enable '1'                       #socket 使能 0：禁用 1：启用
+        option name 'SOCKB'                     #socket 通道名称
+        option mode '0'                         #socket 模式 0：TCP client 1: TCP Server 2:UDP client 3 http client
+        #以tcpc_开头的参数 
+        option tcpc_server_ip '192.168.0.201'   #tcp client  连接的服务器IP/域名
+        option tcpc_local_port '0'              #tcp client  tcp client本地使用的端口 0表示系统选择 非0表示指定端口
+        option tcpc_server_port '8234'          #tcp client  tcp client连接的服务器端口
+        option tcpc_dns_timeout '30'            #tcp client  dns超时时间    用在tcpc_server_ip为域名时
+        option tcpc_reconn_interval '5'         #tcp client  重连间隔
+        option tcpc_ssl_mode '0'                #tcp client  ssl模式 0：不使用ssl 1：使用ssl TLS1.2
+        option tcpc_ssl_verify '0'              #tcp client  ssl验证 0：不验证 1：验证   不知道干啥的？？
+        option tcpc_ssl_server_name 'null'      #服务器证书名称 证书存放在指定的目录下/etc/config/tcpc/
+        option tcpc_ssl_client_name 'null'      #客户端证书名称
+        option tcpc_ssl_client_key 'null'       #客户端证书密钥
+        option tcpc_regp_en '0'                 #tcp client  注册包协议使能 0：禁用 1：启用
+        option tcpc_regp_fmt '0'                #tcp client  注册包协议格式 0：不使用 1：使用
+        option tcpc_regp_ctx ''                 #tcp client  注册包协议上下文
+        option tcpc_regp_tim '0'                #tcp client  注册包协议超时时间
+        option tcpc_hrtp_en '0'                 #tcp client  心跳包协议使能 0：禁用 1：启用
+        option tcpc_hrtp_fmt '0'                #tcp client  心跳包协议格式 0：不使用 1：使用
+        option tcpc_hrtp_ctx ''                 #tcp client  心跳包协议上下文
+        option tcpc_hrtp_tim '60'               #tcp client  心跳包协议超时时间
+        #以tcps_开头的参数
+        option tcps_local_port '8029'           #tcp server  tcp server本地使用的端口
+        option tcps_conn_max_num '4'            #tcp server  tcp server最大连接数
+        option tcps_timeout_handling '0'        #tcp server  超出连接数量后的处理 0：KEEP 保持 1：KICK 踢掉
+        #以udpc_开头的参数
+        option udpc_server_ip '192.168.20.21'   #udp client  udp client连接的服务器IP/域名
+        option udpc_local_port '0'              #udp client  udp client本地使用的端口 0表示系统选择 非0表示指定端口
+        option udpc_server_port '1593'          #udp client  udp client连接的服务器端口
+        option udpc_dns_timeout '30'            #udp client  dns超时时间    用在udpc_server_ip为域名时
+        option udpc_ip_port_verify '0'          #udp client  ip端口验证 0：不验证 1：验证
+        #以httpc_开头的参数
+        option httpc_mode '0'                   #http client  http client模式 0：http 1：https
+        option httpc_url '/1.php?'              #http client  http client连接的URL
+        option httpc_header 'Accept:text/html'  #http client  http client连接的header
+        option httpc_cut_header '1'             #http client  http client连接的cut_header
+        option httpc_server_ip 'test.usr.cn'    #http client  http client连接的服务器IP/域名
+        option httpc_server_port '80'           #http client  http client连接的服务器端口
+        option httpc_resp_timeout '10'          #http client  http client连接的响应超时时间
+        option httpc_local_port '0'             #http client  http client本地使用的端口 0表示系统选择 非0表示指定端口
+    config comm_tunnel 'MQTT'
+        option enable '1'                       #MQTT 使能 0：禁用 1：启用 
+        option name 'MQTT1'                     #MQTT 通道名称
+        option mott_Ver '4'                     #MQTT 协议版本 3：MQTT 3.1 4：MQTT 3.1.1
+        option client_id 'test'                 #MQTT 客户端ID
+        option server_ip '192.168.0.201'        #MQTT 服务器IP
+        option server_port '1883'               #MQTT 服务器端口
+        option local_port '0'                   #MQTT 本地端口
+        option keepalive '60'                   #MQTT 保持连接时间
+
+        option reconn_space '5'                 #MQTT 重连间隔
+        option clean_session '0'                #MQTT 清除会话 0：不清除 1：清除
+        option conn_verify '0'                  #MQTT 连接验证 0：不验证 1：验证
+
+        option conn_user_name 'test'            #MQTT 用户名
+        option conn_password 'test'             #MQTT 密码
+        option will_flag '0'                    #MQTT 遗嘱标志 0：不遗嘱 1：遗嘱
+        option will_topic 'test'                #MQTT 遗嘱主题
+        option will_msg 'test'                  #MQTT 遗嘱消息
+        option will_qos '0'                     #MQTT 遗嘱QoS 0：QoS 0 1：QoS 1 2：QoS 2
+        option will_retention '0'               #MQTT 遗嘱保留 0：不保留 1：保留
+        option ssl_mode '2'                     #MQTT SSL模式 0：不使用SSL 1：使用SSL 2：使用SSL/TLS
+        option ssl_verify '0'                   #MQTT SSL验证 01: 不认证证书 1:认证服务器证书 2:双向认证
+        option ssl_server_name 'test'           #MQTT SSL服务器证书文件名称
+        option ssl_client_name 'test'           #MQTT SSL客户端证书文件名称
+        option ssl_client_key 'test'            #MQTT SSL客户端密钥文件名称
+    config comm_tunnel 'MQTT'
+        option enable '0'                       #MQTT 使能 0：禁用 1：启用 
+        option name 'MQTT2'                     #MQTT 通道名称
+        option mott_Ver '4'                     #MQTT 协议版本 3：MQTT 3.1 4：MQTT 3.1.1
+        option client_id 'test'                 #MQTT 客户端ID
+        option server_ip '192.168.0.202'        #MQTT 服务器IP
+        option server_port '1883'               #MQTT 服务器端口
+        option local_port '0'                   #MQTT 本地端口
+        option keepalive '60'                   #MQTT 保持连接时间
+
+        option reconn_space '5'                 #MQTT 重连间隔
+        option clean_session '0'                #MQTT 清除会话 0：不清除 1：清除
+        option conn_verify '0'                  #MQTT 连接验证 0：不验证 1：验证
+
+        option conn_user_name 'test'            #MQTT 用户名
+        option conn_password 'test'             #MQTT 密码
+        option will_flag '0'                    #MQTT 遗嘱标志 0：不遗嘱 1：遗嘱
+        option will_topic 'test'                #MQTT 遗嘱主题
+        option will_msg 'test'                  #MQTT 遗嘱消息
+        option will_qos '0'                     #MQTT 遗嘱QoS 0：QoS 0 1：QoS 1 2：QoS 2
+        option will_retention '0'               #MQTT 遗嘱保留 0：不保留 1：保留
+        option ssl_mode '2'                     #MQTT SSL模式 0：不使用SSL 1：使用SSL 2：使用SSL/TLS
+        option ssl_verify '0'                   #MQTT SSL验证 01: 不认证证书 1:认证服务器证书 2:双向认证
+        option ssl_server_name 'test'           #MQTT SSL服务器证书文件名称
+        option ssl_client_name 'test'           #MQTT SSL客户端证书文件名称
+        option ssl_client_key 'test'            #MQTT SSL客户端密钥文件名称
+    config cloud 'Cloud'
+        option enable '0'                       #CLOUD 使能 0：禁用 1：启用
+        option name 'Cloud'                     #CLOUD 云的名字
+        option pvt_deploy_enable '0'            #CLOUD 私有部署使能 0：禁用 1：启用
+        option server_ip '192.168.0.201'        #CLOUD 私有云的IP地址
+        option server_port '8234'               #CLOUD 私有云的端口
+    }
 ]]--
 local comm_tunnel_config = {
     SOCK = {
@@ -389,12 +617,12 @@ local function set_uart_config(args)
     if args.UART and type(args.UART) == "table" then
         -- 更新内存缓存
         uart_config.UART = args.UART
-        uart_config_loaded = true
         
         -- 保存到UCI配置文件
         local success = save_uart_config_to_uci(uart_config)
         if success then
             log_info("Updated uart config and saved to UCI: " .. cjson.encode(uart_config))
+            uart_config_loaded = true
         else
             log_error("Failed to save uart config to UCI")
         end
@@ -624,11 +852,25 @@ local methods = {
         -- 获取通讯通道配置
         get_comm_tunnel_config = {
             function(req, msg)
+                -- 如果内存缓存为空，则从UCI配置文件读取
+                if not comm_tunnel_config_loaded then
+                    local loaded_config = load_comm_tunnel_config_from_uci()
+                    if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.UCLOUD) then
+                        comm_tunnel_config = loaded_config
+                        comm_tunnel_config_loaded = true
+                        log_info("Loaded comm_tunnel config from UCI: " .. cjson.encode(comm_tunnel_config))
+                    else
+                        log_info("Using default comm_tunnel config (UCI empty or not found)")
+                        comm_tunnel_config_loaded = true
+                    end
+                else
+                    log_info("Using cached comm_tunnel config")
+                end
                 reply(req, deep_copy(comm_tunnel_config))
             end,
             {}
         },
-        
+
         -- 设置通讯通道配置
         set_comm_tunnel_config = {
             function(req, msg)

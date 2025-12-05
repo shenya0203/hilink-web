@@ -126,51 +126,16 @@ end
 
 -- 5. Comm Tunnel Config
 function _M.get_comm_tunnel_config()
-    return {
-        SOCK = {
-            {
-                enable = 1, name = "SOCKA", mode = 0,
-                tcpc = { server_ip = "192.168.0.201", dns_timeout = 30, reconn_interval = 5,
-                    server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
-                    ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
-                    regp_en = 0, regp_fmt = 0, regp_ctx = "", regp_tim = 0,
-                    hrtp_en = 0, hrtp_fmt = 0, hrtp_ctx = "", hrtp_tim = 60 },
-                tcps = { local_port = 8029, conn_max_num = 4, timeout_handling = 0, idle_handling = 0, idle_timeout = 3600 },
-                udpc = { server_ip = "192.168.20.21", dns_timeout = 30, server_port = 1593, local_port = 0, ip_port_verify = 0 },
-                httpc = { mode = 0, url = "/1.php?", header = "Accept:text/html", cut_header = 1,
-                    server_ip = "test.usr.cn", server_port = 80, resp_timeout = 10, local_port = 0 }
-            },
-            {
-                enable = 0, name = "SOCKB", mode = 0,
-                tcpc = { server_ip = "192.168.0.201", dns_timeout = 30, reconn_interval = 5,
-                    server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
-                    ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
-                    regp_en = 0, regp_fmt = 0, regp_ctx = "", regp_tim = 0,
-                    hrtp_en = 0, hrtp_fmt = 0, hrtp_ctx = "", hrtp_tim = 60 },
-                tcps = { local_port = 20108, conn_max_num = 4, timeout_handling = 0, idle_handling = 0, idle_timeout = 3600 },
-                udpc = { server_ip = "192.168.20.21", dns_timeout = 30, server_port = 1593, local_port = 0, ip_port_verify = 0 },
-                httpc = { mode = 0, url = "/1.php?", header = "Accept:text/html", cut_header = 1,
-                    server_ip = "test.usr.cn", server_port = 80, resp_timeout = 10, local_port = 0 }
-            }
-        },
-        MQTT = {
-            {
-                enable = 0, name = "MQTT1", mqtt_ver = 4, server_ip = "192.168.0.201",
-                ssl_mode = 0, ssl_verify = 0, ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
-                loacl_port = 0, server_port = 1883, keepalive = 60, reconn_space = 5, clean_session = 0,
-                client_id = "1234567", conn_verify = 0, conn_user_name = "", conn_user_password = "",
-                will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
-            },
-            {
-                enable = 0, name = "MQTT2", mqtt_ver = 4, server_ip = "192.168.0.201",
-                ssl_mode = 0, ssl_verify = 0, ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
-                loacl_port = 0, server_port = 1883, keepalive = 60, reconn_space = 5, clean_session = 0,
-                client_id = "", conn_verify = 0, conn_user_name = "", conn_user_password = "",
-                will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
-            }
-        },
-        UCLOUD = { enable = 1, name = "Cloud", pvt_deploy_enable = 0, server_ip = "192.168.0.201", server_port = 1234 }
-    }
+    ngx.log(ngx.ERR, "-------------------- get_comm_tunnel_config ")
+    -- 通过ubus接口从后端daemon获取通讯通道配置
+    local result = ubus_call("hilink", "get_comm_tunnel_config")
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_comm_tunnel_config result: " .. cjson.encode(result))
+        return result
+    end
+    -- 如果ubus调用失败，返回nil
+    ngx.log(ngx.WARN, "ubus call failed for get_comm_tunnel_config")
+    return nil
 end
 
 -- 6. UART Config
@@ -243,17 +208,36 @@ end
 -- 11. Set Config
 function _M.set_config(module, args)
     if module == "uart" then
+        -- 直接从args组装完整的UART配置数组
+        local uart_array = {}
+        
         for k, v in pairs(args) do
             local index, key = string.match(k, "n_UART%[(%d+)%]%.(.+)")
             if index and key then
                 index = tonumber(index) + 1
-                if uart_config.UART[index] then
-                    uart_config.UART[index][key] = tonumber(v) or v
+                if not uart_array[index] then
+                    uart_array[index] = {}
                 end
+                uart_array[index][key] = tonumber(v) or v
             end
         end
-        ngx.log(ngx.ERR, "set_config uart: " .. cjson.encode(uart_config))
-        return true
+
+        ngx.log(ngx.ERR, "set_config uart via ubus: " .. cjson.encode(uart_array))
+        
+        -- 构建配置对象
+        local uart_config = { UART = uart_array }
+        
+        ngx.log(ngx.ERR, "set_config uart via ubus: " .. cjson.encode(uart_config))
+        
+        -- 通过ubus接口设置uart配置
+        local result = ubus_call("hilink", "set_uart_config", uart_config)
+        if result and result.result then
+            ngx.log(ngx.ERR, "Successfully set uart config via ubus")
+            return true
+        else
+            ngx.log(ngx.ERR, "Failed to set uart config via ubus")
+            return false
+        end
     end
     
     if module == "comm_tunnel" then
