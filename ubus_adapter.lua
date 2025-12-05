@@ -1,3 +1,37 @@
+local cjson = require "cjson"
+local ubus = require "ubus"
+
+-- ubus连接缓存
+local ubus_conn = nil
+
+-- 获取ubus连接
+local function get_ubus_conn()
+    if not ubus_conn then
+        ubus_conn = ubus.connect()
+        if not ubus_conn then
+            ngx.log(ngx.ERR, "Failed to connect to ubus")
+            return nil
+        end
+    end
+    return ubus_conn
+end
+
+-- 调用ubus方法的通用函数
+local function ubus_call(object, method, params)
+    local conn = get_ubus_conn()
+    if not conn then
+        return nil, "ubus connection failed"
+    end
+    
+    local result = conn:call(object, method, params or {})
+    if not result then
+        ngx.log(ngx.ERR, "ubus call failed: " .. object .. "." .. method)
+        return nil, "ubus call failed"
+    end
+    
+    return result
+end
+
 local _M = {}
 
 -- ==========================================================
@@ -148,7 +182,17 @@ local uart_config = {
 }
 
 function _M.get_uart_config()
-    return uart_config
+    ngx.log(ngx.ERR, "-------------------- get_uart_config ")
+    -- 通过ubus接口从后端daemon获取串口配置
+    local result = ubus_call("hilink", "get_uart_config")
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_uart_config result: " .. cjson.encode(result))
+        return result
+    end
+    -- 如果ubus调用失败，返回本地默认配置
+    ngx.log(ngx.WARN, "ubus call failed, using local uart_config")
+    --失败 不要返回数据 会令人迷惑
+    return nil
 end
 
 -- 7. Offline cache config
@@ -208,6 +252,7 @@ function _M.set_config(module, args)
                 end
             end
         end
+        ngx.log(ngx.ERR, "set_config uart: " .. cjson.encode(uart_config))
         return true
     end
     

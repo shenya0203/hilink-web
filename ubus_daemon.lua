@@ -1,0 +1,903 @@
+#!/usr/bin/env lua
+-- ==========================================================
+-- Hilink Ubus Daemon
+-- 后端ubus服务进程，提供设备配置的读取和设置接口
+-- ==========================================================
+
+local ubus = require "ubus"
+local uloop = require "uloop"
+local cjson = require "cjson"
+
+-- ==========================================================
+-- 配置数据存储 (实际应用中应该从文件或数据库读取)
+-- ==========================================================
+
+-- UCI 配置文件操作封装
+local uci_lib = require("uci")
+
+-- 配置缓存标志
+local uart_config_loaded = false
+
+-- 从UCI读取串口配置到内存
+local function load_uart_config_from_uci()
+    local cursor = uci_lib.cursor()
+    local config = { UART = {} }
+    
+    cursor:foreach("uart", "uart", function(section)
+        local uart_item = {
+            enable = tonumber(section.enable) or 0,
+            name = section.name or section[".name"],
+            work_mode = tonumber(section.work_mode) or 0,
+            baud_rate = tonumber(section.baud_rate) or 9600,
+            data_bit = tonumber(section.data_bit) or 8,
+            stop_bit = tonumber(section.stop_bit) or 1,
+            parity = tonumber(section.parity) or 0,
+            pack_len = tonumber(section.pack_len) or 1460,
+            pack_time = tonumber(section.pack_time) or 0,
+            func = tonumber(section.func) or 1,
+            select = tonumber(section.select) or 0,
+            device = section.device or ""
+        }
+        table.insert(config.UART, uart_item)
+    end)
+    
+    return config
+end
+
+-- 保存串口配置到UCI
+local function save_uart_config_to_uci(config)
+    local cursor = uci_lib.cursor()
+    
+    -- 先删除所有现有的uart section
+    cursor:foreach("uart", "uart", function(section)
+        cursor:delete("uart", section[".name"])
+    end)
+    
+    -- 写入新的配置
+    for i, uart_item in ipairs(config.UART) do
+        local section_name = uart_item.name or ("Uart" .. i)
+        cursor:set("uart", section_name, "uart")
+        cursor:set("uart", section_name, "enable", tostring(uart_item.enable or 0))
+        cursor:set("uart", section_name, "name", uart_item.name or section_name)
+        cursor:set("uart", section_name, "work_mode", tostring(uart_item.work_mode or 0))
+        cursor:set("uart", section_name, "baud_rate", tostring(uart_item.baud_rate or 9600))
+        cursor:set("uart", section_name, "data_bit", tostring(uart_item.data_bit or 8))
+        cursor:set("uart", section_name, "stop_bit", tostring(uart_item.stop_bit or 1))
+        cursor:set("uart", section_name, "parity", tostring(uart_item.parity or 0))
+        cursor:set("uart", section_name, "pack_len", tostring(uart_item.pack_len or 1460))
+        cursor:set("uart", section_name, "pack_time", tostring(uart_item.pack_time or 0))
+        cursor:set("uart", section_name, "func", tostring(uart_item.func or 1))
+        if uart_item.select then
+            cursor:set("uart", section_name, "select", tostring(uart_item.select))
+        end
+        if uart_item.device then
+            cursor:set("uart", section_name, "device", uart_item.device)
+        end
+    end
+    
+    cursor:commit("uart")
+    return true
+end
+
+-- 1. 状态数据
+local status_data = {
+    systime = os.time(),
+    runtime = 0,
+    cloud_sta = 1,
+    socketa_sta = 0,
+    socketb_sta = 0,
+    mqtt1_sta = 0,
+    mqtt2_sta = 0,
+    soft_ver = "V1.0.13.000000.0000",
+    mac = "D4AD20DBBF2F",
+    sn = "03300225101400005387",
+    user_sn = ""
+}
+
+-- 2. 网络状态数据
+local network_status = {
+    netdev = "EtherNET",
+    eth = {
+        link_sta = 1, ip_mode = 0, ip = "192.168.2.177",
+        dns = "223.5.5.5", sdns = "223.6.6.6", netmask = "255.255.255.0"
+    },
+    lte = {
+        ver = "16009.1037.00.01.53.05", iccid = "89861125204091384377",
+        imei = "868892078327435", csq = 21, mode = "4G", oper = 1, sim = 1,
+        cimi = "460113957693001", lte_sta = "Connected", lte_ip = "10.42.78.154",
+        lte_netmask = "255.255.255.255", lte_dns = "202.96.128.86", lte_sdns = "202.96.134.133"
+    }
+}
+
+-- 3. 网络配置数据
+local network_config = {
+    net_select = 0, keepalive_period = 10,
+    keepalive_addr = {"223.5.5.5", "8.8.8.8"},
+    eth0 = {
+        ip_mode = 0, sip = "192.168.2.177", gip = "192.168.2.1",
+        mip = "255.255.255.0", dns_mode = 0, dns_ip = {"223.5.5.5", "223.6.6.6"}
+    },
+    cell = {
+        sim_switch = 2,
+        apn = { addr = "", user = "", pswd = "", auth = 0 },
+        dns_mode = 1, dns_ip = {"202.96.128.86", "202.96.134.133"}
+    }
+}
+
+-- 4. 杂项配置
+local misc_config = {
+    web_lang = 2,
+    host_name = "N720",
+    websock_port = 6432,
+    websocket_point = 9,
+    web_port = 80,
+    web_user = "admin",
+    web_psw = "admin",
+    cache_buf = 0,
+    reset_time = 0,
+    telnet_en = 0,
+    telnet_port = 22,
+    ntp_sync_en = 1,
+    ntp_url = {
+        "ntp1.aliyun.com",
+        "time1.cloud.tencent.com",
+        "time.ustc.edu.cn",
+        "cn.pool.ntp.org"
+    },
+    ntp_utc = 8,
+    f485_en = 0,
+    f485_t = 10,
+    port_max = 2,
+    port_view = 0,
+    timing_reset = {
+        enable = 0,
+        hh = 0,
+        mm = 0,
+        ss = 0
+    }
+}
+
+-- 5. 通讯通道配置
+--分多个配置
+--[[
+    /etc/config/comm_tunnel
+    config comm_tunnel 'SOCK'
+        option enable '1'
+        option name 'SOCKA'
+        option mode '0'
+    config comm_tunnel 'TCPC'
+        option tcpc_server_ip '192.168.0.201'
+        option tcpc_dns_timeout '30'
+        option tcpc_reconn_interval '5'
+        option tcpc_server_port '8234'
+        option tcpc_local_port '0'
+        option tcpc_ssl_mode '0'
+        option tcpc_ssl_verify '0'
+        option tcpc_ssl_server_name 'null'
+        option tcpc_ssl_client_name 'null'
+        option tcpc_ssl_client_key 'null'
+        option tcpc_regp_en '0'
+        option tcpc_regp_fmt '0'
+        option tcpc_regp_ctx ''
+        option tcpc_regp_tim '0'
+        option tcpc_hrtp_en '0'
+        option tcpc_hrtp_fmt '0'
+        option tcpc_hrtp_ctx ''
+        option tcpc_hrtp_tim '60'
+    config comm_tunnel 'UDP'
+]]--
+local comm_tunnel_config = {
+    SOCK = {
+        {
+            enable = 1, name = "SOCKA", mode = 0,
+            tcpc = { server_ip = "192.168.0.201", dns_timeout = 30, reconn_interval = 5,
+                server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
+                ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
+                regp_en = 0, regp_fmt = 0, regp_ctx = "", regp_tim = 0,
+                hrtp_en = 0, hrtp_fmt = 0, hrtp_ctx = "", hrtp_tim = 60 },
+            tcps = { local_port = 8029, conn_max_num = 4, timeout_handling = 0, idle_handling = 0, idle_timeout = 3600 },
+            udpc = { server_ip = "192.168.20.21", dns_timeout = 30, server_port = 1593, local_port = 0, ip_port_verify = 0 },
+            httpc = { mode = 0, url = "/1.php?", header = "Accept:text/html", cut_header = 1,
+                server_ip = "test.usr.cn", server_port = 80, resp_timeout = 10, local_port = 0 }
+        },
+        {
+            enable = 0, name = "SOCKB", mode = 0,
+            tcpc = { server_ip = "192.168.0.201", dns_timeout = 30, reconn_interval = 5,
+                server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
+                ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
+                regp_en = 0, regp_fmt = 0, regp_ctx = "", regp_tim = 0,
+                hrtp_en = 0, hrtp_fmt = 0, hrtp_ctx = "", hrtp_tim = 60 },
+            tcps = { local_port = 20108, conn_max_num = 4, timeout_handling = 0, idle_handling = 0, idle_timeout = 3600 },
+            udpc = { server_ip = "192.168.20.21", dns_timeout = 30, server_port = 1593, local_port = 0, ip_port_verify = 0 },
+            httpc = { mode = 0, url = "/1.php?", header = "Accept:text/html", cut_header = 1,
+                server_ip = "test.usr.cn", server_port = 80, resp_timeout = 10, local_port = 0 }
+        }
+    },
+    MQTT = {
+        {
+            enable = 0, name = "MQTT1", mqtt_ver = 4, server_ip = "192.168.0.201",
+            ssl_mode = 0, ssl_verify = 0, ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
+            loacl_port = 0, server_port = 1883, keepalive = 60, reconn_space = 5, clean_session = 0,
+            client_id = "1234567", conn_verify = 0, conn_user_name = "", conn_user_password = "",
+            will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
+        },
+        {
+            enable = 0, name = "MQTT2", mqtt_ver = 4, server_ip = "192.168.0.201",
+            ssl_mode = 0, ssl_verify = 0, ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
+            loacl_port = 0, server_port = 1883, keepalive = 60, reconn_space = 5, clean_session = 0,
+            client_id = "", conn_verify = 0, conn_user_name = "", conn_user_password = "",
+            will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
+        }
+    },
+    UCLOUD = { enable = 1, name = "Cloud", pvt_deploy_enable = 0, server_ip = "192.168.0.201", server_port = 1234 }
+}
+
+-- 6. 串口配置
+--[[
+    /etc/config/uart
+    config uart 'Uart1'
+        option enable '1'
+        option select '0'
+        option device '/dev/ttyS0'
+        option name 'Uart1'
+        option work_mode '2'
+        option baud_rate '115200'
+        option data_bit '8'
+        option stop_bit '1'
+        option parity '0'
+        option pack_len '1460'
+        option pack_time '0'
+        option func '1'
+    config uart 'Uart2'
+        option enable '1'           #串口使能 0 禁用 1 启用
+        option select '0'           #意义不明 暂时保留
+        option device '/dev/ttyS1'  #物理串口设备
+        option name 'Uart2'         #串口通道名称
+        option work_mode '1'        #0 网络透传 1:边缘计算模式
+        option baud_rate '9600'     #波特率 
+        option data_bit '8'         #数据位
+        option stop_bit '1'         #停止位   1: 1位 2： 2位
+        option parity '0'           #校验位   0：无校验 1：奇校验 2：偶校验
+        option pack_len '1460'      #串口打包长度， work_mode == 1时 有效
+        option pack_time '0'        #串口打包时间， work_mode == 1时 有效   
+        option func '1'             #功能位 1 表示数据库 0 表示调试口
+]]--
+local uart_config = {
+    UART = {
+        { enable = 1, name = "Uart1", work_mode = 2, baud_rate = 115200, data_bit = 8, stop_bit = 1, parity = 0, pack_len = 1460, pack_time = 0, func = 1 },
+        { enable = 1, select = 0, name = "Uart2", work_mode = 2, baud_rate = 9600, data_bit = 8, stop_bit = 1, parity = 0, pack_len = 1460, pack_time = 0 }
+    }
+}
+
+-- 7. 离线缓存配置
+local offline_cache_config = {
+    mgt = { rpt_time = 200, queue_type = 0 },
+    tunnel = {
+        { name = "SOCKA", enable = 0 },
+        { name = "SOCKB", enable = 0 },
+        { name = "MQTT1", enable = 0 },
+        { name = "MQTT2", enable = 0 },
+        { name = "Cloud", enable = 0 }
+    }
+}
+
+-- 8. TF卡信息
+local tf_info = {
+    status = 1,
+    err = 0,
+    total = 16 * 1024 * 1024 * 1024,
+    used = 2 * 1024 * 1024 * 1024
+}
+
+-- 9. 边缘计算配置
+local edge_config = {
+    all_en = 1,
+    refresh_frequency = 100,
+    calc_period = 100,
+    poll_interval = 100
+}
+
+-- 10. 边缘计算上报配置
+local edge_report_config = {
+    group = {}
+}
+
+-- 11. 边缘计算协议转换配置
+local edge_access_config = {
+    group = {
+        {
+            enable = 0,
+            name = "my_group1",
+            proto = 1,
+            up = {
+                link = "MQTT1",
+                topic = "/PubTopic",
+                qos = 0,
+                retention = 0
+            },
+            down = {
+                link = "MQTT1",
+                topic = "/SubTopic",
+                qos = 0
+            }
+        }
+    }
+}
+
+-- 12. 边缘计算链路控制配置
+local edge_link_ctrl_config = {
+    group = {}
+}
+
+-- 13. 边缘计算点位数据 (CSV格式)
+local edge_points_csv = "V,V1.0,N7X0,;\nSC,Device1,1,2,1,100,0,0,192.168.0.21:2100,Device1,;\n"
+
+-- 14. 协议转换点位数据 (CSV格式)
+local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
+
+-- ==========================================================
+-- 辅助函数
+-- ==========================================================
+
+local start_time = os.time()
+
+local function get_runtime()
+    return os.time() - start_time
+end
+
+local function log_info(msg)
+    print(string.format("[INFO] %s", msg))
+end
+
+local function log_error(msg)
+    print(string.format("[ERROR] %s", msg))
+end
+
+local function deep_copy(obj)
+    if type(obj) ~= 'table' then return obj end
+    local res = {}
+    for k, v in pairs(obj) do res[deep_copy(k)] = deep_copy(v) end
+    return res
+end
+
+-- 更新嵌套表的值
+local function update_nested_value(tbl, key_path, value)
+    local keys = {}
+    for k in string.gmatch(key_path, "[^%.%[%]]+") do
+        table.insert(keys, k)
+    end
+    
+    local current = tbl
+    for i = 1, #keys - 1 do
+        local key = tonumber(keys[i]) or keys[i]
+        if current[key] == nil then
+            current[key] = {}
+        end
+        current = current[key]
+    end
+    
+    local final_key = tonumber(keys[#keys]) or keys[#keys]
+    current[final_key] = value
+end
+
+-- ==========================================================
+-- 配置设置处理函数
+-- ==========================================================
+
+local function set_uart_config(args)
+    -- 参数格式: {"UART":[{...}, {...}]}
+    if args.UART and type(args.UART) == "table" then
+        -- 更新内存缓存
+        uart_config.UART = args.UART
+        uart_config_loaded = true
+        
+        -- 保存到UCI配置文件
+        local success = save_uart_config_to_uci(uart_config)
+        if success then
+            log_info("Updated uart config and saved to UCI: " .. cjson.encode(uart_config))
+        else
+            log_error("Failed to save uart config to UCI")
+        end
+        return success
+    else
+        log_error("Invalid uart config format, expected {UART:[...]}")
+        return false
+    end
+end
+
+local function set_comm_tunnel_config(args)
+    for k, v in pairs(args) do
+        -- 处理 SOCK 配置
+        local prefix, index, key = string.match(k, "([ns])_SOCK%[(%d+)%]%.(.+)")
+        if prefix and index and key then
+            index = tonumber(index) + 1
+            if comm_tunnel_config.SOCK[index] then
+                -- 解析嵌套key，如 tcpc.server_ip
+                local parts = {}
+                for part in string.gmatch(key, "[^%.]+") do
+                    table.insert(parts, part)
+                end
+                
+                local target = comm_tunnel_config.SOCK[index]
+                for i = 1, #parts - 1 do
+                    if target[parts[i]] then
+                        target = target[parts[i]]
+                    end
+                end
+                target[parts[#parts]] = tonumber(v) or v
+            end
+            log_info("SOCK[" .. (index-1) .. "]." .. key .. " = " .. tostring(v))
+        end
+        
+        -- 处理 MQTT 配置
+        prefix, index, key = string.match(k, "([ns])_MQTT%[(%d+)%]%.(.+)")
+        if prefix and index and key then
+            index = tonumber(index) + 1
+            if comm_tunnel_config.MQTT[index] then
+                local parts = {}
+                for part in string.gmatch(key, "[^%.]+") do
+                    table.insert(parts, part)
+                end
+                
+                local target = comm_tunnel_config.MQTT[index]
+                for i = 1, #parts - 1 do
+                    if target[parts[i]] then
+                        target = target[parts[i]]
+                    end
+                end
+                target[parts[#parts]] = tonumber(v) or v
+            end
+            log_info("MQTT[" .. (index-1) .. "]." .. key .. " = " .. tostring(v))
+        end
+        
+        -- 处理 UCLOUD 配置
+        local ucloud_key = string.match(k, "[ns]_UCLOUD%.(.+)")
+        if ucloud_key then
+            comm_tunnel_config.UCLOUD[ucloud_key] = tonumber(v) or v
+            log_info("UCLOUD." .. ucloud_key .. " = " .. tostring(v))
+        end
+    end
+    return true
+end
+
+local function set_offline_cache(args)
+    for k, v in pairs(args) do
+        local index, key = string.match(k, "n_tunnel%[(%d+)%]%.(.+)")
+        if index and key then
+            index = tonumber(index) + 1
+            if offline_cache_config.tunnel[index] then
+                offline_cache_config.tunnel[index][key] = tonumber(v) or v
+            end
+        end
+        
+        local mgt_key = string.match(k, "n_mgt%.(.+)")
+        if mgt_key then
+            offline_cache_config.mgt[mgt_key] = tonumber(v) or v
+        end
+    end
+    return true
+end
+
+local function set_misc_config_values(args)
+    for k, v in pairs(args) do
+        local key = string.match(k, "[ns]_(.+)")
+        if key then
+            -- 处理嵌套key
+            if string.find(key, "%.") then
+                local parts = {}
+                for part in string.gmatch(key, "[^%.]+") do
+                    table.insert(parts, part)
+                end
+                
+                local target = misc_config
+                for i = 1, #parts - 1 do
+                    if target[parts[i]] then
+                        target = target[parts[i]]
+                    end
+                end
+                target[parts[#parts]] = tonumber(v) or v
+            else
+                misc_config[key] = tonumber(v) or v
+            end
+            log_info("misc." .. key .. " = " .. tostring(v))
+        end
+    end
+    return true
+end
+
+local function set_network_config_values(args)
+    for k, v in pairs(args) do
+        local key = string.match(k, "[ns]_(.+)")
+        if key then
+            if string.find(key, "%.") then
+                local parts = {}
+                for part in string.gmatch(key, "[^%.]+") do
+                    table.insert(parts, part)
+                end
+                
+                local target = network_config
+                for i = 1, #parts - 1 do
+                    if target[parts[i]] then
+                        target = target[parts[i]]
+                    end
+                end
+                target[parts[#parts]] = tonumber(v) or v
+            else
+                network_config[key] = tonumber(v) or v
+            end
+            log_info("network." .. key .. " = " .. tostring(v))
+        end
+    end
+    return true
+end
+
+local function set_edge_config_values(args)
+    for k, v in pairs(args) do
+        if k == "n_all_en" then
+            edge_config.all_en = tonumber(v) or 0
+        elseif k == "n_refresh_frequency" then
+            edge_config.refresh_frequency = tonumber(v) or 100
+        elseif k == "n_calc_period" then
+            edge_config.calc_period = tonumber(v) or 100
+        elseif k == "n_poll_interval" then
+            edge_config.poll_interval = tonumber(v) or 100
+        end
+    end
+    return true
+end
+
+-- ==========================================================
+-- 初始化 ubus 连接和事件循环
+-- ==========================================================
+
+uloop.init()
+
+local conn = ubus.connect()
+if not conn then
+    log_error("Failed to connect to ubus")
+    os.exit(1)
+end
+
+-- ==========================================================
+-- 定义 ubus 方法
+-- ==========================================================
+
+local function reply(req, data)
+    conn:reply(req, data or {})
+end
+
+local methods = {
+    ["hilink"] = {
+        -- 获取状态信息
+        get_status = {
+            function(req, msg)
+                local data = deep_copy(status_data)
+                data.systime = os.time()
+                data.runtime = get_runtime()
+                reply(req, data)
+            end,
+            {}
+        },
+        
+        -- 获取网络状态
+        get_network_status = {
+            function(req, msg)
+                reply(req, deep_copy(network_status))
+            end,
+            {}
+        },
+        
+        -- 获取网络配置
+        get_network_config = {
+            function(req, msg)
+                reply(req, deep_copy(network_config))
+            end,
+            {}
+        },
+        
+        -- 设置网络配置
+        set_network_config = {
+            function(req, msg)
+                local res = set_network_config_values(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+        
+        -- 获取杂项配置
+        get_misc_config = {
+            function(req, msg)
+                reply(req, deep_copy(misc_config))
+            end,
+            {}
+        },
+        
+        -- 设置杂项配置
+        set_misc_config = {
+            function(req, msg)
+                local res = set_misc_config_values(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+        
+        -- 获取通讯通道配置
+        get_comm_tunnel_config = {
+            function(req, msg)
+                reply(req, deep_copy(comm_tunnel_config))
+            end,
+            {}
+        },
+        
+        -- 设置通讯通道配置
+        set_comm_tunnel_config = {
+            function(req, msg)
+                local res = set_comm_tunnel_config(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+        
+        -- 获取串口配置
+        get_uart_config = {
+            function(req, msg)
+                -- 如果内存缓存为空，则从UCI配置文件读取
+                if not uart_config_loaded then
+                    local loaded_config = load_uart_config_from_uci()
+                    if loaded_config and #loaded_config.UART > 0 then
+                        uart_config = loaded_config
+                        uart_config_loaded = true
+                        log_info("Loaded uart config from UCI: " .. cjson.encode(uart_config))
+                    else
+                        log_info("Using default uart config (UCI empty or not found)")
+                        uart_config_loaded = true  -- 标记已尝试加载，避免重复尝试
+                    end
+                else
+                    log_info("Using cached uart config")
+                end
+                reply(req, deep_copy(uart_config))
+            end,
+            {}
+        },
+        
+        -- 设置串口配置
+        set_uart_config = {
+            function(req, msg)
+                local res = set_uart_config(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+        
+        -- 获取离线缓存配置
+        get_offline_cache_config = {
+            function(req, msg)
+                reply(req, deep_copy(offline_cache_config))
+            end,
+            {}
+        },
+        
+        -- 设置离线缓存配置
+        set_offline_cache_config = {
+            function(req, msg)
+                local res = set_offline_cache(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+        
+        -- 获取TF卡信息
+        get_tf_info = {
+            function(req, msg)
+                reply(req, deep_copy(tf_info))
+            end,
+            {}
+        },
+        
+        -- 格式化TF卡
+        format_tf_card = {
+            function(req, msg)
+                log_info("Formatting TF card...")
+                -- 实际应该调用系统命令: os.execute("mkfs.vfat /dev/mmcblk0p1")
+                reply(req, {result = true})
+            end,
+            {}
+        },
+        
+        -- 设置系统时间
+        set_system_time = {
+            function(req, msg)
+                local timestamp = msg.timestamp
+                log_info("Setting system time to: " .. tostring(timestamp))
+                -- 实际应该调用: os.execute("date -s @" .. timestamp)
+                reply(req, {result = true})
+            end,
+            { timestamp = ubus.INT32 }
+        },
+        
+        -- 通用设置配置接口
+        set_config = {
+            function(req, msg)
+                local module = msg.module
+                local args = {}
+                for k, v in pairs(msg) do
+                    if k ~= "module" then
+                        args[k] = v
+                    end
+                end
+                
+                local result = false
+                if module == "uart" then
+                    result = set_uart_config(args)
+                elseif module == "comm_tunnel" then
+                    result = set_comm_tunnel_config(args)
+                elseif module == "offline_cache" then
+                    result = set_offline_cache(args)
+                elseif module == "misc" then
+                    result = set_misc_config_values(args)
+                elseif module == "network" then
+                    result = set_network_config_values(args)
+                elseif module == "edge" then
+                    result = set_edge_config_values(args)
+                else
+                    log_error("Unknown module: " .. tostring(module))
+                end
+                
+                reply(req, {result = result})
+            end,
+            { module = ubus.STRING }
+        },
+        
+        -- 获取边缘计算配置
+        get_edge_config = {
+            function(req, msg)
+                reply(req, deep_copy(edge_config))
+            end,
+            {}
+        },
+        
+        -- 设置边缘计算配置
+        set_edge_config = {
+            function(req, msg)
+                local res = set_edge_config_values(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+        
+        -- 获取边缘计算上报配置
+        get_edge_report_config = {
+            function(req, msg)
+                reply(req, deep_copy(edge_report_config))
+            end,
+            {}
+        },
+        
+        -- 设置边缘计算上报配置
+        set_edge_report_config = {
+            function(req, msg)
+                if msg.group then
+                    edge_report_config.group = msg.group
+                end
+                reply(req, {result = true})
+            end,
+            {}
+        },
+        
+        -- 获取边缘计算协议转换配置
+        get_edge_access_config = {
+            function(req, msg)
+                reply(req, deep_copy(edge_access_config))
+            end,
+            {}
+        },
+        
+        -- 设置边缘计算协议转换配置
+        set_edge_access_config = {
+            function(req, msg)
+                if msg.group then
+                    edge_access_config.group = msg.group
+                end
+                reply(req, {result = true})
+            end,
+            {}
+        },
+        
+        -- 获取边缘计算链路控制配置
+        get_edge_link_ctrl_config = {
+            function(req, msg)
+                reply(req, deep_copy(edge_link_ctrl_config))
+            end,
+            {}
+        },
+        
+        -- 设置边缘计算链路控制配置
+        set_edge_link_ctrl_config = {
+            function(req, msg)
+                if msg.group then
+                    edge_link_ctrl_config.group = msg.group
+                end
+                reply(req, {result = true})
+            end,
+            {}
+        },
+        
+        -- 获取边缘计算点位CSV数据
+        get_edge_points_csv = {
+            function(req, msg)
+                reply(req, {content = edge_points_csv})
+            end,
+            {}
+        },
+        
+        -- 设置边缘计算点位CSV数据
+        set_edge_points_csv = {
+            function(req, msg)
+                if msg.content then
+                    edge_points_csv = msg.content
+                end
+                reply(req, {result = true})
+            end,
+            { content = ubus.STRING }
+        },
+        
+        -- 获取协议转换点位CSV数据
+        get_edge_proto_access_csv = {
+            function(req, msg)
+                reply(req, {content = edge_proto_access_csv})
+            end,
+            {}
+        },
+        
+        -- 设置协议转换点位CSV数据
+        set_edge_proto_access_csv = {
+            function(req, msg)
+                if msg.content then
+                    edge_proto_access_csv = msg.content
+                end
+                reply(req, {result = true})
+            end,
+            { content = ubus.STRING }
+        },
+        
+        -- 系统重启
+        reboot = {
+            function(req, msg)
+                log_info("System reboot requested...")
+                reply(req, {result = true})
+                -- 实际应该调用: os.execute("reboot")
+            end,
+            {}
+        },
+        
+        -- 恢复出厂设置
+        factory_reset = {
+            function(req, msg)
+                log_info("Factory reset requested...")
+                reply(req, {result = true})
+                -- 实际应该清除配置并重启
+            end,
+            {}
+        }
+    }
+}
+
+-- ==========================================================
+-- 注册 ubus 对象并启动事件循环
+-- ==========================================================
+
+conn:add(methods)
+
+log_info("=========================================")
+log_info("Hilink ubus daemon started successfully")
+log_info("Object: hilink")
+log_info("=========================================")
+log_info("Available methods:")
+for obj_name, obj_methods in pairs(methods) do
+    for method_name, _ in pairs(obj_methods) do
+        log_info("  - " .. obj_name .. "." .. method_name)
+    end
+end
+log_info("=========================================")
+
+uloop.run()
