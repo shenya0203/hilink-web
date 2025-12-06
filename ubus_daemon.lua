@@ -17,6 +17,7 @@ local uci_lib = require("uci")
 
 -- 配置缓存标志
 local uart_config_loaded = false
+local comm_tunnel_config_loaded = false
 
 -- 从UCI读取串口配置到内存
 local function load_uart_config_from_uci()
@@ -188,6 +189,134 @@ local function load_comm_tunnel_config_from_uci()
     return config
 end
 
+-- 保存通讯通道配置到UCI
+local function save_comm_tunnel_config_to_uci(config)
+    local cursor = uci_lib.cursor()
+    
+    -- 先删除所有现有的SOCK section
+    cursor:foreach("comm_tunnel", "SOCK", function(section)
+        cursor:delete("comm_tunnel", section[".name"])
+    end)
+    
+    -- 先删除所有现有的MQTT section
+    cursor:foreach("comm_tunnel", "MQTT", function(section)
+        cursor:delete("comm_tunnel", section[".name"])
+    end)
+    
+    -- 先删除所有现有的cloud section
+    cursor:foreach("comm_tunnel", "cloud", function(section)
+        cursor:delete("comm_tunnel", section[".name"])
+    end)
+    
+    -- 写入SOCK配置
+    for i, sock_item in ipairs(config.SOCK or {}) do
+        local section_name = sock_item.name or ("SOCK" .. i)
+        cursor:set("comm_tunnel", section_name, "SOCK")
+        cursor:set("comm_tunnel", section_name, "enable", tostring(sock_item.enable or 0))
+        cursor:set("comm_tunnel", section_name, "name", sock_item.name or section_name)
+        cursor:set("comm_tunnel", section_name, "mode", tostring(sock_item.mode or 0))
+        
+        -- tcpc 配置
+        if sock_item.tcpc then
+            cursor:set("comm_tunnel", section_name, "tcpc_server_ip", sock_item.tcpc.server_ip or "192.168.0.201")
+            cursor:set("comm_tunnel", section_name, "tcpc_local_port", tostring(sock_item.tcpc.local_port or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_server_port", tostring(sock_item.tcpc.server_port or 8234))
+            cursor:set("comm_tunnel", section_name, "tcpc_dns_timeout", tostring(sock_item.tcpc.dns_timeout or 30))
+            cursor:set("comm_tunnel", section_name, "tcpc_reconn_interval", tostring(sock_item.tcpc.reconn_interval or 5))
+            cursor:set("comm_tunnel", section_name, "tcpc_ssl_mode", tostring(sock_item.tcpc.ssl_mode or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_ssl_verify", tostring(sock_item.tcpc.ssl_verify or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_ssl_server_name", sock_item.tcpc.ssl_server_name or "null")
+            cursor:set("comm_tunnel", section_name, "tcpc_ssl_client_name", sock_item.tcpc.ssl_client_name or "null")
+            cursor:set("comm_tunnel", section_name, "tcpc_ssl_client_key", sock_item.tcpc.ssl_client_key or "null")
+            cursor:set("comm_tunnel", section_name, "tcpc_regp_en", tostring(sock_item.tcpc.regp_en or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_regp_fmt", tostring(sock_item.tcpc.regp_fmt or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_regp_ctx", sock_item.tcpc.regp_ctx or "")
+            cursor:set("comm_tunnel", section_name, "tcpc_regp_tim", tostring(sock_item.tcpc.regp_tim or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_hrtp_en", tostring(sock_item.tcpc.hrtp_en or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_hrtp_fmt", tostring(sock_item.tcpc.hrtp_fmt or 0))
+            cursor:set("comm_tunnel", section_name, "tcpc_hrtp_ctx", sock_item.tcpc.hrtp_ctx or "")
+            cursor:set("comm_tunnel", section_name, "tcpc_hrtp_tim", tostring(sock_item.tcpc.hrtp_tim or 60))
+        end
+        
+        -- tcps 配置
+        if sock_item.tcps then
+            cursor:set("comm_tunnel", section_name, "tcps_local_port", tostring(sock_item.tcps.local_port or 8029))
+            cursor:set("comm_tunnel", section_name, "tcps_conn_max_num", tostring(sock_item.tcps.conn_max_num or 4))
+            cursor:set("comm_tunnel", section_name, "tcps_timeout_handling", tostring(sock_item.tcps.timeout_handling or 0))
+            cursor:set("comm_tunnel", section_name, "tcps_idle_handling", tostring(sock_item.tcps.idle_handling or 0))
+            cursor:set("comm_tunnel", section_name, "tcps_idle_timeout", tostring(sock_item.tcps.idle_timeout or 3600))
+        end
+        
+        -- udpc 配置
+        if sock_item.udpc then
+            cursor:set("comm_tunnel", section_name, "udpc_server_ip", sock_item.udpc.server_ip or "192.168.20.21")
+            cursor:set("comm_tunnel", section_name, "udpc_local_port", tostring(sock_item.udpc.local_port or 0))
+            cursor:set("comm_tunnel", section_name, "udpc_server_port", tostring(sock_item.udpc.server_port or 1593))
+            cursor:set("comm_tunnel", section_name, "udpc_dns_timeout", tostring(sock_item.udpc.dns_timeout or 30))
+            cursor:set("comm_tunnel", section_name, "udpc_ip_port_verify", tostring(sock_item.udpc.ip_port_verify or 0))
+        end
+        
+        -- httpc 配置
+        if sock_item.httpc then
+            cursor:set("comm_tunnel", section_name, "httpc_mode", tostring(sock_item.httpc.mode or 0))
+            cursor:set("comm_tunnel", section_name, "httpc_url", sock_item.httpc.url or "/1.php?")
+            cursor:set("comm_tunnel", section_name, "httpc_header", sock_item.httpc.header or "Accept:text/html")
+            cursor:set("comm_tunnel", section_name, "httpc_cut_header", tostring(sock_item.httpc.cut_header or 1))
+            cursor:set("comm_tunnel", section_name, "httpc_server_ip", sock_item.httpc.server_ip or "test.usr.cn")
+            cursor:set("comm_tunnel", section_name, "httpc_server_port", tostring(sock_item.httpc.server_port or 80))
+            cursor:set("comm_tunnel", section_name, "httpc_resp_timeout", tostring(sock_item.httpc.resp_timeout or 10))
+            cursor:set("comm_tunnel", section_name, "httpc_local_port", tostring(sock_item.httpc.local_port or 0))
+        end
+    end
+    
+    -- 写入MQTT配置
+    for i, mqtt_item in ipairs(config.MQTT or {}) do
+        local section_name = mqtt_item.name or ("MQTT" .. i)
+        cursor:set("comm_tunnel", section_name, "MQTT")
+        cursor:set("comm_tunnel", section_name, "enable", tostring(mqtt_item.enable or 0))
+        cursor:set("comm_tunnel", section_name, "name", mqtt_item.name or section_name)
+        cursor:set("comm_tunnel", section_name, "mqtt_ver", tostring(mqtt_item.mqtt_ver or 4))
+        cursor:set("comm_tunnel", section_name, "server_ip", mqtt_item.server_ip or "192.168.0.201")
+        cursor:set("comm_tunnel", section_name, "server_port", tostring(mqtt_item.server_port or 1883))
+        cursor:set("comm_tunnel", section_name, "local_port", tostring(mqtt_item.loacl_port or 0))
+        cursor:set("comm_tunnel", section_name, "keepalive", tostring(mqtt_item.keepalive or 60))
+        cursor:set("comm_tunnel", section_name, "reconn_space", tostring(mqtt_item.reconn_space or 5))
+        cursor:set("comm_tunnel", section_name, "clean_session", tostring(mqtt_item.clean_session or 0))
+        cursor:set("comm_tunnel", section_name, "client_id", mqtt_item.client_id or "")
+        cursor:set("comm_tunnel", section_name, "conn_verify", tostring(mqtt_item.conn_verify or 0))
+        cursor:set("comm_tunnel", section_name, "conn_user_name", mqtt_item.conn_user_name or "")
+        cursor:set("comm_tunnel", section_name, "conn_password", mqtt_item.conn_user_password or "")
+        cursor:set("comm_tunnel", section_name, "ssl_mode", tostring(mqtt_item.ssl_mode or 0))
+        cursor:set("comm_tunnel", section_name, "ssl_verify", tostring(mqtt_item.ssl_verify or 0))
+        cursor:set("comm_tunnel", section_name, "ssl_server_name", mqtt_item.ssl_server_name or "null")
+        cursor:set("comm_tunnel", section_name, "ssl_client_name", mqtt_item.ssl_client_name or "null")
+        cursor:set("comm_tunnel", section_name, "ssl_client_key", mqtt_item.ssl_client_key or "null")
+        cursor:set("comm_tunnel", section_name, "will_flag", tostring(mqtt_item.will_flag or 0))
+        
+        -- will 配置
+        if mqtt_item.will then
+            cursor:set("comm_tunnel", section_name, "will_topic", mqtt_item.will.topic or "/will")
+            cursor:set("comm_tunnel", section_name, "will_msg", mqtt_item.will.msg or "offline")
+            cursor:set("comm_tunnel", section_name, "will_qos", tostring(mqtt_item.will.qos or 0))
+            cursor:set("comm_tunnel", section_name, "will_retention", tostring(mqtt_item.will.retention or 0))
+        end
+    end
+    
+    -- 写入UCLOUD配置
+    if config.UCLOUD then
+        local section_name = config.UCLOUD.name or "Cloud"
+        cursor:set("comm_tunnel", section_name, "cloud")
+        cursor:set("comm_tunnel", section_name, "enable", tostring(config.UCLOUD.enable or 0))
+        cursor:set("comm_tunnel", section_name, "name", config.UCLOUD.name or "Cloud")
+        cursor:set("comm_tunnel", section_name, "pvt_deploy_enable", tostring(config.UCLOUD.pvt_deploy_enable or 0))
+        cursor:set("comm_tunnel", section_name, "server_ip", config.UCLOUD.server_ip or "192.168.0.201")
+        cursor:set("comm_tunnel", section_name, "server_port", tostring(config.UCLOUD.server_port or 1234))
+    end
+    
+    cursor:commit("comm_tunnel")
+    return true
+end
+
 -- 1. 状态数据
 local status_data = {
     systime = os.time(),
@@ -270,7 +399,7 @@ local misc_config = {
 --分多个配置
 --[[
     /etc/config/comm_tunnel
-    config comm_tunnel 'SOCK'
+    config SOCK 'SOCKA'
         option enable '1'                       #socket 使能 0：禁用 1：启用
         option name 'SOCKA'                     #socket 通道名称
         option mode '0'                         #socket 模式 0：TCP client 1: TCP Server 2:UDP client 3 http client
@@ -312,7 +441,7 @@ local misc_config = {
         option httpc_server_port '80'           #http client  http client连接的服务器端口
         option httpc_resp_timeout '10'          #http client  http client连接的响应超时时间
         option httpc_local_port '0'             #http client  http client本地使用的端口 0表示系统选择 非0表示指定端口
-    config comm_tunnel 'SOCK'
+    config SOCK 'SOCKB'
         option enable '1'                       #socket 使能 0：禁用 1：启用
         option name 'SOCKB'                     #socket 通道名称
         option mode '0'                         #socket 模式 0：TCP client 1: TCP Server 2:UDP client 3 http client
@@ -354,7 +483,7 @@ local misc_config = {
         option httpc_server_port '80'           #http client  http client连接的服务器端口
         option httpc_resp_timeout '10'          #http client  http client连接的响应超时时间
         option httpc_local_port '0'             #http client  http client本地使用的端口 0表示系统选择 非0表示指定端口
-    config comm_tunnel 'MQTT'
+    config MQTT 'MQTT1'
         option enable '1'                       #MQTT 使能 0：禁用 1：启用 
         option name 'MQTT1'                     #MQTT 通道名称
         option mott_Ver '4'                     #MQTT 协议版本 3：MQTT 3.1 4：MQTT 3.1.1
@@ -380,7 +509,7 @@ local misc_config = {
         option ssl_server_name 'test'           #MQTT SSL服务器证书文件名称
         option ssl_client_name 'test'           #MQTT SSL客户端证书文件名称
         option ssl_client_key 'test'            #MQTT SSL客户端密钥文件名称
-    config comm_tunnel 'MQTT'
+    config MQTT 'MQTT2'
         option enable '0'                       #MQTT 使能 0：禁用 1：启用 
         option name 'MQTT2'                     #MQTT 通道名称
         option mott_Ver '4'                     #MQTT 协议版本 3：MQTT 3.1 4：MQTT 3.1.1
@@ -401,7 +530,7 @@ local misc_config = {
         option will_msg 'test'                  #MQTT 遗嘱消息
         option will_qos '0'                     #MQTT 遗嘱QoS 0：QoS 0 1：QoS 1 2：QoS 2
         option will_retention '0'               #MQTT 遗嘱保留 0：不保留 1：保留
-        option ssl_mode '2'                     #MQTT SSL模式 0：不使用SSL 1：使用SSL 2：使用SSL/TLS
+        option ssl_mode '0'                     #MQTT SSL模式 0：不使用SSL 1：使用SSL
         option ssl_verify '0'                   #MQTT SSL验证 01: 不认证证书 1:认证服务器证书 2:双向认证
         option ssl_server_name 'test'           #MQTT SSL服务器证书文件名称
         option ssl_client_name 'test'           #MQTT SSL客户端证书文件名称
@@ -685,7 +814,17 @@ local function set_comm_tunnel_config(args)
             log_info("UCLOUD." .. ucloud_key .. " = " .. tostring(v))
         end
     end
-    return true
+    
+    -- 保存配置到UCI配置文件
+    local success = save_comm_tunnel_config_to_uci(comm_tunnel_config)
+    if success then
+        log_info("Updated comm_tunnel config and saved to UCI: " .. cjson.encode(comm_tunnel_config))
+        comm_tunnel_config_loaded = true
+    else
+        log_error("Failed to save comm_tunnel config to UCI")
+    end
+    
+    return success
 end
 
 local function set_offline_cache(args)

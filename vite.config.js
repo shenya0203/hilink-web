@@ -4,7 +4,7 @@ import { getProxyConfig } from './config/auth'
 
 // 获取代理配置（包含 Basic Auth）
 const proxyConfig = getProxyConfig()
-const proxyTarget = 'http://192.168.2.177'
+const proxyTarget = 'http://192.168.18.254'
 
 // https://vitejs.dev/config/
 export default defineConfig({

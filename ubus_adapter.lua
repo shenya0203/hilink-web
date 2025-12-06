@@ -241,13 +241,17 @@ function _M.set_config(module, args)
     end
     
     if module == "comm_tunnel" then
-        for k, v in pairs(args) do
-            local prefix, index, key = string.match(k, "([ns])_SOCK%[(%d+)%]%.(.+)")
-            if prefix and index and key then
-                ngx.log(ngx.INFO, "SOCK[" .. index .. "]." .. key .. " = " .. tostring(v))
-            end
+        ngx.log(ngx.INFO, "Setting comm_tunnel config via ubus: " .. cjson.encode(args))
+        
+        -- 通过ubus接口设置通讯通道配置
+        local result = ubus_call("hilink", "set_comm_tunnel_config", args)
+        if result and result.result then
+            ngx.log(ngx.INFO, "Successfully set comm_tunnel config via ubus")
+            return true
+        else
+            ngx.log(ngx.ERR, "Failed to set comm_tunnel config via ubus")
+            return false
         end
-        return true
     end
     
     if module == "offline_cache" then
