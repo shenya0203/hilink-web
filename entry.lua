@@ -51,11 +51,19 @@ local function strip_binary_prefix(content)
     return content -- 如果没找到 {，可能就是纯 CSV 或其他格式
 end
 
--- 保存文件到系统
-local function save_file_to_system(filename, content)
-    local path = "/etc/config/cert/" .. filename
-    -- Ensure directory exists (optional, depending on environment)
-    -- os.execute("mkdir -p /etc/edge_gateway/")
+-- 读取文件内容
+local function read_file(path)
+    local file = io.open(path, "r")
+    if not file then
+        ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
+        return nil
+    end
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
+local function save_file_to_system(path, content)
     local file = io.open(path, "w+")
     if not file then 
         ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
@@ -120,6 +128,18 @@ local function get_cert_directory(filename, cert_type)
     
     ngx.log(ngx.ERR, "[DEBUG] Certificate directory for ", filename, ": ", dir)
     return dir
+end
+
+local function save_group_config(content)
+    save_file_to_system("/etc/config/device/group.json", content)
+end
+
+local function save_tpc_config(content)
+    save_file_to_system("/etc/config/device/tpc.json", content)
+end
+
+local function save_points_csv(content)
+    save_file_to_system("/etc/config/device/points.csv", content)
 end
 
 -- 保存证书文件到指定目录
@@ -241,12 +261,12 @@ local function handle_download_file(args)
     local content = ""
     
     if name == "edge" then
-        -- 读取 /etc/edge_gateway/points.csv
-        -- content = read_file("/etc/edge_gateway/points.csv")
-        content = "V,V1.0,N7X0,;\nSC,Device1,234,2,1,100,0,0,192.168.0.21:2100,Device1,;\n"
+        content = read_file("/etc/config/device/points.csv") or "V,V1.0,N7X0,;"
     elseif name == "edge_proto_access" then
         content = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
     end
+
+    ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
     
     -- 直接输出文本内容，非 JSON
     ngx.header.content_type = "text/plain"
@@ -272,7 +292,14 @@ local function handle_upload(uri)
     
     if string.find(uri, "/upload/edge") then
         -- 3.2 边缘计算点位 CSV
-        save_file_to_system("points.csv", content)
+        --[[
+            CSV 格式：
+            V,V1.0,N7X0,;
+            SC,Device1,234,2,1,100,0,0,192.168.0.222:2100,Device1,;
+            C,Device1,Device1_state,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
+            V开头的 表示虚拟设备
+        ]]--
+        save_points_csv(content)
         notify_core_process("edge_points")
         
     elseif string.find(uri, "/upload/nv1") or string.find(uri, "/upload/nv2") then
@@ -280,13 +307,12 @@ local function handle_upload(uri)
         local clean_json = strip_binary_prefix(content)
         
         if string.find(clean_json, "tcpc") then
-            save_file_to_system("link_config.json", clean_json)
+            save_tpc_config(clean_json)
             notify_core_process("link_sync")
         elseif string.find(clean_json, "group") then
-            save_file_to_system("report_strategy.json", clean_json)
+            save_group_config(clean_json)
             notify_core_process("report_strategy")
         end
-        
     elseif string.find(uri, "/upload/template") then
         -- 3.4 上报模板
         save_file_to_system("report_template.json", content)
@@ -302,8 +328,6 @@ local function handle_upload(uri)
         ngx.log(ngx.ERR, "[DEBUG] Uploading server certificate for: ", target_name or "unknown")
         if target_name then
             save_cert_file(target_name, "server_cert.pem", content)
-        else
-            save_file_to_system("server_cert.pem", content)
         end
         notify_core_process("server_cert")
         
@@ -312,8 +336,6 @@ local function handle_upload(uri)
         ngx.log(ngx.ERR, "[DEBUG] Uploading client certificate for: ", target_name or "unknown")
         if target_name then
             save_cert_file(target_name, "client_cert.pem", content)
-        else
-            save_file_to_system("client_cert.pem", content)
         end
         notify_core_process("client_cert")
         
@@ -322,8 +344,6 @@ local function handle_upload(uri)
         ngx.log(ngx.ERR, "[DEBUG] Uploading client key for: ", target_name or "unknown")
         if target_name then
             save_cert_file(target_name, "client_key.pem", content)
-        else
-            save_file_to_system("client_key.pem", content)
         end
         notify_core_process("client_key")
     end

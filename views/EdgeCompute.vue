@@ -126,7 +126,7 @@
                 <td class="action-cell">
                   <template v-if="!currentSlave?.isSystem">
                     <button class="btn-small" @click.stop="editPoint(index)">{{ t('edge.edit') }}</button>
-                    <button class="btn-small btn-danger" @click.stop="deletePoint(index)">{{ t('edge.delete') }}</button>
+                    <button v-if="!point.isDefault" class="btn-small btn-danger" @click.stop="deletePoint(index)">{{ t('edge.delete') }}</button>
                   </template>
                 </td>
               </tr>
@@ -241,13 +241,13 @@
         <div class="modal-form">
           <div class="form-group">
             <label>{{ t('edge.name') }}:</label>
-            <input v-model="pointForm.name" type="text" placeholder="node0101" />
+            <input v-model="pointForm.name" type="text" placeholder="node0101" :disabled="pointForm.isDefault" />
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.detail') }}:</label>
             <input v-model="pointForm.detail" type="text" />
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.registerType') }}:</label>
             <div class="register-input">
               <select v-model.number="pointForm.registerType">
@@ -262,32 +262,32 @@
           </div>
           <div class="form-group">
             <label>{{ t('edge.dataType') }}:</label>
-            <select v-model="pointForm.dataType">
+            <select v-model="pointForm.dataType" :disabled="pointForm.isDefault">
               <option v-for="type in availableDataTypes" :key="type" :value="type">{{ type }}</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.decimalPlaces') }}:</label>
             <select v-model.number="pointForm.decimalPlaces">
               <option v-for="n in 7" :key="n-1" :value="n-1">{{ n - 1 }}</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.timeout') }}:</label>
             <div class="input-with-unit">
               <input v-model.number="pointForm.timeout" type="number" placeholder="200" />
               <span class="unit">ms</span>
             </div>
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.collectFormula') }}:</label>
             <input v-model="pointForm.collectFormula" type="text" />
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.controlFormula') }}:</label>
             <input v-model="pointForm.controlFormula" type="text" />
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.reportOnChange') }}:</label>
             <input type="checkbox" v-model="pointForm.reportOnChange" />
           </div>
@@ -598,7 +598,18 @@ const saveSlave = () => {
     id: isEditingSlave.value ? slaveList.value[editingSlaveIndex.value].id : `slave_${Date.now()}`,
     ...slaveForm.value,
     isSystem: false,
-    points: isEditingSlave.value ? slaveList.value[editingSlaveIndex.value].points : []
+    points: isEditingSlave.value ? slaveList.value[editingSlaveIndex.value].points : [
+      {
+        id: `point_${Date.now()}`,
+        name: `${slaveForm.value.name}_state`,
+        dataType: 'Bool',
+        registerType: 0,
+        registerAddress: 0,
+        registerDisplay: 'State',
+        value: null,
+        isDefault: true
+      }
+    ]
   }
   
   if (isEditingSlave.value) {
@@ -667,7 +678,7 @@ const savePoint = () => {
   const newPoint = {
     id: isEditingPoint.value ? currentSlave.value.points[editingPointIndex.value].id : `point_${Date.now()}`,
     ...pointForm.value,
-    registerDisplay: computedRegisterAddress.value,
+    registerDisplay: pointForm.value.isDefault ? pointForm.value.registerDisplay : computedRegisterAddress.value,
     value: null
   }
   
@@ -740,7 +751,12 @@ const generateCsvContent = () => {
     
     // 数据点行格式 (如果需要)
     slave.points.forEach(point => {
-      csv += `C,${point.name},${slave.name},${point.registerType}${String(point.registerAddress).padStart(5, '0')}\n`
+      if (point.registerDisplay === 'State') {
+        // 特殊 State 点位格式: C,SlaveName,PointName,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
+        csv += `C,${slave.name},${point.name},,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;\n`
+      } else {
+        csv += `C,${point.name},${slave.name},${point.registerType}${String(point.registerAddress).padStart(5, '0')}\n`
+      }
     })
   })
   
@@ -781,16 +797,32 @@ const parseCsvContent = (content) => {
       newSlaves.push(currentSlave)
     } else if (parts[0] === 'C' && currentSlave) {
       // 数据点定义
-      const registerStr = parts[3] || '000001'
-      currentSlave.points.push({
-        id: `point_${Date.now()}_${Math.random()}`,
-        name: parts[1],
-        registerType: parseInt(registerStr[0]) || 0,
-        registerAddress: parseInt(registerStr.substring(1)) || 1,
-        registerDisplay: registerStr,
-        dataType: 'Bool',
-        value: null
-      })
+      // 检查是否为特殊的 State 点位 (parts[12] === 'State')
+      // 格式: C,SlaveName,PointName,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
+      if (parts[12] === 'State') {
+        currentSlave.points.push({
+          id: `point_${Date.now()}_${Math.random()}`,
+          name: parts[2], // 点位名称在第3列
+          registerType: 0,
+          registerAddress: 0,
+          registerDisplay: 'State',
+          dataType: 'Bool',
+          value: null,
+          isDefault: true
+        })
+      } else {
+        const registerStr = parts[3] || '000001'
+        currentSlave.points.push({
+          id: `point_${Date.now()}_${Math.random()}`,
+          name: parts[1],
+          registerType: parseInt(registerStr[0]) || 0,
+          registerAddress: parseInt(registerStr.substring(1)) || 1,
+          registerDisplay: registerStr,
+          dataType: 'Bool',
+          value: null,
+          isDefault: false
+        })
+      }
     }
   })
   
