@@ -640,8 +640,18 @@ const showAddPointModal = () => {
   
   isEditingPoint.value = false
   editingPointIndex.value = -1
+  // Calculate default name
+  // 1. Slave Index (slaveList[0] is System, so selectedSlaveIndex is the 1-based index for CSV devices)
+  const slaveIdxStr = String(selectedSlaveIndex.value).padStart(2, '0')
+  
+  // 2. Point Index (ignoring default points like State)
+  const existingUserPoints = currentSlave.value.points.filter(p => !p.isDefault).length
+  const pointIdxStr = String(existingUserPoints + 1).padStart(2, '0')
+  
+  const defaultName = `node${slaveIdxStr}${pointIdxStr}`
+
   pointForm.value = {
-    name: `${currentSlave.value.name}_st.State`,
+    name: defaultName,
     detail: '',
     registerType: 0,
     registerAddress: 1,
@@ -737,6 +747,24 @@ const saveCurrentPage = async () => {
   }
 }
 
+// 数据类型映射
+const dataTypeMap = {
+  'Bit': 1,
+  'Unsigned': 4,
+  'Signed': 5,
+  '32 Bit Unsigned (AB CD)': 6,
+  '32 Bit Unsigned (CD AB)': 7,
+  '32 Bit Signed (AB CD)': 8,
+  '32 Bit Signed (CD AB)': 9,
+  '32 Bit Float (AB CD)': 10,
+  '32 Bit Float (CD AB)': 11,
+  'Bool': 18
+}
+
+const getDataTypeName = (code) => {
+  return Object.keys(dataTypeMap).find(key => dataTypeMap[key] === code) || 'Bool'
+}
+
 // 生成CSV内容
 const generateCsvContent = () => {
   let csv = 'V,V1.0,N7X0,;\n'
@@ -751,13 +779,16 @@ const generateCsvContent = () => {
     
     csv += `SC,${slave.name},${slave.detail || ''},${proto},${slave.slaveAddress},${slave.pollInterval},0,${slave.mergeCollect ? 1 : 0},${addr},${devName},;\n`
     
-    // 数据点行格式 (如果需要)
+    // 数据点行格式
+    // C, SlaveName, PointName, Detail, Type, Decimal, 0,0,0,0,0, CollectFormula, Register, 0,0,0, Timeout, Report, 0, ControlFormula, ;
     slave.points.forEach(point => {
       if (point.registerDisplay === 'State') {
-        // 特殊 State 点位格式: C,SlaveName,PointName,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
+        // 特殊 State 点位格式
         csv += `C,${slave.name},${point.name},,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;\n`
       } else {
-        csv += `C,${point.name},${slave.name},${point.registerType}${String(point.registerAddress).padStart(5, '0')}\n`
+        const typeCode = dataTypeMap[point.dataType] || 18
+        const report = point.reportOnChange ? 1 : 0
+        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${point.registerDisplay},0,0,0,${point.timeout || 200},${report},0,${point.controlFormula || ''},;\n`
       }
     })
   })
@@ -809,12 +840,17 @@ const parseCsvContent = (content) => {
       newSlaves.push(currentSlave)
     } else if (parts[0] === 'C' && currentSlave) {
       // 数据点定义
-      // 检查是否为特殊的 State 点位 (parts[12] === 'State')
-      // 格式: C,SlaveName,PointName,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
-      if (parts[12] === 'State') {
+      // 索引映射:
+      // 1: SlaveName, 2: PointName, 3: Detail, 4: Type, 5: Decimal, 
+      // 11: CollectFormula, 12: Register, 16: Timeout, 17: Report, 19: ControlFormula
+      
+      const registerStr = parts[12]
+      
+      // 检查是否为特殊的 State 点位
+      if (registerStr === 'State') {
         currentSlave.points.push({
           id: `point_${Date.now()}_${Math.random()}`,
-          name: parts[2], // 点位名称在第3列
+          name: parts[2],
           registerType: 0,
           registerAddress: 0,
           registerDisplay: 'State',
@@ -823,14 +859,22 @@ const parseCsvContent = (content) => {
           isDefault: true
         })
       } else {
-        const registerStr = parts[3] || '000001'
+        const regType = parseInt(registerStr[0]) || 0
+        const regAddr = parseInt(registerStr.substring(1)) || 1
+        
         currentSlave.points.push({
           id: `point_${Date.now()}_${Math.random()}`,
-          name: parts[1],
-          registerType: parseInt(registerStr[0]) || 0,
-          registerAddress: parseInt(registerStr.substring(1)) || 1,
+          name: parts[2],
+          detail: parts[3] || '',
+          registerType: regType,
+          registerAddress: regAddr,
           registerDisplay: registerStr,
-          dataType: 'Bool',
+          dataType: getDataTypeName(parseInt(parts[4])),
+          decimalPlaces: parseInt(parts[5]) || 0,
+          collectFormula: parts[11] || '',
+          timeout: parseInt(parts[16]) || 200,
+          reportOnChange: parts[17] === '1',
+          controlFormula: parts[19] || '',
           value: null,
           isDefault: false
         })
