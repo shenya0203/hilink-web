@@ -53,11 +53,90 @@ end
 
 -- 保存文件到系统
 local function save_file_to_system(filename, content)
-    local path = "/etc/edge_gateway/" .. filename
+    local path = "/etc/config/cert/" .. filename
     -- Ensure directory exists (optional, depending on environment)
     -- os.execute("mkdir -p /etc/edge_gateway/")
     local file = io.open(path, "w+")
-    if not file then return false, "Cannot open file" end
+    if not file then 
+        ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
+        return false, "Cannot open file" 
+    else
+        ngx.log(ngx.ERR, "[DEBUG] Open file: ", path)
+    end
+    file:write(content)
+    file:close()
+    return true
+end
+
+-- 解析 multipart form-data 提取 filename 和文件内容
+local function parse_multipart(body)
+    local result = {
+        filename = nil,
+        content = nil
+    }
+    
+    -- 从 Content-Disposition 头中提取 filename
+    -- 格式: Content-Disposition: form-data; name="c"; filename="SOCK0"
+    local filename_pattern = 'filename="([^"]+)"'
+    local filename = string.match(body, filename_pattern)
+    if filename then
+        result.filename = filename
+        ngx.log(ngx.ERR, "[DEBUG] Parsed filename: ", filename)
+    end
+    
+    -- 提取文件内容 (在两个空行之后，到下一个 boundary 之前)
+    -- multipart 格式: boundary\r\nheaders\r\n\r\ncontent\r\n--boundary
+    local content_start = string.find(body, "\r\n\r\n")
+    if content_start then
+        local content = string.sub(body, content_start + 4)
+        -- 去除尾部的 boundary
+        local boundary_start = string.find(content, "\r\n%-%-")
+        if boundary_start then
+            content = string.sub(content, 1, boundary_start - 1)
+        end
+        result.content = content
+    else
+        result.content = body
+    end
+    
+    return result
+end
+
+-- 根据 filename 获取证书存放目录
+local function get_cert_directory(filename, cert_type)
+    -- filename 格式: SOCK0, SOCK1, MQTT0, MQTT1
+    local dir_map = {
+        SOCK0 = "/etc/config/cert/SOCKA/",
+        SOCK1 = "/etc/config/cert/SOCKB/",
+        MQTT0 = "/etc/config/cert/MQTT0/",
+        MQTT1 = "/etc/config/cert/MQTT1/"
+    }
+    
+    local dir = dir_map[filename]
+    if not dir then
+        -- 默认目录
+        dir = "/etc/config/cert/"
+    end
+    
+    ngx.log(ngx.ERR, "[DEBUG] Certificate directory for ", filename, ": ", dir)
+    return dir
+end
+
+-- 保存证书文件到指定目录
+local function save_cert_file(filename, cert_name, content)
+    local dir = get_cert_directory(filename, cert_name)
+    local path = dir .. cert_name
+    
+    -- 确保目录存在
+    --os.execute("mkdir -p " .. dir)
+    
+    -- 如果存在 则需要删除文件内容重写文件
+    local file = io.open(path, "w+")
+    if not file then 
+        ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
+        return false, "Cannot open file" 
+    end
+    ngx.log(ngx.ERR, "[DEBUG] Saving certificate to: ", path)
     file:write(content)
     file:close()
     return true
@@ -184,11 +263,12 @@ local function handle_upload(uri)
         return
     end
 
-    -- 注意：这里是一个简化的 Multipart 解析
-    -- 实际 POST 请求包含 boundary，可以通过 lua-resty-upload 库完美解析
-    -- 这里假设我们只关心内容，或者进行简单的字符串截取找到实际 payload
+    -- 解析 multipart form-data 获取 filename 和内容
+    local parsed = parse_multipart(body)
+    local target_name = parsed.filename  -- SOCK0, SOCK1, MQTT0, MQTT1
+    local content = parsed.content or body
     
-    local content = body -- 暂时简化，实际需提取 payload
+    ngx.log(ngx.ERR, "[DEBUG] Parsed target: ", target_name or "nil")
     
     if string.find(uri, "/upload/edge") then
         -- 3.2 边缘计算点位 CSV
@@ -197,10 +277,8 @@ local function handle_upload(uri)
         
     elseif string.find(uri, "/upload/nv1") or string.find(uri, "/upload/nv2") then
         -- 3.3 Socket 链接同步 (Filename: link) 或 上报策略 (Filename: edge_report)
-        -- 这种请求通常混合了二进制头，需要清洗
         local clean_json = strip_binary_prefix(content)
         
-        -- 根据内容判断是 Link 还是 Report (或者根据 Header 中的 filename)
         if string.find(clean_json, "tcpc") then
             save_file_to_system("link_config.json", clean_json)
             notify_core_process("link_sync")
@@ -220,23 +298,34 @@ local function handle_upload(uri)
         notify_core_process("proto_map")
         
     elseif string.find(uri, "/upload/scert") then
-        -- MQTT 服务器证书上传
-        ngx.log(ngx.ERR, "[DEBUG] Uploading MQTT server certificate")
-        -- 这里简化处理，实际应该保存到系统路径
-        save_file_to_system("mqtt_server_cert.pem", content)
-        notify_core_process("mqtt_server_cert")
+        -- 服务器证书上传 (根据 filename 区分 SOCK0/SOCK1/MQTT0/MQTT1)
+        ngx.log(ngx.ERR, "[DEBUG] Uploading server certificate for: ", target_name or "unknown")
+        if target_name then
+            save_cert_file(target_name, "server_cert.pem", content)
+        else
+            save_file_to_system("server_cert.pem", content)
+        end
+        notify_core_process("server_cert")
         
     elseif string.find(uri, "/upload/ccert") then
-        -- MQTT 客户端证书上传
-        ngx.log(ngx.ERR, "[DEBUG] Uploading MQTT client certificate")
-        save_file_to_system("mqtt_client_cert.pem", content)
-        notify_core_process("mqtt_client_cert")
+        -- 客户端证书上传 (根据 filename 区分 SOCK0/SOCK1/MQTT0/MQTT1)
+        ngx.log(ngx.ERR, "[DEBUG] Uploading client certificate for: ", target_name or "unknown")
+        if target_name then
+            save_cert_file(target_name, "client_cert.pem", content)
+        else
+            save_file_to_system("client_cert.pem", content)
+        end
+        notify_core_process("client_cert")
         
     elseif string.find(uri, "/upload/ckey") then
-        -- MQTT 客户端私钥上传
-        ngx.log(ngx.ERR, "[DEBUG] Uploading MQTT client key")
-        save_file_to_system("mqtt_client_key.pem", content)
-        notify_core_process("mqtt_client_key")
+        -- 客户端私钥上传 (根据 filename 区分 SOCK0/SOCK1/MQTT0/MQTT1)
+        ngx.log(ngx.ERR, "[DEBUG] Uploading client key for: ", target_name or "unknown")
+        if target_name then
+            save_cert_file(target_name, "client_key.pem", content)
+        else
+            save_file_to_system("client_key.pem", content)
+        end
+        notify_core_process("client_key")
     end
 
     send_success()
