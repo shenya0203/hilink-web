@@ -447,6 +447,30 @@ const buildSocketParams = (sock, i) => {
 
 const saveConfig = async () => {
   try {
+    // 验证自定义内容
+    for (let i = 0; i < socketList.value.length; i++) {
+      const sock = socketList.value[i]
+      // 检查Socket是否启用且为TCP Client模式
+      if (sock.enable === 1 && sock.mode === 0) {
+        // 检查注册包自定义内容
+        if (sock.tcpc.regp_en === 1 && sock.tcpc.regp_fmt === 3) {
+          const regpCtx = String(sock.tcpc.regp_ctx || '').trim()
+          if (regpCtx === '') {
+            alert(t('socket.registerCustomContentRequired'))
+            return
+          }
+        }
+        // 检查心跳包自定义内容
+        if (sock.tcpc.hrtp_en === 1 && sock.tcpc.hrtp_fmt === 2) {
+          const hrtpCtx = String(sock.tcpc.hrtp_ctx || '').trim()
+          if (hrtpCtx === '') {
+            alert(t('socket.heartbeatCustomContentRequired'))
+            return
+          }
+        }
+      }
+    }
+    
     const sockParams = []
     socketList.value.forEach((sock, i) => sockParams.push(...buildSocketParams(sock, i)))
     const cacheParams = offlineCacheList.value.map((en, i) => `n_tunnel[${i}].enable=${en}`)

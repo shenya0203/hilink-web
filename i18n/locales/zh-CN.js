@@ -184,7 +184,9 @@ export default {
         path: '路径',
         restartRequired: 'Socket配置需要重启设备才能生效。',
         continueConfig: '继续配置',
-        customContentHint: '(1-128字节 支持\'a\'-\'z\'/\'A\'-\'Z\'/\'0\'-\'9\'和\'-\'.\'@\')'
+        customContentHint: '(1-128字节 支持\'a\'-\'z\'/\'A\'-\'Z\'/\'0\'-\'9\'和\'-\'.\'@\')',
+        registerCustomContentRequired: '注册包自定义内容不能为空',
+        heartbeatCustomContentRequired: '心跳包自定义内容不能为空'
     },
 
     // MQTT配置页面
