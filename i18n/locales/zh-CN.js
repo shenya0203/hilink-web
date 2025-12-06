@@ -218,7 +218,9 @@ export default {
         mutualAuth: '双向认证',
         serverCert: '服务器根证书上传',
         clientCert: '客户端证书上传',
-        clientKey: '客户端私钥上传'
+        clientKey: '客户端私钥上传',
+        restartRequired: 'MQTT配置需要重启设备才能生效。',
+        continueConfig: '继续配置'
     },
 
     // 云平台配置页面

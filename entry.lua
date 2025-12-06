@@ -108,8 +108,8 @@ local function get_cert_directory(filename, cert_type)
     local dir_map = {
         SOCK0 = "/etc/config/cert/SOCKA/",
         SOCK1 = "/etc/config/cert/SOCKB/",
-        MQTT0 = "/etc/config/cert/MQTT0/",
-        MQTT1 = "/etc/config/cert/MQTT1/"
+        MQTT1 = "/etc/config/cert/MQTT1/",
+        MQTT2 = "/etc/config/cert/MQTT2/"
     }
     
     local dir = dir_map[filename]

@@ -197,12 +197,26 @@
     <div class="button-group">
       <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
+
+    <!-- 重启确认弹窗 -->
+    <div v-if="showRestartModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('common.saveSuccess') }}</h3></div>
+        <div class="modal-body">
+          <p>{{ t('mqtt.restartRequired') }}</p>
+          <div class="modal-actions">
+            <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
+            <button class="btn-continue" @click="handleContinue">{{ t('mqtt.continueConfig') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getCommTunnel, getOfflineCache } from '../api/services'
+import { getCommTunnel, getOfflineCache, updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 
@@ -215,6 +229,7 @@ const error = ref(null)
 const mqttList = ref([])
 const activeTab = ref(0)
 const offlineCacheData = ref(null)
+const showRestartModal = ref(false)
 
 // DOM 元素引用 (用于触发点击)
 const serverCertInput = ref(null)
@@ -472,12 +487,87 @@ const loadData = async () => {
   }
 }
 
+// 构建 MQTT 参数
+const buildMqttParams = (mqtt, i) => {
+  const p = []
+  // 基本配置
+  p.push(`n_MQTT[${i}].enable=${mqtt.enable}`)
+  p.push(`s_MQTT[${i}].name=${mqtt.name || ''}`)
+  p.push(`n_MQTT[${i}].mqtt_ver=${mqtt.mqtt_ver || 4}`)
+  p.push(`s_MQTT[${i}].client_id=${mqtt.client_id || ''}`)
+  p.push(`s_MQTT[${i}].server_ip=${mqtt.server_ip || ''}`)
+  p.push(`n_MQTT[${i}].server_port=${mqtt.server_port || 1883}`)
+  p.push(`n_MQTT[${i}].keepalive=${mqtt.keepalive || 60}`)
+  p.push(`n_MQTT[${i}].reconn_space=${mqtt.reconn_space || 5}`)
+  p.push(`n_MQTT[${i}].clean_session=${mqtt.clean_session || 0}`)
+  
+  // 连接验证
+  p.push(`n_MQTT[${i}].conn_verify=${mqtt.conn_verify || 0}`)
+  p.push(`s_MQTT[${i}].conn_user_name=${mqtt.conn_user_name || ''}`)
+  p.push(`s_MQTT[${i}].conn_user_password=${mqtt.conn_user_password || ''}`)
+  
+  // SSL配置
+  p.push(`n_MQTT[${i}].ssl_mode=${mqtt.ssl_mode || 0}`)
+  p.push(`n_MQTT[${i}].ssl_verify=${mqtt.ssl_verify || 0}`)
+  
+  // 遗嘱配置
+  p.push(`n_MQTT[${i}].will_flag=${mqtt.will_flag || 0}`)
+  if (mqtt.will) {
+    p.push(`s_MQTT[${i}].will.topic=${mqtt.will.topic || ''}`)
+    p.push(`s_MQTT[${i}].will.msg=${mqtt.will.msg || ''}`)
+    p.push(`n_MQTT[${i}].will.qos=${mqtt.will.qos || 0}`)
+    p.push(`n_MQTT[${i}].will.retention=${mqtt.will.retention || 0}`)
+  }
+  
+  return p
+}
+
 // 保存配置
-const saveConfig = () => {
-  console.log('保存MQTT配置:', mqttList.value)
-  // 这里需要处理保存逻辑，可能需要拆分回两个接口的格式
-  // 暂时只打印
-  alert(t('common.saveSuccess') + ' (模拟)')
+const saveConfig = async () => {
+  try {
+    // 构建 MQTT 参数
+    const mqttParams = []
+    mqttList.value.forEach((mqtt, i) => mqttParams.push(...buildMqttParams(mqtt, i)))
+    
+    // 构建断网缓存参数
+    const cacheParams = []
+    if (offlineCacheData.value && offlineCacheData.value.tunnel) {
+      mqttList.value.forEach((mqtt, mqttIndex) => {
+        // 查找对应的 tunnel 索引
+        const tunnelIndex = offlineCacheData.value.tunnel.findIndex(t => t.name === mqtt.name)
+        if (tunnelIndex >= 0) {
+          cacheParams.push(`n_tunnel[${tunnelIndex}].enable=${mqtt.offline_cache_enable || 0}`)
+        }
+      })
+    }
+    
+    // 并行调用两个接口保存配置
+    const promises = [updateConfig('comm_tunnel', mqttParams.join('&'))]
+    if (cacheParams.length > 0) {
+      promises.push(updateConfig('offline_cache', cacheParams.join('&')))
+    }
+    
+    await Promise.all(promises)
+    showRestartModal.value = true
+  } catch (err) {
+    alert(t('common.saveFailed') + ': ' + err.message)
+  }
+}
+
+// 处理重启
+const handleRestart = async () => {
+  try {
+    await restartDevice()
+    alert(t('system.restartSuccess'))
+    showRestartModal.value = false
+  } catch (err) {
+    alert(t('system.restartFailed') + ': ' + err.message)
+  }
+}
+
+// 继续配置
+const handleContinue = () => {
+  showRestartModal.value = false
 }
 
 // 组件挂载时加载数据
@@ -648,5 +738,79 @@ onMounted(() => {
   border-radius: 4px;
   margin-bottom: 20px;
   font-size: 13px;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 8px;
+  width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  background-color: #f8f9fa;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  text-align: center;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.btn-restart {
+  padding: 8px 20px;
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-continue {
+  padding: 8px 20px;
+  background-color: white;
+  color: #666;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-restart:hover {
+  background-color: #0052a3;
+}
+
+.btn-continue:hover {
+  background-color: #f5f5f5;
 }
 </style>

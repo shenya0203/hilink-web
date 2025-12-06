@@ -214,7 +214,9 @@ export default {
         mutualAuth: 'Mutual Auth',
         serverCert: 'Server Root Certificate',
         clientCert: 'Client Certificate',
-        clientKey: 'Client Private Key'
+        clientKey: 'Client Private Key',
+        restartRequired: 'MQTT configuration requires a device restart to take effect.',
+        continueConfig: 'Continue Configuration'
     },
 
     // Cloud Platform Configuration Page
@@ -231,20 +233,20 @@ export default {
     edge: {
         title: 'Edge Computing',
         description: 'Edge Computing Gateway',
-        
+
         // Tabs
         tabGatewayEnable: 'Gateway Enable',
         tabDataCollection: 'Data Collection',
         tabDataReport: 'Data Report',
         tabProtocolConvert: 'Protocol Convert',
-        
+
         // Gateway Enable
         gatewayEnable: 'Gateway Enable',
         close: 'Close',
         open: 'Open',
         saveCurrentPage: 'Save Current Page',
         nextStep: 'Next Step',
-        
+
         // Point Import
         pointImport: 'Point Import',
         selectFile: 'Select File',
@@ -254,7 +256,7 @@ export default {
         importTip: '(When importing consecutive files with the same name, press shift+f5 to refresh before importing)',
         pointsAdded: 'Points Added',
         pointsRemaining: 'Points Remaining',
-        
+
         // Slave Table
         slaveNumber: 'No.',
         slaveName: 'Name',
@@ -264,18 +266,18 @@ export default {
         empty: 'Empty',
         edit: 'Edit',
         delete: 'Delete',
-        
+
         // Data Point Table
         pointNumber: 'No.',
         pointName: 'Name',
         register: 'Register',
         dataType: 'Data Type',
         value: 'Value',
-        
+
         // Buttons
         addSlave: 'Add Slave',
         addDataPoint: 'Add Data Point',
-        
+
         // Slave Dialog
         addSlaveTitle: 'Add Slave',
         editSlaveTitle: 'Edit Slave',
@@ -293,7 +295,7 @@ export default {
         mergeCollect: 'Merge Collect',
         save: 'Save',
         cancel: 'Cancel',
-        
+
         // Data Point Dialog
         addPointTitle: 'Add Data Point',
         editPointTitle: 'Edit Data Point',
@@ -303,18 +305,18 @@ export default {
         collectFormula: 'Collect Formula',
         controlFormula: 'Control Formula',
         reportOnChange: 'Report on Change',
-        
+
         // Data Types
         dataTypeString: 'String',
         dataTypeBool: 'Bool',
         dataTypeUnsigned: 'Unsigned',
         dataTypeSigned: 'Signed',
-        
+
         // Placeholder
         dataReportConfig: 'Data Report Configuration',
         protocolConvertConfig: 'Protocol Conversion Configuration',
         inDevelopment: 'Under Development...',
-        
+
         // Messages
         pleaseSelectFileFirst: 'Please select a file first',
         importSuccess: 'Import successful',
