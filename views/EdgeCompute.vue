@@ -182,7 +182,7 @@
           </div>
           <div class="form-group">
             <label>{{ t('edge.protocolType') }}:</label>
-            <select v-model.number="slaveForm.protocol">
+            <select v-model.number="slaveForm.protocol" :disabled="isEditingSlave">
               <option :value="0">{{ t('edge.modbusRtu') }}</option>
               <option :value="1">{{ t('edge.modbusTcp') }}</option>
             </select>
@@ -744,10 +744,12 @@ const generateCsvContent = () => {
   slaveList.value.forEach(slave => {
     if (slave.isSystem) return
     
-    // 从机行格式: SC,name,slaveAddress,protocol,serialPort/tcp,pollInterval,mergeCollect,0,remoteAddress:remotePort,detail,;
+    // 从机行格式: SC,name,detail,protocol,slaveAddress,pollInterval,0,mergeCollect,remoteAddress:remotePort,deviceName,;
     const proto = slave.protocol === 1 ? 2 : 1
-    const addr = slave.protocol === 1 ? `${slave.remoteAddress}:${slave.remotePort}` : `串口${slave.serialPort}`
-    csv += `SC,${slave.name},${slave.slaveAddress},${proto},${slave.serialPort || 1},${slave.pollInterval},${slave.mergeCollect ? 1 : 0},0,${addr},${slave.detail || slave.name},;\n`
+    const addr = slave.protocol === 1 ? `${slave.remoteAddress}:${slave.remotePort}` : ''
+    const devName = slave.protocol === 1 ? slave.name : `UART${slave.serialPort || 1}`
+    
+    csv += `SC,${slave.name},${slave.detail || ''},${proto},${slave.slaveAddress},${slave.pollInterval},0,${slave.mergeCollect ? 1 : 0},${addr},${devName},;\n`
     
     // 数据点行格式 (如果需要)
     slave.points.forEach(point => {
@@ -777,23 +779,33 @@ const parseCsvContent = (content) => {
       currentSlave = {
         id: `slave_${Date.now()}_${Math.random()}`,
         name: parts[1],
-        slaveAddress: parseInt(parts[2]) || 1,
+        detail: parts[2] || '',
         protocol: parts[3] === '2' ? 1 : 0,
-        serialPort: parseInt(parts[4]) || 1,
+        slaveAddress: parseInt(parts[4]) || 1,
         pollInterval: parseInt(parts[5]) || 100,
-        mergeCollect: parts[6] === '1',
+        mergeCollect: parts[7] === '1',
         isSystem: false,
         points: []
       }
       
-      // 解析地址
-      if (parts[8] && parts[8].includes(':')) {
-        const [addr, port] = parts[8].split(':')
-        currentSlave.remoteAddress = addr
-        currentSlave.remotePort = parseInt(port) || 2100
+      // 解析地址和串口
+      if (currentSlave.protocol === 1) {
+        // TCP
+        if (parts[8] && parts[8].includes(':')) {
+          const [addr, port] = parts[8].split(':')
+          currentSlave.remoteAddress = addr
+          currentSlave.remotePort = parseInt(port) || 2100
+        }
+      } else {
+        // RTU - 解析 DeviceName (UART1/UART2)
+        const devName = parts[9] || ''
+        if (devName.toUpperCase().includes('UART2')) {
+          currentSlave.serialPort = 2
+        } else {
+          currentSlave.serialPort = 1
+        }
       }
       
-      currentSlave.detail = parts[9] || ''
       newSlaves.push(currentSlave)
     } else if (parts[0] === 'C' && currentSlave) {
       // 数据点定义
