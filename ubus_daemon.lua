@@ -410,18 +410,19 @@ local misc_config = {
         option tcpc_dns_timeout '30'            #tcp client  dns超时时间    用在tcpc_server_ip为域名时
         option tcpc_reconn_interval '5'         #tcp client  重连间隔
         option tcpc_ssl_mode '0'                #tcp client  ssl模式 0：不使用ssl 1：使用ssl TLS1.2
-        option tcpc_ssl_verify '0'              #tcp client  ssl验证 0：不验证 1：验证   不知道干啥的？？
+        option tcpc_ssl_verify '0'              #tcp client  0：不认证证书 1：认证服务器证书 2：双向认证
         option tcpc_ssl_server_name 'null'      #服务器证书名称 证书存放在指定的目录下/etc/config/tcpc/
         option tcpc_ssl_client_name 'null'      #客户端证书名称
         option tcpc_ssl_client_key 'null'       #客户端证书密钥
-        option tcpc_regp_en '0'                 #tcp client  注册包协议使能 0：禁用 1：启用
-        option tcpc_regp_fmt '0'                #tcp client  注册包协议格式 0：不使用 1：使用
-        option tcpc_regp_ctx ''                 #tcp client  注册包协议上下文
-        option tcpc_regp_tim '0'                #tcp client  注册包协议超时时间
-        option tcpc_hrtp_en '0'                 #tcp client  心跳包协议使能 0：禁用 1：启用
-        option tcpc_hrtp_fmt '0'                #tcp client  心跳包协议格式 0：不使用 1：使用
-        option tcpc_hrtp_ctx ''                 #tcp client  心跳包协议上下文
-        option tcpc_hrtp_tim '60'               #tcp client  心跳包协议超时时间
+        option tcpc_regp_en '0'                 #tcp client  注册包使能 0：禁用 1：启用
+        option tcpc_regp_fmt '0'                #tcp client  注册包发送内容：0：MAC 1：IMEI 2：SN 3：自定义
+        option tcpc_regp_ctx ''                 #tcp client  注册包自定义内容 当tcpc_regp_fmt为3时有效
+        option tcpc_regp_tim '0'                #tcp client  注册包发送方式 0：建立连接时 1: 发送数据时 2: 都发送
+        
+        option tcpc_hrtp_en '0'                 #tcp client  心跳包使能 0：禁用 1：启用
+        option tcpc_hrtp_fmt '0'                #tcp client  心跳包发送内容： 0：MAC 1:IMEI 2:自定义
+        option tcpc_hrtp_ctx ''                 #tcp client  心跳包自定义内容 当tcpc_hrtp_fmt为2时有效
+        option tcpc_hrtp_tim '60'               #tcp client  心跳包时间
         #以tcps_开头的参数
         option tcps_local_port '8029'           #tcp server  tcp server本地使用的端口
         option tcps_conn_max_num '4'            #tcp server  tcp server最大连接数
@@ -504,7 +505,7 @@ local misc_config = {
         option will_msg 'test'                  #MQTT 遗嘱消息
         option will_qos '0'                     #MQTT 遗嘱QoS 0：QoS 0 1：QoS 1 2：QoS 2
         option will_retention '0'               #MQTT 遗嘱保留 0：不保留 1：保留
-        option ssl_mode '2'                     #MQTT SSL模式 0：不使用SSL 1：使用SSL 2：使用SSL/TLS
+        option ssl_mode '1'                     #MQTT SSL模式 0：不使用SSL 1：使用SSL
         option ssl_verify '0'                   #MQTT SSL验证 01: 不认证证书 1:认证服务器证书 2:双向认证
         option ssl_server_name 'test'           #MQTT SSL服务器证书文件名称
         option ssl_client_name 'test'           #MQTT SSL客户端证书文件名称

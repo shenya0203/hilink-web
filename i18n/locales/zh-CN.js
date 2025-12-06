@@ -165,7 +165,7 @@ export default {
         registerPacket: '注册包使能',
         registerSendMode: '注册包发送方式',
         registerContent: '注册包发送内容',
-        customContent: '自定义内容',
+        customContent: '注册包自定义内容',
         onConnect: '建立连接时',
         onSend: '发送数据时',
         both: '都发送',
@@ -173,6 +173,7 @@ export default {
         heartbeat: '心跳包使能',
         heartbeatInterval: '心跳包时间(秒)',
         heartbeatContent: '心跳包发送内容',
+        heartbeatCustomContent: '心跳包自定义内容',
         tcpClient: 'TCP Client',
         tcpServer: 'TCP Server',
         udpClient: 'UDP Client',
@@ -182,7 +183,8 @@ export default {
         config: '配置',
         path: '路径',
         restartRequired: 'Socket配置需要重启设备才能生效。',
-        continueConfig: '继续配置'
+        continueConfig: '继续配置',
+        customContentHint: '(1-128字节 支持\'a\'-\'z\'/\'A\'-\'Z\'/\'0\'-\'9\'和\'-\'.\'@\')'
     },
 
     // MQTT配置页面
@@ -232,20 +234,20 @@ export default {
     edge: {
         title: '边缘计算',
         description: '边缘计算网关',
-        
+
         // 标签页
         tabGatewayEnable: '网关使能',
         tabDataCollection: '数据采集',
         tabDataReport: '数据上报',
         tabProtocolConvert: '协议转换',
-        
+
         // 网关使能
         gatewayEnable: '网关使能',
         close: '关闭',
         open: '开启',
         saveCurrentPage: '保存当前页',
         nextStep: '下一步',
-        
+
         // 点表导入
         pointImport: '点表导入',
         selectFile: '选择文件',
@@ -255,7 +257,7 @@ export default {
         importTip: '(连续导入的文件名称一致时，需要shift+f5刷新后导入)',
         pointsAdded: '已添加点位数量',
         pointsRemaining: '还可添加点位',
-        
+
         // 从机表格
         slaveNumber: '序号',
         slaveName: '名称',
@@ -265,18 +267,18 @@ export default {
         empty: '空',
         edit: '编辑',
         delete: '删除',
-        
+
         // 数据点表格
         pointNumber: '序号',
         pointName: '名称',
         register: '寄存器',
         dataType: '数值类型',
         value: '值',
-        
+
         // 按钮
         addSlave: '添加从机',
         addDataPoint: '添加数据点',
-        
+
         // 从机对话框
         addSlaveTitle: '添加从机',
         editSlaveTitle: '编辑从机',
@@ -294,7 +296,7 @@ export default {
         mergeCollect: '合并采集',
         save: '保存',
         cancel: '取消',
-        
+
         // 数据点对话框
         addPointTitle: '添加数据点',
         editPointTitle: '编辑数据点',
@@ -304,18 +306,18 @@ export default {
         collectFormula: '采集公式',
         controlFormula: '控制公式',
         reportOnChange: '变化上报',
-        
+
         // 数据类型
         dataTypeString: '字符串',
         dataTypeBool: 'Bool',
         dataTypeUnsigned: 'Unsigned',
         dataTypeSigned: 'Signed',
-        
+
         // 占位符
         dataReportConfig: '数据上报配置',
         protocolConvertConfig: '协议转换配置',
         inDevelopment: '功能开发中...',
-        
+
         // 提示信息
         pleaseSelectFileFirst: '请先选择文件',
         importSuccess: '导入成功',

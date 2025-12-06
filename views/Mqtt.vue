@@ -141,49 +141,52 @@
             </select>
           </div>
 
-          <div class="form-group">
-            <label>{{ t('mqtt.authMethod') }}:</label>
-            <select v-model.number="mqttList[activeTab].ssl_verify">
-              <option :value="0">{{ t('mqtt.noAuth') }}</option>
-              <option :value="1">{{ t('mqtt.serverAuth') }}</option>
-              <option :value="2">{{ t('mqtt.mutualAuth') }}</option>
-            </select>
-          </div>
-
-          <!-- 服务器证书上传 (ssl_verify >= 1) -->
-          <template v-if="mqttList[activeTab].ssl_verify >= 1">
+          <!-- SSL加密开启时才显示认证相关选项 -->
+          <template v-if="mqttList[activeTab].ssl_mode === 1">
             <div class="form-group">
-              <label>{{ t('mqtt.serverCert') }}:</label>
-              <input type="file" ref="serverCertInput" @change="handleServerCertSelect" accept=".crt,.pem" style="display:none" />
-              <button type="button" class="btn-upload" @click="triggerFileSelect('server')">{{ t('common.selectFile') }}</button>
-              <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">{{ t('common.upload') }}...</button>
-              <span v-if="mqttList[activeTab].ssl_server_name && mqttList[activeTab].ssl_server_name !== 'null'" class="file-name">
-                {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_server_name }}
-              </span>
-            </div>
-          </template>
-
-          <!-- 客户端证书和私钥上传 (ssl_verify == 2) -->
-          <template v-if="mqttList[activeTab].ssl_verify === 2">
-            <div class="form-group">
-              <label>{{ t('mqtt.clientCert') }}:</label>
-              <input type="file" ref="clientCertInput" @change="handleClientCertSelect" accept=".crt,.pem" style="display:none" />
-              <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">{{ t('common.selectFile') }}</button>
-              <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">{{ t('common.upload') }}...</button>
-              <span v-if="mqttList[activeTab].ssl_client_name && mqttList[activeTab].ssl_client_name !== 'null'" class="file-name">
-                {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_client_name }}
-              </span>
+              <label>{{ t('mqtt.authMethod') }}:</label>
+              <select v-model.number="mqttList[activeTab].ssl_verify">
+                <option :value="0">{{ t('mqtt.noAuth') }}</option>
+                <option :value="1">{{ t('mqtt.serverAuth') }}</option>
+                <option :value="2">{{ t('mqtt.mutualAuth') }}</option>
+              </select>
             </div>
 
-            <div class="form-group">
-              <label>{{ t('mqtt.clientKey') }}:</label>
-              <input type="file" ref="clientKeyInput" @change="handleClientKeySelect" accept=".key,.pem" style="display:none" />
-              <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">{{ t('common.selectFile') }}</button>
-              <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">{{ t('common.upload') }}...</button>
-              <span v-if="mqttList[activeTab].ssl_client_key && mqttList[activeTab].ssl_client_key !== 'null'" class="file-name">
-                {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_client_key }}
-              </span>
-            </div>
+            <!-- 服务器证书上传 (ssl_verify >= 1) -->
+            <template v-if="mqttList[activeTab].ssl_verify >= 1">
+              <div class="form-group">
+                <label>{{ t('mqtt.serverCert') }}:</label>
+                <input type="file" ref="serverCertInput" @change="handleServerCertSelect" accept=".crt,.pem" style="display:none" />
+                <button type="button" class="btn-upload" @click="triggerFileSelect('server')">{{ t('common.selectFile') }}</button>
+                <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">{{ t('common.upload') }}...</button>
+                <span v-if="mqttList[activeTab].ssl_server_name && mqttList[activeTab].ssl_server_name !== 'null'" class="file-name">
+                  {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_server_name }}
+                </span>
+              </div>
+            </template>
+
+            <!-- 客户端证书和私钥上传 (ssl_verify == 2) -->
+            <template v-if="mqttList[activeTab].ssl_verify === 2">
+              <div class="form-group">
+                <label>{{ t('mqtt.clientCert') }}:</label>
+                <input type="file" ref="clientCertInput" @change="handleClientCertSelect" accept=".crt,.pem" style="display:none" />
+                <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">{{ t('common.selectFile') }}</button>
+                <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">{{ t('common.upload') }}...</button>
+                <span v-if="mqttList[activeTab].ssl_client_name && mqttList[activeTab].ssl_client_name !== 'null'" class="file-name">
+                  {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_client_name }}
+                </span>
+              </div>
+
+              <div class="form-group">
+                <label>{{ t('mqtt.clientKey') }}:</label>
+                <input type="file" ref="clientKeyInput" @change="handleClientKeySelect" accept=".key,.pem" style="display:none" />
+                <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">{{ t('common.selectFile') }}</button>
+                <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">{{ t('common.upload') }}...</button>
+                <span v-if="mqttList[activeTab].ssl_client_key && mqttList[activeTab].ssl_client_key !== 'null'" class="file-name">
+                  {{ t('common.selectedFile') }}: {{ mqttList[activeTab].ssl_client_key }}
+                </span>
+              </div>
+            </template>
           </template>
         </template>
         

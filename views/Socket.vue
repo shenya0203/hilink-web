@@ -87,7 +87,9 @@
                 <input type="file" ref="serverCertInput" @change="handleServerCertSelect" accept=".crt,.pem" style="display:none" />
                 <button type="button" class="btn-upload" @click="triggerFileSelect('server')">{{ t('common.selectFile') }}</button>
                 <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">{{ t('common.upload') }}...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_server_name && socketList[activeTab].tcpc.ssl_server_name !== 'null'" class="file-name">{{ t('common.selectedFile') }}</span>
+                <span v-if="socketList[activeTab].tcpc.ssl_server_name && socketList[activeTab].tcpc.ssl_server_name !== 'null'" class="file-name">
+                  {{ t('common.selectedFile') }}: {{ socketList[activeTab].tcpc.ssl_server_name }}
+                </span>
               </div>
             </template>
 
@@ -98,14 +100,18 @@
                 <input type="file" ref="clientCertInput" @change="handleClientCertSelect" accept=".crt,.pem" style="display:none" />
                 <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">{{ t('common.selectFile') }}</button>
                 <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">{{ t('common.upload') }}...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_client_name && socketList[activeTab].tcpc.ssl_client_name !== 'null'" class="file-name">{{ t('common.selectedFile') }}</span>
+                <span v-if="socketList[activeTab].tcpc.ssl_client_name && socketList[activeTab].tcpc.ssl_client_name !== 'null'" class="file-name">
+                  {{ t('common.selectedFile') }}: {{ socketList[activeTab].tcpc.ssl_client_name }}
+                </span>
               </div>
               <div class="form-group">
                 <label>{{ t('socket.clientKey') }}:</label>
                 <input type="file" ref="clientKeyInput" @change="handleClientKeySelect" accept=".key,.pem" style="display:none" />
                 <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">{{ t('common.selectFile') }}</button>
                 <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">{{ t('common.upload') }}...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_client_key && socketList[activeTab].tcpc.ssl_client_key !== 'null'" class="file-name">{{ t('common.selectedFile') }}</span>
+                <span v-if="socketList[activeTab].tcpc.ssl_client_key && socketList[activeTab].tcpc.ssl_client_key !== 'null'" class="file-name">
+                  {{ t('common.selectedFile') }}: {{ socketList[activeTab].tcpc.ssl_client_key }}
+                </span>
               </div>
             </template>
           </template>
@@ -136,9 +142,12 @@
                 <option :value="3">{{ t('socket.custom') }}</option>
               </select>
             </div>
-            <div v-if="socketList[activeTab].tcpc.regp_fmt === 3" class="form-group">
-              <label>{{ t('socket.customContent') }}:</label>
-              <input v-model="socketList[activeTab].tcpc.regp_ctx" type="text" maxlength="128" />
+            <div v-if="socketList[activeTab].tcpc.regp_fmt === 3" class="form-group-with-hint">
+              <div class="form-group">
+                <label>{{ t('socket.customContent') }}:</label>
+                <input v-model="socketList[activeTab].tcpc.regp_ctx" type="text" maxlength="128" />
+              </div>
+              <div class="hint-text">{{ t('socket.customContentHint') }}</div>
             </div>
           </template>
 
@@ -163,9 +172,12 @@
                 <option :value="2">{{ t('socket.custom') }}</option>
               </select>
             </div>
-            <div v-if="socketList[activeTab].tcpc.hrtp_fmt === 2" class="form-group">
-              <label>{{ t('socket.customContent') }}:</label>
-              <input v-model="socketList[activeTab].tcpc.hrtp_ctx" type="text" maxlength="128" />
+            <div v-if="socketList[activeTab].tcpc.hrtp_fmt === 2" class="form-group-with-hint">
+              <div class="form-group">
+                <label>{{ t('socket.heartbeatCustomContent') }}:</label>
+                <input v-model="socketList[activeTab].tcpc.hrtp_ctx" type="text" maxlength="128" />
+              </div>
+              <div class="hint-text">{{ t('socket.customContentHint') }}</div>
             </div>
           </template>
 
@@ -322,9 +334,22 @@ const uploadServerCert = async () => {
   if (!serverCertFile.value) return alert(t('common.selectFile'))
   try {
     const formData = new FormData()
-    formData.append('c', serverCertFile.value, `SOCK${activeTab.value}`)
+    const sockIndex = activeTab.value
+    const filename = serverCertFile.value.name
+    formData.append('c', serverCertFile.value, `SOCK${sockIndex}`)
+    
+    // POST 上传证书
     await apiClient.post('/upload/scert', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-    socketList.value[activeTab.value].tcpc.ssl_server_name = serverCertFile.value.name
+    
+    // GET 更新配置
+    await apiClient.get('/update_nv.cgi', {
+      params: {
+        file: 'comm_tunnel',
+        [`s_SOCK[${sockIndex}].tcpc.ssl_server_name`]: filename
+      }
+    })
+    
+    socketList.value[sockIndex].tcpc.ssl_server_name = filename
     alert(t('common.uploadSuccess'))
     serverCertFile.value = null
   } catch (err) { alert(t('common.uploadFailed') + ': ' + err.message) }
@@ -334,9 +359,22 @@ const uploadClientCert = async () => {
   if (!clientCertFile.value) return alert(t('common.selectFile'))
   try {
     const formData = new FormData()
-    formData.append('c', clientCertFile.value, `SOCK${activeTab.value}`)
+    const sockIndex = activeTab.value
+    const filename = clientCertFile.value.name
+    formData.append('c', clientCertFile.value, `SOCK${sockIndex}`)
+    
+    // POST 上传证书
     await apiClient.post('/upload/ccert', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-    socketList.value[activeTab.value].tcpc.ssl_client_name = clientCertFile.value.name
+    
+    // GET 更新配置
+    await apiClient.get('/update_nv.cgi', {
+      params: {
+        file: 'comm_tunnel',
+        [`s_SOCK[${sockIndex}].tcpc.ssl_client_name`]: filename
+      }
+    })
+    
+    socketList.value[sockIndex].tcpc.ssl_client_name = filename
     alert(t('common.uploadSuccess'))
     clientCertFile.value = null
   } catch (err) { alert(t('common.uploadFailed') + ': ' + err.message) }
@@ -346,9 +384,22 @@ const uploadClientKey = async () => {
   if (!clientKeyFile.value) return alert(t('common.selectFile'))
   try {
     const formData = new FormData()
-    formData.append('c', clientKeyFile.value, `SOCK${activeTab.value}`)
+    const sockIndex = activeTab.value
+    const filename = clientKeyFile.value.name
+    formData.append('c', clientKeyFile.value, `SOCK${sockIndex}`)
+    
+    // POST 上传证书私钥
     await apiClient.post('/upload/ckey', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-    socketList.value[activeTab.value].tcpc.ssl_client_key = clientKeyFile.value.name
+    
+    // GET 更新配置
+    await apiClient.get('/update_nv.cgi', {
+      params: {
+        file: 'comm_tunnel',
+        [`s_SOCK[${sockIndex}].tcpc.ssl_client_key`]: filename
+      }
+    })
+    
+    socketList.value[sockIndex].tcpc.ssl_client_key = filename
     alert(t('common.uploadSuccess'))
     clientKeyFile.value = null
   } catch (err) { alert(t('common.uploadFailed') + ': ' + err.message) }
@@ -444,4 +495,7 @@ onMounted(() => { loadData() })
 .btn-continue { padding: 8px 20px; background-color: white; color: #666; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-weight: 600; }
 .btn-restart:hover { background-color: #0052a3; }
 .btn-continue:hover { background-color: #f5f5f5; }
+.form-group-with-hint { margin-bottom: 15px; }
+.form-group-with-hint .form-group { margin-bottom: 5px; }
+.hint-text { color: #ff0000; font-size: 12px; margin-left: 170px; }
 </style>
