@@ -320,6 +320,33 @@ export default {
         // 占位符
         dataReportConfig: '数据上报配置',
         protocolConvertConfig: '协议转换配置',
+        // 数据上报
+        groupNumber: '分组序号',
+        channelSelection: '通道选择',
+        periodicReport: '周期上报',
+        scheduledReport: '定时上报',
+        changeReport: '变化上报',
+        wholeGroupReport: '整组上报',
+        addGroup: '添加分组',
+        editGroup: '编辑分组',
+        reportTopic: '上报主题',
+        messageRetain: '消息保留',
+        reportPeriod: '上报周期',
+        reportDataFormat: '上报数据格式',
+        originalType: '原类型',
+        errorFill: '错误填充',
+        errorMessage: '错误信息',
+        reportTemplate: '上报模板',
+        reconfigure: '重新配置',
+        continueConfig: '继续配置',
+
+        // 新增选项
+        reportTime: '上报时间',
+        wholeHour: '整小时上报',
+        wholeQuarter: '整刻钟上报',
+        wholeMinute: '整分钟上报',
+        fixedTime: '固定时间上报',
+
         inDevelopment: '功能开发中...',
 
         // 提示信息

@@ -146,11 +146,40 @@
 
     <!-- Tab 3: 数据上报 -->
     <div v-if="activeTab === 2" class="tab-content">
-      <div class="placeholder">
-        <h3>{{ t('edge.dataReportConfig') }}</h3>
-        <p>{{ t('edge.inDevelopment') }}</p>
+      <div class="table-container">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ t('edge.groupNumber') }}</th>
+                <th>{{ t('edge.name') }}</th>
+                <th>{{ t('edge.channelSelection') }}</th>
+                <th>{{ t('edge.periodicReport') }}</th>
+                <th>{{ t('edge.scheduledReport') }}</th>
+                <th>{{ t('edge.changeReport') }}</th>
+                <th>{{ t('edge.operation') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(group, index) in reportGroups" :key="group.id">
+                <td>{{ index + 1 }}</td>
+                <td>{{ group.name }}</td>
+                <td>{{ group.channel }}</td>
+                <td>{{ group.periodic ? t('edge.open') : t('edge.close') }}</td>
+                <td>{{ group.scheduled ? t('edge.open') : t('edge.close') }}</td>
+                <td>{{ t('edge.wholeGroupReport') }}</td>
+                <td class="action-cell">
+                  <button class="btn-small" @click="editReportGroup(index)">{{ t('edge.edit') }}</button>
+                  <button class="btn-small btn-danger" @click="deleteReportGroup(index)">{{ t('edge.delete') }}</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+      
       <div class="button-group">
+        <button class="btn-action" @click="showAddReportGroupModal">{{ t('edge.addGroup') }}</button>
         <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
         <button class="btn-next" @click="nextTab">{{ t('edge.nextStep') }}</button>
       </div>
@@ -164,6 +193,100 @@
       </div>
       <div class="button-group">
         <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
+      </div>
+    </div>
+
+    <!-- 添加分组对话框 -->
+    <div v-if="showReportGroupModal" class="modal-overlay" @click.self="closeReportGroupModal">
+      <div class="modal" style="max-width: 600px;">
+        <h3>{{ isEditingReportGroup ? t('edge.editGroup') : t('edge.addGroup') }}</h3>
+        <div class="modal-form">
+          <div class="form-group">
+            <label>{{ t('edge.name') }}:</label>
+            <input v-model="reportGroupForm.name" type="text" />
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.channelSelection') }}:</label>
+            <select v-model="reportGroupForm.channel">
+              <option value="MQTT1">MQTT1</option>
+              <option value="MQTT2">MQTT2</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.reportTopic') }}:</label>
+            <input v-model="reportGroupForm.topic" type="text" />
+          </div>
+          <div class="form-group">
+            <label>QOS:</label>
+            <select v-model="reportGroupForm.qos">
+              <option value="QOS0">QOS0</option>
+              <option value="QOS1">QOS1</option>
+              <option value="QOS2">QOS2</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.messageRetain') }}:</label>
+            <input type="checkbox" v-model="reportGroupForm.retain" />
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.periodicReport') }}:</label>
+            <input type="checkbox" v-model="reportGroupForm.periodic" />
+          </div>
+          <div class="form-group" v-if="reportGroupForm.periodic">
+            <label>{{ t('edge.reportPeriod') }}:</label>
+            <div class="input-with-unit">
+              <input v-model.number="reportGroupForm.periodicInterval" type="number" />
+              <span class="unit">s</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.scheduledReport') }}:</label>
+            <input type="checkbox" v-model="reportGroupForm.scheduled" />
+          </div>
+          <div class="form-group" v-if="reportGroupForm.scheduled">
+            <label>{{ t('edge.reportTime') }}:</label>
+            <select v-model.number="reportGroupForm.scheduledType">
+              <option :value="0">{{ t('edge.wholeHour') }}</option>
+              <option :value="1">{{ t('edge.wholeQuarter') }}</option>
+              <option :value="2">{{ t('edge.wholeMinute') }}</option>
+              <option :value="3">{{ t('edge.fixedTime') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.reportDataFormat') }}:</label>
+            <select v-model="reportGroupForm.format">
+              <option value="Original">{{ t('edge.originalType') }}</option>
+              <option value="JSON">JSON</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.errorFill') }}:</label>
+            <input type="checkbox" v-model="reportGroupForm.errorFill" />
+          </div>
+          <div class="form-group" v-if="reportGroupForm.errorFill">
+            <label>{{ t('edge.errorMessage') }}:</label>
+            <input v-model="reportGroupForm.errorMsg" type="text" placeholder="error" />
+          </div>
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.reportTemplate') }}:</label>
+            <textarea v-model="reportGroupForm.template" rows="10" style="flex: 1; padding: 5px; border: 1px solid #ddd; border-radius: 2px; font-family: monospace;"></textarea>
+          </div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-save" @click="saveReportGroup">{{ t('edge.save') }}</button>
+          <button class="btn-cancel" @click="closeReportGroupModal">{{ t('edge.cancel') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 保存成功对话框 -->
+    <div v-if="showSuccessModal" class="modal-overlay">
+      <div class="modal" style="min-width: 300px; text-align: center;">
+        <h3 style="border: none; margin-bottom: 10px;">{{ t('edge.saveSuccess') }}</h3>
+        <div class="modal-buttons">
+          <button class="btn-save" @click="handleReconfigure">{{ t('edge.reconfigure') }}</button>
+          <button class="btn-next" @click="handleContinue">{{ t('edge.continueConfig') }}</button>
+        </div>
       </div>
     </div>
 
@@ -345,6 +468,29 @@ const edgeReport = ref({ group: [] })
 const edgeAccess = ref({ group: [] })
 const edgeLinkCtrl = ref({ group: [] })
 
+// 数据上报相关数据
+const reportGroups = ref([])
+const showReportGroupModal = ref(false)
+const isEditingReportGroup = ref(false)
+const editingReportGroupIndex = ref(-1)
+const showSuccessModal = ref(false)
+
+const reportGroupForm = ref({
+  name: '',
+  channel: 'MQTT1',
+  topic: '',
+  qos: 'QOS0',
+  retain: false,
+  periodic: true,
+  periodicInterval: 5,
+  scheduled: false,
+  scheduledType: 0,
+  format: 'Original',
+  errorFill: false,
+  errorMsg: '',
+  template: ''
+})
+
 // CSV文件选择
 const csvFileInput = ref(null)
 const selectedCsvFile = ref(null)
@@ -519,6 +665,114 @@ const selectSlave = (index) => {
 // 选择数据点
 const selectPoint = (index) => {
   selectedPointIndex.value = index
+}
+
+// 数据上报管理
+const showAddReportGroupModal = () => {
+  isEditingReportGroup.value = false
+  editingReportGroupIndex.value = -1
+  reportGroupForm.value = {
+    name: `Report${reportGroups.value.length + 1}`,
+    channel: 'MQTT1',
+    topic: '/UploadTopic',
+    qos: 'QOS0',
+    retain: false,
+    periodic: true,
+    periodicInterval: 5,
+    scheduled: false,
+    scheduledType: 0,
+    format: 'Original',
+    errorFill: false,
+    errorMsg: '',
+    template: '{\n  "device01": {\n    "node0101": "node0101",\n    "node0102": "node0102"\n  },\n  "time": "sys_local_time"\n}'
+  }
+  showReportGroupModal.value = true
+}
+
+const editReportGroup = (index) => {
+  isEditingReportGroup.value = true
+  editingReportGroupIndex.value = index
+  reportGroupForm.value = { ...reportGroups.value[index] }
+  showReportGroupModal.value = true
+}
+
+const deleteReportGroup = (index) => {
+  if (confirm(t('edge.confirmDeletePoint') + '?')) { // Reuse confirm delete message
+    reportGroups.value.splice(index, 1)
+  }
+}
+
+const closeReportGroupModal = () => {
+  showReportGroupModal.value = false
+}
+
+const saveReportGroup = () => {
+  if (!reportGroupForm.value.name) {
+    alert(t('edge.pleaseInputPointName')) // Reuse
+    return
+  }
+  
+  const newGroup = {
+    id: isEditingReportGroup.value ? reportGroups.value[editingReportGroupIndex.value].id : `group_${Date.now()}`,
+    ...reportGroupForm.value
+  }
+  
+  if (isEditingReportGroup.value) {
+    reportGroups.value[editingReportGroupIndex.value] = newGroup
+  } else {
+    reportGroups.value.push(newGroup)
+  }
+  
+  closeReportGroupModal()
+}
+
+const saveReportData = async () => {
+  // 1. Save Group Config (group.json)
+  const groupConfig = {
+    group: reportGroups.value.map(g => ({
+      name: g.name,
+      channel: g.channel,
+      topic: g.topic,
+      qos: g.qos,
+      retain: g.retain ? 1 : 0,
+      periodic: g.periodic ? 1 : 0,
+      periodicInterval: g.periodicInterval,
+      scheduled: g.scheduled ? 1 : 0,
+      scheduledType: g.scheduledType,
+      format: g.format,
+      errorFill: g.errorFill ? 1 : 0,
+      errorMsg: g.errorMsg
+      // template is NOT saved here, but in report_template.json
+    }))
+  }
+  
+  await apiClient.post('/upload/nv1', JSON.stringify(groupConfig), {
+    headers: { 'Content-Type': 'application/json' }
+  })
+  
+  // 2. Save Templates (report_template.json)
+  // Format: Report0:{...}\nReport1:{...}
+  let templateContent = ''
+  reportGroups.value.forEach((g, i) => {
+    templateContent += `Report${i}:${g.template}\n`
+  })
+  
+  const formData = new FormData()
+  // filename="report" as per user request
+  formData.append('c', new Blob([templateContent]), 'report')
+  
+  await apiClient.post('/upload/template', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+const handleReconfigure = () => {
+  showSuccessModal.value = false
+}
+
+const handleContinue = () => {
+  showSuccessModal.value = false
+  nextTab()
 }
 
 // 文件选择处理
@@ -762,6 +1016,11 @@ const saveCurrentPage = async () => {
       await apiClient.post('/upload/edge', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+    } else if (activeTab.value === 2) {
+      // 保存数据上报配置
+      await saveReportData()
+      showSuccessModal.value = true
+      return
     }
     
     alert(t('edge.saveSuccess'))
@@ -960,6 +1219,28 @@ const loadData = async () => {
     
     edgeFileContent.value = edgeFileRes.data || ''
     edgeReport.value = edgeReportRes.data || { group: [] }
+    
+    // Initialize reportGroups from loaded data
+    if (edgeReport.value.group && Array.isArray(edgeReport.value.group)) {
+      reportGroups.value = edgeReport.value.group.map((g, i) => ({
+        id: `group_${i}`,
+        name: g.name || `Report${i+1}`,
+        channel: g.channel || 'MQTT1',
+        topic: g.topic || '',
+        qos: g.qos || 'QOS0',
+        retain: g.retain === 1,
+        periodic: g.periodic === 1,
+        periodicInterval: g.periodicInterval || 5,
+        scheduled: g.scheduled === 1,
+        scheduledType: g.scheduledType || 0,
+        format: g.format || 'Original',
+        errorFill: g.errorFill === 1,
+        errorMsg: g.errorMsg || '',
+        template: g.template || ''
+      }))
+    } else {
+      reportGroups.value = []
+    }
     edgeAccess.value = edgeAccessRes.data || { group: [] }
     edgeLinkCtrl.value = edgeLinkCtrlRes.data || { group: [] }
     

@@ -315,7 +315,7 @@ local function handle_upload(uri)
         end
     elseif string.find(uri, "/upload/template") then
         -- 3.4 上报模板
-        save_file_to_system("report_template.json", content)
+        save_file_to_system("/etc/config/device/report_template.json", content)
         notify_core_process("report_template")
         
     elseif string.find(uri, "/upload/conver_csv") then

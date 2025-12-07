@@ -32,6 +32,15 @@ local function ubus_call(object, method, params)
     return result
 end
 
+-- 读取文件内容
+local function read_file(path)
+    local file = io.open(path, "r")
+    if not file then return nil end
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
 local _M = {}
 
 -- ==========================================================
@@ -333,7 +342,34 @@ local edge_report_config = {
 }
 
 function _M.get_edge_report_config()
-    return edge_report_config
+    local config = { group = {} }
+    
+    -- Read group.json
+    local group_content = read_file("/etc/config/device/group.json")
+    if group_content then
+        local ok, data = pcall(cjson.decode, group_content)
+        if ok and data and data.group then
+            config.group = data.group
+        end
+    end
+    
+    -- Read report_template.json
+    local template_content = read_file("/etc/config/device/report_template.json")
+    if template_content then
+        -- Parse ReportN:{...}
+        for i, group in ipairs(config.group) do
+            -- Look for Report(i-1):{...}
+            -- Pattern: Report(Index):(%b{})
+            -- Note: %b{} matches balanced braces
+            local pattern = "Report" .. (i-1) .. ":(%b{})"
+            local template = string.match(template_content, pattern)
+            if template then
+                group.template = template
+            end
+        end
+    end
+    
+    return config
 end
 
 function _M.set_edge_report_config(data)
