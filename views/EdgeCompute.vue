@@ -435,6 +435,7 @@ const currentSlavePoints = computed(() => {
 // 计算属性：总数据点数量
 const totalPoints = computed(() => {
   return slaveList.value.reduce((total, slave) => {
+    if (slave.isSystem) return total
     return total + (slave.points?.length || 0)
   }, 0)
 })
