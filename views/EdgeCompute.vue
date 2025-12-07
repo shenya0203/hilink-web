@@ -257,6 +257,15 @@
                 <option :value="4">4</option>
               </select>
               <input v-model.number="pointForm.registerAddress" type="number" placeholder="1" />
+              <input 
+                v-if="pointForm.registerType === 4 && pointForm.dataType === 'Bit'"
+                v-model.number="pointForm.bitIndex" 
+                type="number" 
+                min="0" 
+                max="15" 
+                placeholder="0" 
+                style="width: 60px; flex: none;"
+              />
             </div>
             <span class="register-display">{{ computedRegisterAddress }}</span>
           </div>
@@ -467,7 +476,13 @@ const computedRegisterAddress = computed(() => {
   const type = pointForm.value.registerType
   const addr = pointForm.value.registerAddress || 0
   // 格式：寄存器类型 + 5位地址
-  return String(type) + String(addr).padStart(5, '0')
+  let str = String(type) + String(addr).padStart(5, '0')
+  
+  if (type === 4 && pointForm.value.dataType === 'Bit') {
+    str += `.${pointForm.value.bitIndex || 0}`
+  }
+  
+  return str
 })
 
 // 监听寄存器类型变化，重置数据类型
@@ -476,6 +491,13 @@ watch(() => pointForm.value.registerType, (newType) => {
   if (!types.includes(pointForm.value.dataType)) {
     pointForm.value.dataType = types[0]
   }
+})
+
+// 监听位索引变化，限制范围 0-15
+watch(() => pointForm.value.bitIndex, (newVal) => {
+  if (newVal === undefined || newVal === null || newVal === '') return
+  if (newVal < 0) pointForm.value.bitIndex = 0
+  if (newVal > 15) pointForm.value.bitIndex = 15
 })
 
 // 获取从机来源显示
@@ -655,6 +677,7 @@ const showAddPointModal = () => {
     detail: '',
     registerType: 0,
     registerAddress: 1,
+    bitIndex: 0,
     dataType: 'Bool',
     decimalPlaces: 3,
     timeout: 200,
@@ -671,7 +694,7 @@ const editPoint = (index) => {
   const point = currentSlave.value.points[index]
   isEditingPoint.value = true
   editingPointIndex.value = index
-  pointForm.value = { ...point }
+  pointForm.value = { bitIndex: 0, ...point }
   showPointModal.value = true
 }
 
@@ -788,7 +811,19 @@ const generateCsvContent = () => {
       } else {
         const typeCode = dataTypeMap[point.dataType] || 18
         const report = point.reportOnChange ? 1 : 0
-        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${point.registerDisplay},0,0,0,${point.timeout || 200},${report},0,${point.controlFormula || ''},;\n`
+        
+        let registerStr = String(point.registerType) + String(point.registerAddress).padStart(5, '0')
+        let bitIndex = 0
+        
+        if (point.registerType === 4 && point.dataType === 'Bit') {
+          bitIndex = point.bitIndex || 0
+        } else {
+          // For other types, ensure we use the clean register string without dot
+          // (though point.registerDisplay might be clean for them, this is safer)
+          registerStr = String(point.registerType) + String(point.registerAddress).padStart(5, '0')
+        }
+
+        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${registerStr},${bitIndex},0,0,${point.timeout || 200},${report},0,${point.controlFormula || ''},;\n`
       }
     })
   })
@@ -860,7 +895,16 @@ const parseCsvContent = (content) => {
         })
       } else {
         const regType = parseInt(registerStr[0]) || 0
+
         const regAddr = parseInt(registerStr.substring(1)) || 1
+        
+        let bitIdx = parseInt(parts[13]) || 0
+        
+        // Reconstruct display string
+        let displayStr = registerStr
+        if (regType === 4 && getDataTypeName(parseInt(parts[4])) === 'Bit') {
+           displayStr += `.${bitIdx}`
+        }
         
         currentSlave.points.push({
           id: `point_${Date.now()}_${Math.random()}`,
@@ -868,7 +912,8 @@ const parseCsvContent = (content) => {
           detail: parts[3] || '',
           registerType: regType,
           registerAddress: regAddr,
-          registerDisplay: registerStr,
+          bitIndex: bitIdx,
+          registerDisplay: displayStr,
           dataType: getDataTypeName(parseInt(parts[4])),
           decimalPlaces: parseInt(parts[5]) || 0,
           collectFormula: parts[11] || '',
@@ -1244,7 +1289,7 @@ tr.selected:hover {
   border-radius: 8px;
   padding: 20px 30px;
   min-width: 400px;
-  max-width: 500px;
+  max-width: 600px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -1295,7 +1340,7 @@ tr.selected:hover {
   display: flex;
   gap: 5px;
   flex: 1;
-  max-width: 250px;
+  max-width: 340px;
 }
 
 .register-input select {
