@@ -1889,6 +1889,34 @@ const loadData = async () => {
     
     // Initialize reportGroups from loaded data
     if (edgeReport.value.group && Array.isArray(edgeReport.value.group)) {
+      // 1. Collect template names
+      const templateNames = []
+      edgeReport.value.group.forEach(g => {
+        if (g.tmpl_file) {
+           const match = g.tmpl_file.match(/\/([^/]+)\.json$/)
+           if (match && match[1]) {
+             templateNames.push(match[1])
+           }
+        }
+      })
+      
+      // 2. Fetch templates if any
+      let templatesData = {}
+      if (templateNames.length > 0) {
+        try {
+           // Construct params manually to ensure name=template&name=Report1 format
+           // Axios paramsSerializer can be used, or just URLSearchParams
+           const params = new URLSearchParams()
+           params.append('name', 'template')
+           templateNames.forEach(n => params.append('name', n))
+           
+           const tmplRes = await apiClient.get('/download_multi_file.cgi', { params })
+           templatesData = tmplRes.data || {}
+        } catch (e) {
+           console.error('Failed to load templates:', e)
+        }
+      }
+
       reportGroups.value = edgeReport.value.group.map((g, i) => {
         // Map backend fields to frontend fields
         const qosVal = g.qos === 1 ? 'QOS1' : (g.qos === 2 ? 'QOS2' : 'QOS0')
@@ -1900,6 +1928,15 @@ const loadData = async () => {
         const mm = g.cond && g.cond.timed ? g.cond.timed.mm || 0 : 0
         const scheduledTime = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`
         
+        // Resolve template content
+        let tmplContent = g.template || '' // Fallback if backend still sends it (it shouldn't)
+        if (g.tmpl_file) {
+           const match = g.tmpl_file.match(/\/([^/]+)\.json$/)
+           if (match && match[1] && templatesData[match[1]]) {
+              tmplContent = JSON.stringify(templatesData[match[1]], null, 2)
+           }
+        }
+
         return {
           id: `group_${i}`,
           name: g.name || `Report${i+1}`,
@@ -1915,7 +1952,7 @@ const loadData = async () => {
           format: (g.data_report_type === 0 || g.format === 'Original') ? 'Original' : 'JSON',
           errorFill: g.err_enable === 1 || g.errorFill === 1,
           errorMsg: g.err_info || g.errorMsg || '',
-          template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : (g.template || '')
+          template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : tmplContent
         }
       })
     } else {
@@ -1953,11 +1990,12 @@ const loadData = async () => {
          const parts = line.split(',')
          if (parts[0] === 'S') {
             // S,1,6,10,ModBusTCP
-            // parts[1]: Enable?
-            // parts[3]: Station Address?
+            // parts[1]: Station Address?
+            // parts[2]:
+            // parts[3]: 
             // parts[4]: Protocol?
             if (parts.length > 3) {
-               protocolConversionConfig.value.stationAddress = parseInt(parts[3]) || 1
+               protocolConversionConfig.value.stationAddress = parseInt(parts[1]) || 1
             }
          } else if (parts[0] === 'C') {
             // C,PointName,SlaveName,DataType,MappingAddr

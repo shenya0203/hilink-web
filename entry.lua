@@ -263,7 +263,7 @@ local function handle_download_file(args)
     if name == "edge" then
         content = read_file("/etc/config/device/points.csv") or "V,V1.0,N7X0,;"
     elseif name == "edge_proto_access" then
-        content = read_file("/etc/config/device/proto_map.csv") or "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
+        content = read_file("/etc/config/device/edge_access/edge_proto_access") or "S,1,6,10,ModBusTCP"
     end
 
     ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
@@ -272,6 +272,51 @@ local function handle_download_file(args)
     ngx.header.content_type = "text/plain"
     ngx.print(content)
     ngx.exit(ngx.HTTP_OK)
+end
+
+-- 处理 /download_multi_file.cgi (批量下载文件)
+local function handle_download_multi_file(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_download_multi_file args: ", cjson.encode(args))
+    local names = args.name
+    local response = {}
+    
+    -- Ensure names is a table (array)
+    if type(names) ~= "table" then
+        names = { names }
+    end
+    
+    local is_template = false
+    local target_files = {}
+    
+    for _, name in ipairs(names) do
+        if name == "template" then
+            is_template = true
+        else
+            table.insert(target_files, name)
+        end
+    end
+    
+    if is_template then
+        for _, file_name in ipairs(target_files) do
+            local path = "/etc/config/device/template/" .. file_name .. ".json"
+            local content = read_file(path)
+            if content then
+                -- Try to decode JSON to ensure validity, or just send as string?
+                -- User requested: "Report0": { ... } (JSON object)
+                -- So we should decode the file content if it's JSON string
+                local ok, json_data = pcall(cjson.decode, content)
+                if ok then
+                    response[file_name] = json_data
+                else
+                    -- If not valid JSON, maybe send as string or ignore?
+                    -- Assuming valid JSON for now as per user description
+                    response[file_name] = content
+                end
+            end
+        end
+    end
+    
+    send_json(response)
 end
 
 -- 处理 /upload/* (文件上传)
@@ -341,10 +386,14 @@ local function handle_upload(uri)
         os.execute("mkdir -p /etc/config/device/template")
         -- Content format: Report0:{...}\nReport1:{...}
         for key, val in string.gmatch(content, "([^:]+):(%b{})") do
-            local f = io.open("/etc/config/device/template/" .. key .. ".json", "w+")
-            if f then
-                f:write(val)
-                f:close()
+            -- Trim whitespace/newlines from key
+            key = string.match(key, "^%s*(.-)%s*$")
+            if key and key ~= "" then
+                local f = io.open("/etc/config/device/template/" .. key .. ".json", "w+")
+                if f then
+                    f:write(val)
+                    f:close()
+                end
             end
         end
         
@@ -352,7 +401,8 @@ local function handle_upload(uri)
         
     elseif string.find(uri, "/upload/conver_csv") then
         -- 4.2 协议转换 CSV
-        save_file_to_system("/etc/config/device/proto_map.csv", content)
+        os.execute("mkdir -p /etc/config/device/edge_access")
+        save_file_to_system("/etc/config/device/edge_access/edge_proto_access", content)
         notify_core_process("proto_map")
         
     elseif string.find(uri, "/upload/scert") then
@@ -485,6 +535,9 @@ elseif uri == "/update_nv.cgi" then
 
 elseif uri == "/download_file.cgi" then
     handle_download_file(args)
+
+elseif uri == "/download_multi_file.cgi" then
+    handle_download_multi_file(args)
 
 elseif uri == "/action_restart.cgi" then
     handle_restart()

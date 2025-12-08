@@ -185,6 +185,33 @@ function _M.get_offline_cache_config()
     return offline_cache_config
 end
 
+-- ==========================================================
+-- 边缘计算配置 (Moved to top for scope visibility)
+-- ==========================================================
+
+-- 12. Edge Config - 边缘计算基本配置
+local edge_config = {
+    all_en = 1,
+    refresh_frequency = 100,
+    calc_period = 100,
+    poll_interval = 100
+}
+
+-- 13. Edge Report Config - 数据上报配置
+local edge_report_config = {
+    group = {}
+}
+
+-- 14. Edge Access Config - 协议转换访问配置
+local edge_access_config = {
+    group = {}
+}
+
+-- 15. Edge Link Control Config - 链路控制配置
+local edge_link_ctrl_config = {
+    group = {}
+}
+
 -- 8. TF Card Info
 function _M.get_tf_info()
     -- 模拟TF卡信息
@@ -304,6 +331,10 @@ function _M.set_config(module, args)
 
     if module == "edge_access" then
         ngx.log(ngx.INFO, "Updating edge_access config...")
+        
+        -- Reset group config to ensure we only save what's currently submitted
+        edge_access_config.group = {}
+        
         for k, v in pairs(args) do
             -- Parse n_group[i].key or s_group[i].key
             local type_prefix, index, key = string.match(k, "([ns])_group%[(%d+)%]%.(.+)")
@@ -328,6 +359,19 @@ function _M.set_config(module, args)
                 end
             end
         end
+        
+        -- Save to files
+        os.execute("rm -f /etc/config/device/edge_access/*.json")
+        os.execute("mkdir -p /etc/config/device/edge_access")
+        
+        for i, g in pairs(edge_access_config.group) do
+            local f = io.open("/etc/config/device/edge_access/" .. i .. ".json", "w+")
+            if f then
+                f:write(cjson.encode(g))
+                f:close()
+            end
+        end
+        
         return true
     end
     
@@ -338,13 +382,7 @@ end
 -- 边缘计算配置
 -- ==========================================================
 
--- 12. Edge Config - 边缘计算基本配置
-local edge_config = {
-    all_en = 1,
-    refresh_frequency = 100,
-    calc_period = 100,
-    poll_interval = 100
-}
+-- 12. Edge Config - 边缘计算基本配置 (Moved to top)
 
 function _M.get_edge_config()
     return edge_config
@@ -365,10 +403,7 @@ function _M.set_edge_config(args)
     return true
 end
 
--- 13. Edge Report Config - 数据上报配置
-local edge_report_config = {
-    group = {}
-}
+-- 13. Edge Report Config - 数据上报配置 (Moved to top)
 
 function _M.get_edge_report_config()
     local config = { group = {} }
@@ -382,17 +417,7 @@ function _M.get_edge_report_config()
                 local ok, g = pcall(cjson.decode, content)
                 if ok then
                     -- Resolve template
-                    if g.tmpl_file then
-                        -- Extract filename from path: /template/Report0.json -> Report0
-                        local tmpl_name = string.match(g.tmpl_file, "/([^/]+)%.json$")
-                        if tmpl_name then
-                            local tmpl_path = "/etc/config/device/template/" .. tmpl_name .. ".json"
-                            local tmpl_content = read_file(tmpl_path)
-                            if tmpl_content then
-                                g.template = tmpl_content
-                            end
-                        end
-                    end
+                    -- Template content is now fetched via /download_multi_file.cgi
                     table.insert(config.group, g)
                 end
             end
@@ -410,30 +435,30 @@ function _M.set_edge_report_config(data)
     return true
 end
 
--- 14. Edge Access Config - 协议转换访问配置
-local edge_access_config = {
-    group = {
-        {
-            enable = 0,
-            name = "my_group1",
-            proto = 1,
-            up = {
-                link = "MQTT1",
-                topic = "/PubTopic",
-                qos = 0,
-                retention = 0
-            },
-            down = {
-                link = "MQTT1",
-                topic = "/SubTopic",
-                qos = 0
-            }
-        }
-    }
-}
+-- 14. Edge Access Config - 协议转换访问配置 (Moved to top)
 
 function _M.get_edge_access_config()
-    return edge_access_config
+    local config = { group = {} }
+    
+    -- Read from /etc/config/device/edge_access/
+    local p = io.popen("ls /etc/config/device/edge_access/*.json 2>/dev/null")
+    if p then
+        for file_path in p:lines() do
+            local content = read_file(file_path)
+            if content then
+                local ok, g = pcall(cjson.decode, content)
+                if ok then
+                    table.insert(config.group, g)
+                end
+            end
+        end
+        p:close()
+    end
+    
+    -- Update local cache
+    edge_access_config = config
+    
+    return config
 end
 
 function _M.set_edge_access_config(data)
@@ -443,10 +468,8 @@ function _M.set_edge_access_config(data)
     return true
 end
 
--- 15. Edge Link Control Config - 链路控制配置
-local edge_link_ctrl_config = {
-    group = {}
-}
+
+-- 15. Edge Link Control Config - 链路控制配置 (Moved to top)
 
 function _M.get_edge_link_ctrl_config()
     return edge_link_ctrl_config
