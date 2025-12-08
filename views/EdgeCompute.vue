@@ -146,6 +146,16 @@
 
     <!-- Tab 3: 数据上报 -->
     <div v-if="activeTab === 2" class="tab-content">
+      <!-- 上报分组导入区域 -->
+      <div class="import-section">
+        <span class="label">{{ t('edge.reportGroupImport') }}</span>
+        <button class="btn-outline" @click="triggerReportFileSelect">{{ t('edge.selectFile') }}</button>
+        <button class="btn-outline" @click="importReportJson" :disabled="!reportJsonFile">{{ t('edge.import') }}</button>
+        <button class="btn-outline" @click="exportReportJson">{{ t('edge.export') }}</button>
+        <span class="file-hint">{{ reportJsonFileName || t('edge.pleaseSelectJsonFile') }}</span>
+        <input type="file" ref="reportJsonInput" @change="handleReportFileSelect" accept=".json" style="display:none" />
+      </div>
+
       <div class="table-container">
         <div class="table-wrapper">
           <table>
@@ -286,6 +296,27 @@
         <div class="modal-buttons">
           <button class="btn-save" @click="handleReconfigure">{{ t('edge.reconfigure') }}</button>
           <button class="btn-next" @click="handleContinue">{{ t('edge.continueConfig') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 解析结果对话框 -->
+    <div v-if="showParseResultModal" class="modal-overlay" @click.self="closeParseResultModal">
+      <div class="modal" style="min-width: 300px; text-align: center;">
+        <div style="margin-bottom: 20px; font-size: 16px; font-weight: bold;">
+          <span v-if="parseSuccess">🌐 {{ ipAddress }}</span>
+        </div>
+        
+        <div v-if="parseSuccess" style="margin-bottom: 20px;">
+          {{ t('edge.parseSuccess') }}
+        </div>
+        <div v-else style="text-align: left; margin-bottom: 20px;">
+          <div>{{ t('edge.errorReason') }}:</div>
+          <div>{{ parseErrorMsg }}</div>
+        </div>
+        
+        <div class="modal-buttons" style="justify-content: center;">
+          <button class="btn-save" @click="closeParseResultModal">{{ t('common.confirm') }}</button>
         </div>
       </div>
     </div>
@@ -490,6 +521,15 @@ const reportGroupForm = ref({
   errorMsg: '',
   template: ''
 })
+
+// JSON导入导出
+const reportJsonInput = ref(null)
+const reportJsonFile = ref(null)
+const reportJsonFileName = ref('')
+const showParseResultModal = ref(false)
+const parseSuccess = ref(false)
+const parseErrorMsg = ref('')
+const ipAddress = ref(window.location.hostname)
 
 // CSV文件选择
 const csvFileInput = ref(null)
@@ -697,9 +737,7 @@ const editReportGroup = (index) => {
 }
 
 const deleteReportGroup = (index) => {
-  if (confirm(t('edge.confirmDeletePoint') + '?')) { // Reuse confirm delete message
-    reportGroups.value.splice(index, 1)
-  }
+  reportGroups.value.splice(index, 1)
 }
 
 const closeReportGroupModal = () => {
@@ -741,8 +779,8 @@ const saveReportData = async () => {
       scheduledType: g.scheduledType,
       format: g.format,
       errorFill: g.errorFill ? 1 : 0,
-      errorMsg: g.errorMsg
-      // template is NOT saved here, but in report_template.json
+      errorMsg: g.errorMsg,
+      tmpl_file: `/template/${g.name}.json`
     }))
   }
   
@@ -751,10 +789,10 @@ const saveReportData = async () => {
   })
   
   // 2. Save Templates (report_template.json)
-  // Format: Report0:{...}\nReport1:{...}
+  // Format: GroupName:{...}\nGroupName:{...}
   let templateContent = ''
-  reportGroups.value.forEach((g, i) => {
-    templateContent += `Report${i}:${g.template}\n`
+  reportGroups.value.forEach((g) => {
+    templateContent += `${g.name}:${g.template}\n`
   })
   
   const formData = new FormData()
@@ -986,6 +1024,106 @@ const deletePoint = (index) => {
   if (confirm(`${t('edge.confirmDeletePoint')} "${point.name}" 吗？`)) {
     currentSlave.value.points.splice(index, 1)
   }
+}
+
+// JSON文件选择处理
+const triggerReportFileSelect = () => {
+  reportJsonInput.value?.click()
+}
+
+const handleReportFileSelect = (event) => {
+  const files = event.target.files
+  if (files && files.length > 0) {
+    reportJsonFile.value = files[0]
+    reportJsonFileName.value = files[0].name
+  }
+}
+
+// 导出JSON
+const exportReportJson = () => {
+  try {
+    const data = {
+      group: reportGroups.value.map(g => ({
+        name: g.name,
+        channel: g.channel,
+        topic: g.topic,
+        qos: g.qos,
+        retain: g.retain ? 1 : 0,
+        periodic: g.periodic ? 1 : 0,
+        periodicInterval: g.periodicInterval,
+        scheduled: g.scheduled ? 1 : 0,
+        scheduledType: g.scheduledType,
+        format: g.format,
+        errorFill: g.errorFill ? 1 : 0,
+        errorMsg: g.errorMsg,
+        template: g.template
+      }))
+    }
+    
+    const jsonStr = JSON.stringify(data, null, 2)
+    const blob = new Blob([jsonStr], { type: 'application/json' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'edge_report.json'
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('导出失败:', err)
+    alert(t('edge.exportFailed') + ': ' + err.message)
+  }
+}
+
+// 导入JSON
+const importReportJson = () => {
+  if (!reportJsonFile.value) return
+  
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const jsonStr = e.target.result
+      const data = JSON.parse(jsonStr)
+      
+      if (data && Array.isArray(data.group)) {
+        reportGroups.value = data.group.map((g, i) => ({
+          id: `group_${Date.now()}_${i}`,
+          name: g.name || `Report${i+1}`,
+          channel: g.channel || 'MQTT1',
+          topic: g.topic || '',
+          qos: g.qos || 'QOS0',
+          retain: g.retain === 1,
+          periodic: g.periodic === 1,
+          periodicInterval: g.periodicInterval || 5,
+          scheduled: g.scheduled === 1,
+          scheduledType: g.scheduledType || 0,
+          format: g.format || 'Original',
+          errorFill: g.errorFill === 1,
+          errorMsg: g.errorMsg || '',
+          template: g.template || ''
+        }))
+        
+        parseSuccess.value = true
+        parseErrorMsg.value = ''
+      } else {
+        throw new Error('Invalid JSON format: missing "group" array')
+      }
+    } catch (err) {
+      console.error('解析失败:', err)
+      parseSuccess.value = false
+      parseErrorMsg.value = err.message
+    } finally {
+      showParseResultModal.value = true
+      // Reset file input
+      reportJsonFile.value = null
+      reportJsonFileName.value = ''
+      if (reportJsonInput.value) reportJsonInput.value.value = ''
+    }
+  }
+  reader.readAsText(reportJsonFile.value)
+}
+
+const closeParseResultModal = () => {
+  showParseResultModal.value = false
 }
 
 // 下一页

@@ -310,12 +310,44 @@ local function handle_upload(uri)
             save_tpc_config(clean_json)
             notify_core_process("link_sync")
         elseif string.find(clean_json, "group") then
-            save_group_config(clean_json)
+            -- save_group_config(clean_json)
+            -- Split group config and save to /etc/config/device/edge_report/
+            --先删除所有的edge_report文件
+            os.execute("rm -f /etc/config/device/edge_report/*.json")       
+            os.execute("rm -f /etc/config/device/template/*.json")
+            
+            local data = cjson.decode(clean_json)
+            if data and data.group then
+                os.execute("mkdir -p /etc/config/device/edge_report")
+                -- Optional: Clear existing files? For now, we just overwrite/add.
+                -- os.execute("rm -f /etc/config/device/edge_report/*.json") 
+                
+                for _, g in ipairs(data.group) do
+                    if g.name then
+                        local f = io.open("/etc/config/device/edge_report/" .. g.name .. ".json", "w+")
+                        if f then
+                            f:write(cjson.encode(g))
+                            f:close()
+                        end
+                    end
+                end
+            end
             notify_core_process("report_strategy")
         end
     elseif string.find(uri, "/upload/template") then
         -- 3.4 上报模板
-        save_file_to_system("/etc/config/device/report_template.json", content)
+        -- save_file_to_system("/etc/config/device/report_template.json", content)
+        
+        os.execute("mkdir -p /etc/config/device/template")
+        -- Content format: Report0:{...}\nReport1:{...}
+        for key, val in string.gmatch(content, "([^:]+):(%b{})") do
+            local f = io.open("/etc/config/device/template/" .. key .. ".json", "w+")
+            if f then
+                f:write(val)
+                f:close()
+            end
+        end
+        
         notify_core_process("report_template")
         
     elseif string.find(uri, "/upload/conver_csv") then

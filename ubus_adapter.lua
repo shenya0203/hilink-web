@@ -344,29 +344,31 @@ local edge_report_config = {
 function _M.get_edge_report_config()
     local config = { group = {} }
     
-    -- Read group.json
-    local group_content = read_file("/etc/config/device/group.json")
-    if group_content then
-        local ok, data = pcall(cjson.decode, group_content)
-        if ok and data and data.group then
-            config.group = data.group
-        end
-    end
-    
-    -- Read report_template.json
-    local template_content = read_file("/etc/config/device/report_template.json")
-    if template_content then
-        -- Parse ReportN:{...}
-        for i, group in ipairs(config.group) do
-            -- Look for Report(i-1):{...}
-            -- Pattern: Report(Index):(%b{})
-            -- Note: %b{} matches balanced braces
-            local pattern = "Report" .. (i-1) .. ":(%b{})"
-            local template = string.match(template_content, pattern)
-            if template then
-                group.template = template
+    -- Read groups from /etc/config/device/edge_report/
+    local p = io.popen("ls /etc/config/device/edge_report/*.json 2>/dev/null")
+    if p then
+        for file_path in p:lines() do
+            local content = read_file(file_path)
+            if content then
+                local ok, g = pcall(cjson.decode, content)
+                if ok then
+                    -- Resolve template
+                    if g.tmpl_file then
+                        -- Extract filename from path: /template/Report0.json -> Report0
+                        local tmpl_name = string.match(g.tmpl_file, "/([^/]+)%.json$")
+                        if tmpl_name then
+                            local tmpl_path = "/etc/config/device/template/" .. tmpl_name .. ".json"
+                            local tmpl_content = read_file(tmpl_path)
+                            if tmpl_content then
+                                g.template = tmpl_content
+                            end
+                        end
+                    end
+                    table.insert(config.group, g)
+                end
             end
         end
+        p:close()
     end
     
     return config

@@ -353,6 +353,13 @@ export default {
         pleaseSelectFileFirst: '请先选择文件',
         importSuccess: '导入成功',
         importFailed: '导入失败',
+        // 新增选项
+        reportGroupImport: '上报分组导入',
+        pleaseSelectJsonFile: '请选择文件(.json)',
+        parseSuccess: '解析成功!',
+        parseFailed: '解析失败',
+        errorReason: '错误原因',
+
         exportFailed: '导出失败',
         pleaseInputSlaveName: '请输入从机名称',
         confirmDeleteSlave: '确定要删除从机',
