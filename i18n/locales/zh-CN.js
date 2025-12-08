@@ -265,6 +265,7 @@ export default {
         // 从机表格
         slaveNumber: '序号',
         slaveName: '名称',
+        slaveNameFull: '从机名称',
         slaveSource: '点位来源',
         slaveAddress: '从机地址',
         operation: '操作',

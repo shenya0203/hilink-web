@@ -618,8 +618,14 @@
         <div class="modal-form">
           <div class="form-group">
              <label>{{ t('edge.mappingStartAddress') }}:</label>
-             <div class="input-with-unit">
-                <input v-model.number="mappingForm.startAddress" type="number" placeholder="1" />
+             <div class="input-with-unit" style="display: flex; gap: 10px;">
+                <select v-model="mappingForm.startAddressType" style="width: 80px;">
+                  <option value="0X">0X</option>
+                  <option value="1X">1X</option>
+                  <option value="3X">3X</option>
+                  <option value="4X">4X</option>
+                </select>
+                <input v-model.number="mappingForm.startAddressValue" type="number" placeholder="1" style="width: 100px;" />
              </div>
              <label style="width: auto; margin-left: 20px;">{{ t('edge.pointSelection') }}:</label>
              <button class="btn-outline" @click="openPointSelectionModal">{{ t('edge.addPoint') }}</button>
@@ -632,7 +638,7 @@
                  <tr>
                    <th>{{ t('edge.seq') }}</th>
                    <th>{{ t('edge.pointName') }}</th>
-                   <th>{{ t('edge.slaveName') }}</th>
+                   <th>{{ t('edge.slaveNameFull') }}</th>
                    <th>{{ t('edge.mappingAddress') }}</th>
                    <th>{{ t('edge.dataType') }}</th>
                    <th>{{ t('edge.rwStatus') }}</th>
@@ -643,7 +649,7 @@
                    <td>{{ index + 1 }}</td>
                    <td>{{ p.name }}</td>
                    <td>{{ p.slaveName }}</td>
-                   <td>-</td> <!-- Calculated on save -->
+                   <td>{{ getCalculatedAddress(index) }}</td>
                    <td>{{ p.dataType }}</td>
                    <td>读写</td>
                  </tr>
@@ -678,7 +684,9 @@
              <table>
                <thead>
                  <tr>
-                   <th style="width: 50px;"></th>
+                   <th style="width: 50px;">
+                     <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" />
+                   </th>
                    <th>{{ t('edge.pointName') }}</th>
                    <th>{{ t('edge.dataType') }}</th>
                    <th>{{ t('edge.rwStatus') }}</th>
@@ -760,7 +768,8 @@ const mappingPoints = ref([])
 const showMappingModal = ref(false)
 const showPointSelectionModal = ref(false)
 const mappingForm = ref({
-  startAddress: 1,
+  startAddressType: '4X',
+  startAddressValue: 1,
   points: []
 })
 const selectedMappingSlaveId = ref('')
@@ -1757,7 +1766,8 @@ const generateConversionCsv = () => {
 // 协议转换 - 映射点位管理
 const showAddMappingModal = () => {
   mappingForm.value = {
-    startAddress: 1,
+    startAddressType: '4X',
+    startAddressValue: 1,
     points: [] // Will store selected points temporarily
   }
   tempSelectedPoints.value = []
@@ -1783,13 +1793,18 @@ const closePointSelectionModal = () => {
   showPointSelectionModal.value = false
 }
 
+const availableMappingSlaves = computed(() => {
+  return slaveList.value.filter(s => !s.isSystem)
+})
+
 // Filtered points for selection modal
 const filteredSelectionPoints = computed(() => {
   if (!selectedMappingSlaveId.value) return []
   const slave = slaveList.value.find(s => s.id === selectedMappingSlaveId.value)
   if (!slave) return []
   
-  let points = slave.points.filter(p => !p.isDefault) // Exclude default points like State? User image shows "virl_1", "Unsigned".
+  // Exclude default points except 'State'
+  let points = slave.points.filter(p => !p.isDefault || p.registerDisplay === 'State')
   
   if (mappingSearchQuery.value) {
     const q = mappingSearchQuery.value.toLowerCase()
@@ -1809,6 +1824,28 @@ const togglePointSelection = (point) => {
 
 const isPointSelected = (point) => {
   return tempSelectedPoints.value.some(p => p.id === point.id)
+}
+
+const isAllSelected = computed(() => {
+  if (filteredSelectionPoints.value.length === 0) return false
+  return filteredSelectionPoints.value.every(p => isPointSelected(p))
+})
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    // Deselect all visible
+    filteredSelectionPoints.value.forEach(p => {
+      const idx = tempSelectedPoints.value.findIndex(tp => tp.id === p.id)
+      if (idx >= 0) tempSelectedPoints.value.splice(idx, 1)
+    })
+  } else {
+    // Select all visible
+    filteredSelectionPoints.value.forEach(p => {
+      if (!isPointSelected(p)) {
+        tempSelectedPoints.value.push(p)
+      }
+    })
+  }
 }
 
 const confirmPointSelection = () => {
@@ -1833,27 +1870,45 @@ const confirmPointSelection = () => {
 
 const saveMapping = () => {
   // Calculate mapping addresses and add to main list
-  let currentAddr = parseInt(mappingForm.value.startAddress) || 1
+  let currentAddr = parseInt(mappingForm.value.startAddressValue) || 1
+  const typePrefix = mappingForm.value.startAddressType.substring(0, 1) // '4' from '4X'
   
   mappingForm.value.points.forEach(p => {
     // Determine size
     let size = 1
     if (p.dataType.includes('32 Bit') || p.dataType === 'Float') size = 2
     
+    // Construct full address
+    const fullAddr = typePrefix + String(currentAddr).padStart(5, '0')
+    
     mappingPoints.value.push({
       id: `map_${Date.now()}_${Math.random()}`,
       pointName: p.name,
       slaveName: p.slaveName,
       dataType: p.dataType,
-      mappingAddress: currentAddr,
-      rwStatus: '读写', // Default or derived
-      source: p.slaveSource
+      mappingAddress: fullAddr,
+      rwStatus: p.registerDisplay === 'State' ? '只读' : '读写',
+      source: p.slaveName
     })
     
     currentAddr += size
   })
   
   closeMappingModal()
+}
+
+const getCalculatedAddress = (index) => {
+  let currentAddr = parseInt(mappingForm.value.startAddressValue) || 1
+  const typePrefix = mappingForm.value.startAddressType.substring(0, 1)
+
+  for (let i = 0; i < index; i++) {
+    const p = mappingForm.value.points[i]
+    let size = 1
+    if (p.dataType.includes('32 Bit') || p.dataType === 'Float') size = 2
+    currentAddr += size
+  }
+  
+  return typePrefix + String(currentAddr).padStart(5, '0')
 }
 
 // 加载数据

@@ -260,6 +260,7 @@ export default {
         // Slave Table
         slaveNumber: 'No.',
         slaveName: 'Name',
+        slaveNameFull: 'Slave Name',
         slaveSource: 'Point Source',
         slaveAddress: 'Slave Address',
         operation: 'Operation',
