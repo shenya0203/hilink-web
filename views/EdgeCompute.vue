@@ -307,7 +307,10 @@
           </div>
           <div class="form-group" style="align-items: flex-start;">
             <label style="margin-top: 5px;">{{ t('edge.reportTemplate') }}:</label>
-            <textarea v-model="reportGroupForm.template" rows="10" style="flex: 1; padding: 5px; border: 1px solid #ddd; border-radius: 2px; font-family: monospace;"></textarea>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <textarea v-model="reportGroupForm.template" rows="10" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 2px; font-family: monospace;"></textarea>
+              <span v-if="isJsonError" style="color: red; font-size: 12px; margin-top: 5px;">Json格式错误</span>
+            </div>
           </div>
         </div>
         <div class="modal-buttons">
@@ -551,6 +554,8 @@ const reportGroupForm = ref({
   template: ''
 })
 
+const isJsonError = ref(false)
+
 // Time selection parts
 const timeParts = ref({ h: '00', m: '00', s: '00' })
 
@@ -564,6 +569,20 @@ watch(() => reportGroupForm.value.scheduledTime, (newVal) => {
     timeParts.value.s = parts[2] || '00'
   }
 }, { immediate: true })
+
+// Watch for changes in template to validate JSON
+watch(() => reportGroupForm.value.template, (newVal) => {
+  if (!newVal) {
+    isJsonError.value = false
+    return
+  }
+  try {
+    JSON.parse(newVal)
+    isJsonError.value = false
+  } catch (e) {
+    isJsonError.value = true
+  }
+})
 
 const validateTimeInput = (type) => {
   let val = timeParts.value[type]
@@ -804,6 +823,7 @@ const showAddReportGroupModal = () => {
     template: '{\n  "device01": {\n    "node0101": "node0101",\n    "node0102": "node0102"\n  },\n  "time": "sys_local_time"\n}'
   }
   showReportGroupModal.value = true
+  isJsonError.value = false
 }
 
 const editReportGroup = (index) => {
@@ -811,6 +831,15 @@ const editReportGroup = (index) => {
   editingReportGroupIndex.value = index
   reportGroupForm.value = { ...reportGroups.value[index] }
   showReportGroupModal.value = true
+  // Validate initial value
+  try {
+    if (reportGroupForm.value.template) {
+      JSON.parse(reportGroupForm.value.template)
+      isJsonError.value = false
+    }
+  } catch (e) {
+    isJsonError.value = true
+  }
 }
 
 const deleteReportGroup = (index) => {
