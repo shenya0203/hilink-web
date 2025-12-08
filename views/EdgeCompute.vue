@@ -256,11 +256,39 @@
           <div class="form-group" v-if="reportGroupForm.scheduled">
             <label>{{ t('edge.reportTime') }}:</label>
             <select v-model.number="reportGroupForm.scheduledType">
-              <option :value="0">{{ t('edge.wholeHour') }}</option>
-              <option :value="1">{{ t('edge.wholeQuarter') }}</option>
-              <option :value="2">{{ t('edge.wholeMinute') }}</option>
-              <option :value="3">{{ t('edge.fixedTime') }}</option>
+              <option :value="1">{{ t('edge.wholeHour') }}</option>
+              <option :value="2">{{ t('edge.wholeQuarter') }}</option>
+              <option :value="3">{{ t('edge.wholeMinute') }}</option>
+              <option :value="4">{{ t('edge.fixedTime') }}</option>
             </select>
+          </div>
+          <div class="form-group" v-if="reportGroupForm.scheduled && reportGroupForm.scheduledType === 4">
+            <label>{{ t('edge.timeSelection') }}:</label>
+            <div class="time-input-container">
+              <input 
+                v-model="timeParts.h" 
+                type="text" 
+                class="time-input"
+                @input="validateTimeInput('h')"
+                @blur="formatTimeBlur('h')"
+              />
+              <span class="time-separator">:</span>
+              <input 
+                v-model="timeParts.m" 
+                type="text" 
+                class="time-input"
+                @input="validateTimeInput('m')"
+                @blur="formatTimeBlur('m')"
+              />
+              <span class="time-separator">:</span>
+              <input 
+                v-model="timeParts.s" 
+                type="text" 
+                class="time-input"
+                @input="validateTimeInput('s')"
+                @blur="formatTimeBlur('s')"
+              />
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('edge.reportDataFormat') }}:</label>
@@ -515,12 +543,60 @@ const reportGroupForm = ref({
   periodic: true,
   periodicInterval: 5,
   scheduled: false,
-  scheduledType: 0,
+  scheduledType: 1,
+  scheduledTime: '00:00:00',
   format: 'Original',
   errorFill: false,
   errorMsg: '',
   template: ''
 })
+
+// Time selection parts
+const timeParts = ref({ h: '00', m: '00', s: '00' })
+
+// Watch for changes in scheduledTime to update parts
+watch(() => reportGroupForm.value.scheduledTime, (newVal) => {
+  if (!newVal) return
+  const parts = newVal.split(':')
+  if (parts.length >= 2) {
+    timeParts.value.h = parts[0] || '00'
+    timeParts.value.m = parts[1] || '00'
+    timeParts.value.s = parts[2] || '00'
+  }
+}, { immediate: true })
+
+const validateTimeInput = (type) => {
+  let val = timeParts.value[type]
+  // Remove non-digits
+  val = val.replace(/\D/g, '')
+  
+  // Limit length to 2
+  if (val.length > 2) val = val.slice(0, 2)
+  
+  const intVal = parseInt(val || '0')
+  
+  if (type === 'h') {
+    if (intVal > 23) val = '23'
+  } else {
+    // m or s
+    if (intVal > 59) val = '59'
+  }
+  
+  timeParts.value[type] = val
+  updateScheduledTime()
+}
+
+const formatTimeBlur = (type) => {
+  let val = timeParts.value[type]
+  if (!val) val = '00'
+  val = val.padStart(2, '0')
+  timeParts.value[type] = val
+  updateScheduledTime()
+}
+
+const updateScheduledTime = () => {
+  reportGroupForm.value.scheduledTime = `${timeParts.value.h}:${timeParts.value.m}:${timeParts.value.s}`
+}
 
 // JSON导入导出
 const reportJsonInput = ref(null)
@@ -720,7 +796,8 @@ const showAddReportGroupModal = () => {
     periodic: true,
     periodicInterval: 5,
     scheduled: false,
-    scheduledType: 0,
+    scheduledType: 1,
+    scheduledTime: '00:00:00',
     format: 'Original',
     errorFill: false,
     errorMsg: '',
@@ -767,21 +844,32 @@ const saveReportGroup = () => {
 const saveReportData = async () => {
   // 1. Save Group Config (group.json)
   const groupConfig = {
-    group: reportGroups.value.map(g => ({
-      name: g.name,
-      channel: g.channel,
-      topic: g.topic,
-      qos: g.qos,
-      retain: g.retain ? 1 : 0,
-      periodic: g.periodic ? 1 : 0,
-      periodicInterval: g.periodicInterval,
-      scheduled: g.scheduled ? 1 : 0,
-      scheduledType: g.scheduledType,
-      format: g.format,
-      errorFill: g.errorFill ? 1 : 0,
-      errorMsg: g.errorMsg,
-      tmpl_file: `/template/${g.name}.json`
-    }))
+    group: reportGroups.value.map(g => {
+      const isCloud = g.channel === 'Cloud'
+      return {
+        name: g.name,
+        link: g.channel,
+        topic: g.topic,
+        qos: g.qos === 'QOS0' ? 0 : (g.qos === 'QOS1' ? 1 : 2),
+        retention: g.retain ? 1 : 0,
+        cond: {
+          period: g.periodic ? g.periodicInterval : 0,
+          timed: {
+            type: g.scheduled ? g.scheduledType : 0,
+            hh: g.scheduled && g.scheduledType === 4 ? parseInt(g.scheduledTime.split(':')[0]) || 0 : 0,
+            mm: g.scheduled && g.scheduledType === 4 ? parseInt(g.scheduledTime.split(':')[1]) || 0 : 0
+          }
+        },
+        data_report_type: g.format === 'Original' ? 0 : 1,
+        change_report_type: 0,
+        err_enable: g.errorFill ? 1 : 0,
+        err_info: g.errorMsg,
+        tmpl_file: isCloud ? "" : `/template/${g.name}.json`,
+        fkey_md5: "00000000000000000000000000000000",
+        ucld_node: []
+        // tmpl_cont excluded for save
+      }
+    })
   }
   
   await apiClient.post('/upload/nv1', JSON.stringify(groupConfig), {
@@ -1043,21 +1131,32 @@ const handleReportFileSelect = (event) => {
 const exportReportJson = () => {
   try {
     const data = {
-      group: reportGroups.value.map(g => ({
-        name: g.name,
-        channel: g.channel,
-        topic: g.topic,
-        qos: g.qos,
-        retain: g.retain ? 1 : 0,
-        periodic: g.periodic ? 1 : 0,
-        periodicInterval: g.periodicInterval,
-        scheduled: g.scheduled ? 1 : 0,
-        scheduledType: g.scheduledType,
-        format: g.format,
-        errorFill: g.errorFill ? 1 : 0,
-        errorMsg: g.errorMsg,
-        template: g.template
-      }))
+      group: reportGroups.value.map(g => {
+        const isCloud = g.channel === 'Cloud'
+        return {
+          name: g.name,
+          link: g.channel,
+          topic: g.topic,
+          qos: g.qos === 'QOS0' ? 0 : (g.qos === 'QOS1' ? 1 : 2),
+          retention: g.retain ? 1 : 0,
+          cond: {
+            period: g.periodic ? g.periodicInterval : 0,
+            timed: {
+              type: g.scheduled ? g.scheduledType : 0,
+              hh: 0,
+              mm: 0
+            }
+          },
+          data_report_type: g.format === 'Original' ? 0 : 1,
+          change_report_type: 0,
+          err_enable: g.errorFill ? 1 : 0,
+          err_info: g.errorMsg,
+          tmpl_file: "",
+          fkey_md5: "00000000000000000000000000000000",
+          ucld_node: [],
+          tmpl_cont: g.template ? JSON.parse(g.template) : {}
+        }
+      })
     }
     
     const jsonStr = JSON.stringify(data, null, 2)
@@ -1085,22 +1184,35 @@ const importReportJson = () => {
       const data = JSON.parse(jsonStr)
       
       if (data && Array.isArray(data.group)) {
-        reportGroups.value = data.group.map((g, i) => ({
-          id: `group_${Date.now()}_${i}`,
-          name: g.name || `Report${i+1}`,
-          channel: g.channel || 'MQTT1',
-          topic: g.topic || '',
-          qos: g.qos || 'QOS0',
-          retain: g.retain === 1,
-          periodic: g.periodic === 1,
-          periodicInterval: g.periodicInterval || 5,
-          scheduled: g.scheduled === 1,
-          scheduledType: g.scheduledType || 0,
-          format: g.format || 'Original',
-          errorFill: g.errorFill === 1,
-          errorMsg: g.errorMsg || '',
-          template: g.template || ''
-        }))
+        reportGroups.value = data.group.map((g, i) => {
+          // Map new fields back to frontend fields
+          const qosVal = g.qos === 1 ? 'QOS1' : (g.qos === 2 ? 'QOS2' : 'QOS0')
+          const periodic = g.cond && g.cond.period > 0
+          const periodicInterval = g.cond ? g.cond.period : 5
+          const scheduled = g.cond && g.cond.timed && g.cond.timed.type > 0
+          const scheduledType = (g.cond && g.cond.timed && g.cond.timed.type > 0) ? g.cond.timed.type : 1
+          const hh = g.cond && g.cond.timed ? g.cond.timed.hh || 0 : 0
+          const mm = g.cond && g.cond.timed ? g.cond.timed.mm || 0 : 0
+          const scheduledTime = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`
+          
+          return {
+            id: `group_${Date.now()}_${i}`,
+            name: g.name || `Report${i+1}`,
+            channel: g.link || g.channel || 'MQTT1',
+            topic: g.topic || '',
+            qos: qosVal,
+            retain: g.retention === 1 || g.retain === 1,
+            periodic: periodic,
+            periodicInterval: periodicInterval,
+            scheduled: scheduled,
+            scheduledType: scheduledType,
+            scheduledTime: scheduledTime,
+            format: (g.data_report_type === 0 || g.format === 'Original') ? 'Original' : 'JSON',
+            errorFill: g.err_enable === 1 || g.errorFill === 1,
+            errorMsg: g.err_info || g.errorMsg || '',
+            template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : (g.template || '')
+          }
+        })
         
         parseSuccess.value = true
         parseErrorMsg.value = ''
@@ -1360,22 +1472,35 @@ const loadData = async () => {
     
     // Initialize reportGroups from loaded data
     if (edgeReport.value.group && Array.isArray(edgeReport.value.group)) {
-      reportGroups.value = edgeReport.value.group.map((g, i) => ({
-        id: `group_${i}`,
-        name: g.name || `Report${i+1}`,
-        channel: g.channel || 'MQTT1',
-        topic: g.topic || '',
-        qos: g.qos || 'QOS0',
-        retain: g.retain === 1,
-        periodic: g.periodic === 1,
-        periodicInterval: g.periodicInterval || 5,
-        scheduled: g.scheduled === 1,
-        scheduledType: g.scheduledType || 0,
-        format: g.format || 'Original',
-        errorFill: g.errorFill === 1,
-        errorMsg: g.errorMsg || '',
-        template: g.template || ''
-      }))
+      reportGroups.value = edgeReport.value.group.map((g, i) => {
+        // Map backend fields to frontend fields
+        const qosVal = g.qos === 1 ? 'QOS1' : (g.qos === 2 ? 'QOS2' : 'QOS0')
+        const periodic = g.cond && g.cond.period > 0
+        const periodicInterval = g.cond ? g.cond.period : 5
+        const scheduled = g.cond && g.cond.timed && g.cond.timed.type > 0
+        const scheduledType = (g.cond && g.cond.timed && g.cond.timed.type > 0) ? g.cond.timed.type : 1
+        const hh = g.cond && g.cond.timed ? g.cond.timed.hh || 0 : 0
+        const mm = g.cond && g.cond.timed ? g.cond.timed.mm || 0 : 0
+        const scheduledTime = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`
+        
+        return {
+          id: `group_${i}`,
+          name: g.name || `Report${i+1}`,
+          channel: g.link || g.channel || 'MQTT1',
+          topic: g.topic || '',
+          qos: qosVal,
+          retain: g.retention === 1 || g.retain === 1,
+          periodic: periodic,
+          periodicInterval: periodicInterval,
+          scheduled: scheduled,
+          scheduledType: scheduledType,
+          scheduledTime: scheduledTime,
+          format: (g.data_report_type === 0 || g.format === 'Original') ? 'Original' : 'JSON',
+          errorFill: g.err_enable === 1 || g.errorFill === 1,
+          errorMsg: g.err_info || g.errorMsg || '',
+          template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : (g.template || '')
+        }
+      })
     } else {
       reportGroups.value = []
     }
@@ -1558,8 +1683,25 @@ onMounted(() => {
 
 .tip-warning {
   color: #ff8800;
-  font-size: 12px;
 }
+
+.time-input-container {
+  display: flex;
+  align-items: center;
+}
+
+.time-input {
+  width: 40px !important;
+  text-align: center;
+  padding: 6px 4px;
+  flex: none !important;
+}
+
+.time-separator {
+  margin: 0 5px;
+  font-weight: bold;
+}
+
 
 .tip-info {
   color: #0066cc;

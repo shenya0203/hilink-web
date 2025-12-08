@@ -346,6 +346,7 @@ export default {
         wholeQuarter: '整刻钟上报',
         wholeMinute: '整分钟上报',
         fixedTime: '固定时间上报',
+        timeSelection: '时间选择',
 
         inDevelopment: '功能开发中...',
 

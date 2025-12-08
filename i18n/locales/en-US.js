@@ -315,6 +315,34 @@ export default {
         // Placeholder
         dataReportConfig: 'Data Report Configuration',
         protocolConvertConfig: 'Protocol Conversion Configuration',
+
+        // Data Report
+        groupNumber: 'Group No.',
+        channelSelection: 'Channel Selection',
+        periodicReport: 'Periodic Report',
+        scheduledReport: 'Scheduled Report',
+        changeReport: 'Change Report',
+        wholeGroupReport: 'Whole Group Report',
+        addGroup: 'Add Group',
+        editGroup: 'Edit Group',
+        reportTopic: 'Report Topic',
+        messageRetain: 'Message Retain',
+        reportPeriod: 'Report Period',
+        reportDataFormat: 'Report Data Format',
+        originalType: 'Original Type',
+        errorFill: 'Error Fill',
+        errorMessage: 'Error Message',
+        reportTemplate: 'Report Template',
+        reconfigure: 'Reconfigure',
+        continueConfig: 'Continue Configuration',
+
+        // New Options
+        reportTime: 'Report Time',
+        wholeHour: 'Whole Hour Report',
+        wholeQuarter: 'Whole Quarter Report',
+        wholeMinute: 'Whole Minute Report',
+        fixedTime: 'Fixed Time Report',
+        timeSelection: 'Time Selection',
         inDevelopment: 'Under Development...',
 
         // Messages
