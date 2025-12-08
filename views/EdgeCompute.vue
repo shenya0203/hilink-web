@@ -197,6 +197,16 @@
 
     <!-- Tab 4: 协议转换 -->
     <div v-if="activeTab === 3" class="tab-content">
+      <!-- 协议转换点表导入区域 -->
+      <div class="import-section">
+        <span class="label">{{ t('edge.pointImport') }}</span>
+        <button class="btn-outline" @click="triggerProtocolFileSelect">{{ t('edge.selectFile') }}</button>
+        <button class="btn-outline" @click="importProtocolCsv" :disabled="!protocolCsvFile">{{ t('edge.import') }}</button>
+        <button class="btn-outline" @click="exportProtocolCsv">{{ t('edge.export') }}</button>
+        <span class="file-hint">{{ protocolCsvFile ? protocolCsvFile.name : t('edge.pleaseSelectFile') }}</span>
+        <input type="file" ref="protocolCsvFileInput" @change="handleProtocolCsvSelect" accept=".csv" style="display:none" />
+      </div>
+
       <div class="form-section">
         <div class="form-group">
           <label>{{ t('edge.enable') }}:</label>
@@ -310,6 +320,7 @@
                 <td>{{ point.mappingAddress }}</td>
                 <td>{{ point.rwStatus }}</td>
                 <td class="action-cell">
+                  <button class="btn-small" @click="editMapping(index)">{{ t('edge.edit') }}</button>
                   <button class="btn-small btn-danger" @click="deleteMapping(index)">{{ t('edge.delete') }}</button>
                 </td>
               </tr>
@@ -466,6 +477,40 @@
         
         <div class="modal-buttons" style="justify-content: center;">
           <button class="btn-save" @click="closeParseResultModal">{{ t('common.confirm') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑映射点位对话框 -->
+    <div v-if="showEditMappingModal" class="modal-overlay" @click.self="closeEditMappingModal">
+      <div class="modal" style="max-width: 400px;">
+        <h3>{{ t('edge.edit') }}</h3>
+        <div class="modal-form">
+           <div class="form-group">
+             <label style="width: 80px;">{{ t('edge.pointName') }}</label>
+             <span>{{ editingMappingPoint.pointName }}</span>
+           </div>
+           <div class="form-group">
+             <label style="width: 80px;">{{ t('edge.register') }}</label>
+             <div style="display: flex; gap: 5px; align-items: center;">
+               <select v-model="editingMappingPoint.regType" style="width: 60px; text-align: center;">
+                 <option value="0">0</option>
+                 <option value="1">1</option>
+                 <option value="3">3</option>
+                 <option value="4">4</option>
+               </select>
+               <span>、</span>
+               <input v-model.number="editingMappingPoint.regAddr" type="number" style="width: 100px;" />
+             </div>
+           </div>
+           <div class="form-group">
+              <label style="width: 80px;"></label>
+              <span style="color: red;">{{ computedEditingAddress }}</span>
+           </div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-save" @click="saveEditedMapping">{{ t('edge.save') }}</button>
+          <button class="btn-cancel" @click="closeEditMappingModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -776,6 +821,18 @@ const selectedMappingSlaveId = ref('')
 const mappingSearchQuery = ref('')
 const tempSelectedPoints = ref([]) // Points selected in the selection modal
 
+const showEditMappingModal = ref(false)
+const editingMappingPoint = ref({
+  index: -1,
+  pointName: '',
+  regType: '0',
+  regAddr: 1
+})
+
+const computedEditingAddress = computed(() => {
+   return editingMappingPoint.value.regType + String(editingMappingPoint.value.regAddr).padStart(5, '0')
+})
+
 // 数据上报相关数据
 const reportGroups = ref([])
 const showReportGroupModal = ref(false)
@@ -875,6 +932,10 @@ const ipAddress = ref(window.location.hostname)
 // CSV文件选择
 const csvFileInput = ref(null)
 const selectedCsvFile = ref(null)
+
+// 协议转换CSV文件选择
+const protocolCsvFileInput = ref(null)
+const protocolCsvFile = ref(null)
 
 // 系统默认数据点
 const systemPoints = computed(() => [
@@ -1746,16 +1807,191 @@ const parseCsvContent = (content) => {
   return newSlaves
 }
 
-// 生成协议转换CSV内容
+// 协议转换CSV文件选择处理
+const triggerProtocolFileSelect = () => {
+  protocolCsvFileInput.value?.click()
+}
+
+const handleProtocolCsvSelect = (event) => {
+  const files = event.target.files
+  if (files && files.length > 0) {
+    protocolCsvFile.value = files[0]
+  }
+}
+
+// 导出协议转换CSV
+const exportProtocolCsv = () => {
+  try {
+    const cfg = protocolConversionConfig.value
+    // V Line
+    let csv = 'V,V1.0,N7X0\n'
+    
+    // S Line
+    // Map Byte Orders
+    const intMap = { 'ABCD': 6, 'CDAB': 7, 'BADC': 8, 'DCBA': 9 }
+    const floatMap = { 'ABCD': 10, 'CDAB': 11, 'BADC': 12, 'DCBA': 13 }
+    const intCode = intMap[cfg.intByteOrder] || 6
+    const floatCode = floatMap[cfg.floatByteOrder] || 10
+    const protoName = cfg.protocol === 0 ? 'JSON' : 'ModBusTCP'
+    
+    csv += `S,${cfg.stationAddress},${intCode},${floatCode},${protoName}\n`
+    
+    // J Line
+    // J,0,Enable,group1,Protocol,Channel,PubTopic,PubQos,Retain,Channel,SubTopic,SubQos
+    const pubQosMap = { 'QOS0': 0, 'QOS1': 1, 'QOS2': 2 }
+    const subQosMap = { 'QOS0': 0, 'QOS1': 1, 'QOS2': 2 }
+    const pubQos = pubQosMap[cfg.pubQos] || 0
+    const subQos = subQosMap[cfg.subQos] || 0
+    const retain = cfg.retain ? 1 : 0
+    
+    csv += `J,0,${cfg.enable},group1,${cfg.protocol},${cfg.channel},${cfg.pubTopic},${pubQos},${retain},${cfg.channel},${cfg.subTopic},${subQos}\n`
+    
+    // C Lines
+    mappingPoints.value.forEach(p => {
+      const typeCode = dataTypeMap[p.dataType] || 18
+      csv += `C,${p.pointName},${p.slaveName},${typeCode},${p.mappingAddress}\n`
+    })
+    
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'protocol_conversion.csv'
+    a.click()
+    window.URL.revokeObjectURL(url)
+    
+  } catch (err) {
+    console.error('Export failed:', err)
+    alert(t('edge.exportFailed') + ': ' + err.message)
+  }
+}
+
+// 导入协议转换CSV
+const importProtocolCsv = () => {
+  if (!protocolCsvFile.value) return
+  
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const content = e.target.result
+      const lines = content.split('\n').filter(line => line.trim())
+      
+      // Check V Line
+      if (!lines[0].startsWith('V,V1.0')) {
+        // Optional warning
+        console.warn('Version mismatch or missing V line')
+      }
+      
+      const newMappingPoints = []
+      
+      lines.forEach(line => {
+        const parts = line.split(',').map(p => p.trim())
+        const type = parts[0]
+        
+        if (type === 'S') {
+           // S, StationAddr, IntByteOrder, FloatByteOrder, Protocol
+           if (parts.length >= 5) {
+             protocolConversionConfig.value.stationAddress = parseInt(parts[1]) || 1
+             
+             // Map codes back to ABCD...
+             const intCode = parseInt(parts[2])
+             const floatCode = parseInt(parts[3])
+             const proto = parts[4]
+             
+             const intMapRev = { 6: 'ABCD', 7: 'CDAB', 8: 'BADC', 9: 'DCBA' }
+             const floatMapRev = { 10: 'ABCD', 11: 'CDAB', 12: 'BADC', 13: 'DCBA' }
+             
+             if (intMapRev[intCode]) protocolConversionConfig.value.intByteOrder = intMapRev[intCode]
+             if (floatMapRev[floatCode]) protocolConversionConfig.value.floatByteOrder = floatMapRev[floatCode]
+             
+             protocolConversionConfig.value.protocol = proto === 'JSON' ? 0 : 1
+           }
+        } else if (type === 'J') {
+           // J,0,Enable,group1,Protocol,Channel,PubTopic,PubQos,Retain,Channel,SubTopic,SubQos
+           if (parts.length >= 12) {
+             protocolConversionConfig.value.enable = parseInt(parts[2]) || 0
+             // parts[3] group1
+             // parts[4] protocol
+             protocolConversionConfig.value.channel = parts[5]
+             protocolConversionConfig.value.pubTopic = parts[6]
+             
+             const pubQos = parseInt(parts[7])
+             protocolConversionConfig.value.pubQos = pubQos === 1 ? 'QOS1' : (pubQos === 2 ? 'QOS2' : 'QOS0')
+             
+             protocolConversionConfig.value.retain = parts[8] === '1'
+             
+             // parts[9] channel
+             protocolConversionConfig.value.subTopic = parts[10]
+             
+             const subQos = parseInt(parts[11])
+             protocolConversionConfig.value.subQos = subQos === 1 ? 'QOS1' : (subQos === 2 ? 'QOS2' : 'QOS0')
+           }
+        } else if (type === 'C') {
+           // C,PointName,SlaveName,DataType,MappingAddr
+           if (parts.length >= 5) {
+             const pointName = parts[1]
+             const slaveName = parts[2]
+             const typeCode = parseInt(parts[3])
+             const mapAddr = parts[4].replace(/'/g, '') // Remove quotes if any
+             
+             // Reconstruct point object
+             const slave = slaveList.value.find(s => s.name === slaveName)
+             let point = null
+             if (slave) {
+               point = slave.points.find(p => p.name === pointName)
+             }
+             
+             newMappingPoints.push({
+               id: `map_${Date.now()}_${Math.random()}`,
+               pointName: pointName,
+               slaveName: slaveName,
+               dataType: getDataTypeName(typeCode),
+               mappingAddress: mapAddr,
+               rwStatus: point ? (point.registerDisplay === 'State' ? '只读' : '读写') : '未知',
+               source: slave ? getSlaveSource(slave) : '未知'
+             })
+           }
+        }
+      })
+      
+      mappingPoints.value = newMappingPoints
+      alert(t('edge.importSuccess'))
+      protocolCsvFile.value = null
+      // Reset file input
+      if (protocolCsvFileInput.value) protocolCsvFileInput.value.value = ''
+      
+    } catch (err) {
+      console.error('Import failed:', err)
+      alert(t('edge.importFailed') + ': ' + err.message)
+    }
+  }
+  reader.readAsText(protocolCsvFile.value)
+}
+
+// 生成协议转换CSV内容 (Used for Save)
 const generateConversionCsv = () => {
-  // S,Enable,?,StationAddr,Protocol
-  // C,PointName,SlaveName,DataType,MappingAddr
+  // Use the same logic as exportProtocolCsv but return string
   const cfg = protocolConversionConfig.value
+  let csv = 'V,V1.0,N7X0\n'
+  
+  const intMap = { 'ABCD': 6, 'CDAB': 7, 'BADC': 8, 'DCBA': 9 }
+  const floatMap = { 'ABCD': 10, 'CDAB': 11, 'BADC': 12, 'DCBA': 13 }
+  const intCode = intMap[cfg.intByteOrder] || 6
+  const floatCode = floatMap[cfg.floatByteOrder] || 10
   const protoName = cfg.protocol === 0 ? 'JSON' : 'ModBusTCP'
-  let csv = `S,${cfg.enable},6,${cfg.stationAddress},${protoName}\n`
+  
+  csv += `S,${cfg.stationAddress},${intCode},${floatCode},${protoName}\n`
+  
+  const pubQosMap = { 'QOS0': 0, 'QOS1': 1, 'QOS2': 2 }
+  const subQosMap = { 'QOS0': 0, 'QOS1': 1, 'QOS2': 2 }
+  const pubQos = pubQosMap[cfg.pubQos] || 0
+  const subQos = subQosMap[cfg.subQos] || 0
+  const retain = cfg.retain ? 1 : 0
+  
+  csv += `J,0,${cfg.enable},group1,${cfg.protocol},${cfg.channel},${cfg.pubTopic},${pubQos},${retain},${cfg.channel},${cfg.subTopic},${subQos}\n`
   
   mappingPoints.value.forEach(p => {
-    // Find type code
     const typeCode = dataTypeMap[p.dataType] || 18
     csv += `C,${p.pointName},${p.slaveName},${typeCode},${p.mappingAddress}\n`
   })
@@ -1911,6 +2147,34 @@ const getCalculatedAddress = (index) => {
   return typePrefix + String(currentAddr).padStart(5, '0')
 }
 
+const editMapping = (index) => {
+  const point = mappingPoints.value[index]
+  const addrStr = point.mappingAddress
+  // Assuming format like "400001"
+  const type = addrStr.substring(0, 1)
+  const addr = parseInt(addrStr.substring(1))
+  
+  editingMappingPoint.value = {
+    index: index,
+    pointName: point.pointName,
+    regType: type,
+    regAddr: addr
+  }
+  showEditMappingModal.value = true
+}
+
+const closeEditMappingModal = () => {
+  showEditMappingModal.value = false
+}
+
+const saveEditedMapping = () => {
+  const idx = editingMappingPoint.value.index
+  if (idx >= 0 && idx < mappingPoints.value.length) {
+    mappingPoints.value[idx].mappingAddress = computedEditingAddress.value
+  }
+  closeEditMappingModal()
+}
+
 // 加载数据
 const loadData = async () => {
   try {
@@ -2036,55 +2300,10 @@ const loadData = async () => {
     }
 
     // Parse Protocol Conversion CSV
-    // Format: S,Enable,?,StationAddr,Protocol
+    // Format: V,V1.0,N7X0
+    // S,StationAddr,IntCode,FloatCode,Protocol
+    // J,0,Enable,group1,Protocol,Channel,PubTopic,PubQos,Retain,Channel,SubTopic,SubQos
     // C,PointName,SlaveName,DataType,MappingAddr
-    if (edgeProtoAccessContent) {
-       const lines = edgeProtoAccessContent.split('\n').filter(line => line.trim())
-       mappingPoints.value = []
-       lines.forEach(line => {
-         const parts = line.split(',')
-         if (parts[0] === 'S') {
-            // S,1,6,10,ModBusTCP
-            // parts[1]: Station Address?
-            // parts[2]:
-            // parts[3]: 
-            // parts[4]: Protocol?
-            if (parts.length > 3) {
-               protocolConversionConfig.value.stationAddress = parseInt(parts[1]) || 1
-            }
-         } else if (parts[0] === 'C') {
-            // C,PointName,SlaveName,DataType,MappingAddr
-            // parts[1]: PointName
-            // parts[2]: SlaveName
-            // parts[3]: DataType (Code)
-            // parts[4]: MappingAddr
-            
-            // We need to find the point details (source, rwStatus) from slaveList
-            const pointName = parts[1]
-            const slaveName = parts[2]
-            const typeCode = parseInt(parts[3])
-            const mapAddr = parts[4]
-            
-            // Find slave and point
-            const slave = slaveList.value.find(s => s.name === slaveName)
-            let point = null
-            if (slave) {
-               point = slave.points.find(p => p.name === pointName)
-            }
-            
-            mappingPoints.value.push({
-               id: `map_${Date.now()}_${Math.random()}`,
-               pointName: pointName,
-               slaveName: slaveName,
-               dataType: getDataTypeName(typeCode),
-               mappingAddress: mapAddr,
-               rwStatus: point ? (point.registerDisplay === 'State' ? '只读' : '读写') : '未知', // Simplified
-               source: slave ? getSlaveSource(slave) : '未知'
-            })
-         }
-       })
-    }
-    
     // 解析CSV文件内容
     if (edgeFileContent.value) {
       const parsedSlaves = parseCsvContent(edgeFileContent.value)
@@ -2093,6 +2312,77 @@ const loadData = async () => {
         const systemSlave = slaveList.value[0]
         slaveList.value = [systemSlave, ...parsedSlaves]
       }
+    }
+
+    if (edgeProtoAccessContent) {
+       const lines = edgeProtoAccessContent.split('\n').filter(line => line.trim())
+       mappingPoints.value = []
+       lines.forEach(line => {
+         const parts = line.split(',').map(p => p.trim())
+         const type = parts[0]
+         
+         if (type === 'S') {
+            if (parts.length >= 5) {
+               protocolConversionConfig.value.stationAddress = parseInt(parts[1]) || 1
+               
+               const intCode = parseInt(parts[2])
+               const floatCode = parseInt(parts[3])
+               const proto = parts[4]
+               
+               const intMapRev = { 6: 'ABCD', 7: 'CDAB', 8: 'BADC', 9: 'DCBA' }
+               const floatMapRev = { 10: 'ABCD', 11: 'CDAB', 12: 'BADC', 13: 'DCBA' }
+               
+               if (intMapRev[intCode]) protocolConversionConfig.value.intByteOrder = intMapRev[intCode]
+               if (floatMapRev[floatCode]) protocolConversionConfig.value.floatByteOrder = floatMapRev[floatCode]
+               
+               // Optional: Sync protocol from CSV if needed, but usually NVRAM is master
+               // protocolConversionConfig.value.protocol = proto === 'JSON' ? 0 : 1
+            }
+         } else if (type === 'J') {
+            if (parts.length >= 12) {
+               protocolConversionConfig.value.enable = parseInt(parts[2]) || 0
+               protocolConversionConfig.value.channel = parts[5]
+               protocolConversionConfig.value.pubTopic = parts[6]
+               
+               const pubQos = parseInt(parts[7])
+               protocolConversionConfig.value.pubQos = pubQos === 1 ? 'QOS1' : (pubQos === 2 ? 'QOS2' : 'QOS0')
+               
+               protocolConversionConfig.value.retain = parts[8] === '1'
+               
+               protocolConversionConfig.value.subTopic = parts[10]
+               
+               const subQos = parseInt(parts[11])
+               protocolConversionConfig.value.subQos = subQos === 1 ? 'QOS1' : (subQos === 2 ? 'QOS2' : 'QOS0')
+            }
+         } else if (type === 'C') {
+            // C,PointName,SlaveName,DataType,MappingAddr
+            if (parts.length >= 5) {
+               const pointName = parts[1]
+               const slaveName = parts[2]
+               const typeCode = parseInt(parts[3])
+               const mapAddr = parts[4].replace(/'/g, '')
+               
+               const slave = slaveList.value.find(s => s.name === slaveName)
+               let point = null
+               if (slave) {
+                  point = slave.points.find(p => p.name === pointName)
+               }
+               
+               mappingPoints.value.push({
+                  id: `map_${Date.now()}_${Math.random()}`,
+                  pointName: pointName,
+                  slaveName: slaveName,
+                  dataType: getDataTypeName(typeCode),
+                  mappingAddress: mapAddr,
+                  rwStatus: point ? (point.registerDisplay === 'State' ? '只读' : '读写') : '未知',
+                  dataType: getDataTypeName(typeCode),
+                  mappingAddress: mapAddr,
+                  rwStatus: point ? (point.registerDisplay === 'State' ? '只读' : '读写') : '未知',
+                  source: slaveName
+               })
+            }
+         }
+       })
     }
     
   } catch (err) {
