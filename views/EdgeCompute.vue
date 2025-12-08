@@ -197,11 +197,129 @@
 
     <!-- Tab 4: 协议转换 -->
     <div v-if="activeTab === 3" class="tab-content">
-      <div class="placeholder">
-        <h3>{{ t('edge.protocolConvertConfig') }}</h3>
-        <p>{{ t('edge.inDevelopment') }}</p>
+      <div class="form-section">
+        <div class="form-group">
+          <label>{{ t('edge.enable') }}:</label>
+          <select v-model.number="protocolConversionConfig.enable">
+            <option :value="0">{{ t('edge.close') }}</option>
+            <option :value="1">{{ t('edge.open') }}</option>
+          </select>
+        </div>
+
+        <template v-if="protocolConversionConfig.enable === 1">
+          <div class="form-group">
+            <label>{{ t('edge.protocolType') }}:</label>
+            <select v-model.number="protocolConversionConfig.protocol">
+              <option :value="0">JSON</option>
+              <option :value="1">ModBus TCP</option>
+            </select>
+          </div>
+
+          <template v-if="protocolConversionConfig.protocol === 1">
+             <div class="form-group">
+               <label>{{ t('edge.stationAddress') }}:</label>
+               <input v-model.number="protocolConversionConfig.stationAddress" type="number" />
+             </div>
+             <div class="form-group">
+               <label>{{ t('edge.intByteOrder') }}:</label>
+               <select v-model="protocolConversionConfig.intByteOrder">
+                 <option value="ABCD">ABCD</option>
+                 <option value="CDAB">CDAB</option>
+                 <option value="BADC">BADC</option>
+                 <option value="DCBA">DCBA</option>
+               </select>
+             </div>
+             <div class="form-group">
+               <label>{{ t('edge.floatByteOrder') }}:</label>
+               <select v-model="protocolConversionConfig.floatByteOrder">
+                 <option value="ABCD">ABCD</option>
+                 <option value="CDAB">CDAB</option>
+                 <option value="BADC">BADC</option>
+                 <option value="DCBA">DCBA</option>
+               </select>
+             </div>
+          </template>
+
+          <div class="form-group">
+            <label>{{ t('edge.channelSelection') }}:</label>
+            <select v-model="protocolConversionConfig.channel">
+              <option value="MQTT1">MQTT1</option>
+              <option value="MQTT2">MQTT2</option>
+              <option value="SocketA">SocketA</option>
+              <option value="SocketB">SocketB</option>
+            </select>
+          </div>
+
+          <template v-if="protocolConversionConfig.channel.startsWith('MQTT')">
+            <div class="form-group">
+              <label>{{ t('edge.subTopic') }}:</label>
+              <input v-model="protocolConversionConfig.subTopic" type="text" />
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.subQos') }}:</label>
+              <select v-model="protocolConversionConfig.subQos">
+                <option value="QOS0">QOS0</option>
+                <option value="QOS1">QOS1</option>
+                <option value="QOS2">QOS2</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.pubTopic') }}:</label>
+              <input v-model="protocolConversionConfig.pubTopic" type="text" />
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.pubQos') }}:</label>
+              <select v-model="protocolConversionConfig.pubQos">
+                <option value="QOS0">QOS0</option>
+                <option value="QOS1">QOS1</option>
+                <option value="QOS2">QOS2</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.retainMessage') }}:</label>
+              <input type="checkbox" v-model="protocolConversionConfig.retain" />
+            </div>
+          </template>
+        </template>
       </div>
+
+      <!-- Protocol Conversion Table (Only for Modbus TCP) -->
+      <div v-if="protocolConversionConfig.enable === 1 && protocolConversionConfig.protocol === 1" style="padding: 0 15px; margin-top: 15px;">
+        <div class="table-header-bar" style="background-color: #e67e22; color: white; padding: 10px; font-weight: bold; text-align: center;">
+          {{ t('edge.protocolConversion') }}
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ t('edge.seq') }}</th>
+                <th>{{ t('edge.pointName') }}</th>
+                <th>{{ t('edge.pointSource') }}</th>
+                <th>{{ t('edge.dataType') }}</th>
+                <th>{{ t('edge.mappingAddress') }}</th>
+                <th>{{ t('edge.rwStatus') }}</th>
+                <th>{{ t('edge.operation') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(point, index) in mappingPoints" :key="point.id">
+                <td>{{ index + 1 }}</td>
+                <td>{{ point.pointName }}</td>
+                <td>{{ point.source }}</td>
+                <td>{{ point.dataType }}</td>
+                <td>{{ point.mappingAddress }}</td>
+                <td>{{ point.rwStatus }}</td>
+                <td class="action-cell">
+                  <button class="btn-small btn-danger" @click="deleteMapping(index)">{{ t('edge.delete') }}</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="button-group">
+        <button v-if="protocolConversionConfig.enable === 1 && protocolConversionConfig.protocol === 1" class="btn-action" @click="showAddMappingModal">{{ t('edge.addMappingPoint') }}</button>
         <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
       </div>
     </div>
@@ -492,6 +610,99 @@
         </div>
       </div>
     </div>
+
+    <!-- 添加映射点位对话框 (Add Mapping Modal) -->
+    <div v-if="showMappingModal" class="modal-overlay" @click.self="closeMappingModal">
+      <div class="modal" style="max-width: 800px;">
+        <h3>{{ t('edge.add') }}</h3>
+        <div class="modal-form">
+          <div class="form-group">
+             <label>{{ t('edge.mappingStartAddress') }}:</label>
+             <div class="input-with-unit">
+                <input v-model.number="mappingForm.startAddress" type="number" placeholder="1" />
+             </div>
+             <label style="width: auto; margin-left: 20px;">{{ t('edge.pointSelection') }}:</label>
+             <button class="btn-outline" @click="openPointSelectionModal">{{ t('edge.addPoint') }}</button>
+          </div>
+          
+          <!-- Selected Points Table in Modal -->
+          <div class="table-wrapper" style="max-height: 300px; overflow-y: auto; margin-top: 10px;">
+             <table>
+               <thead>
+                 <tr>
+                   <th>{{ t('edge.seq') }}</th>
+                   <th>{{ t('edge.pointName') }}</th>
+                   <th>{{ t('edge.slaveName') }}</th>
+                   <th>{{ t('edge.mappingAddress') }}</th>
+                   <th>{{ t('edge.dataType') }}</th>
+                   <th>{{ t('edge.rwStatus') }}</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 <tr v-for="(p, index) in mappingForm.points" :key="index">
+                   <td>{{ index + 1 }}</td>
+                   <td>{{ p.name }}</td>
+                   <td>{{ p.slaveName }}</td>
+                   <td>-</td> <!-- Calculated on save -->
+                   <td>{{ p.dataType }}</td>
+                   <td>读写</td>
+                 </tr>
+               </tbody>
+             </table>
+          </div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-save" @click="saveMapping">{{ t('edge.confirm') }}</button>
+          <button class="btn-cancel" @click="closeMappingModal">{{ t('edge.cancel') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 点位选择对话框 (Point Selection Modal) -->
+    <div v-if="showPointSelectionModal" class="modal-overlay" @click.self="closePointSelectionModal">
+      <div class="modal" style="max-width: 700px;">
+        <h3>{{ t('edge.pointSelection') }}</h3>
+        <div class="modal-form">
+           <div class="form-group">
+             <label>{{ t('edge.slaveSelection') }}:</label>
+             <select v-model="selectedMappingSlaveId">
+               <option v-for="slave in availableMappingSlaves" :key="slave.id" :value="slave.id">
+                 {{ slave.name }}
+               </option>
+             </select>
+             <input v-model="mappingSearchQuery" type="text" :placeholder="t('edge.search')" style="margin-left: 10px;" />
+             <button class="btn-outline">{{ t('edge.query') }}</button>
+           </div>
+           
+           <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+             <table>
+               <thead>
+                 <tr>
+                   <th style="width: 50px;"></th>
+                   <th>{{ t('edge.pointName') }}</th>
+                   <th>{{ t('edge.dataType') }}</th>
+                   <th>{{ t('edge.rwStatus') }}</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 <tr v-for="point in filteredSelectionPoints" :key="point.id">
+                   <td>
+                     <input type="checkbox" :checked="isPointSelected(point)" @change="togglePointSelection(point)" />
+                   </td>
+                   <td>{{ point.name }}</td>
+                   <td>{{ point.dataType }}</td>
+                   <td>{{ point.registerDisplay === 'State' ? '只读' : '读写' }}</td>
+                 </tr>
+               </tbody>
+             </table>
+           </div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-save" @click="confirmPointSelection">{{ t('edge.confirm') }}</button>
+          <button class="btn-cancel" @click="closePointSelectionModal">{{ t('edge.cancel') }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -529,6 +740,32 @@ const edgeFileContent = ref('')
 const edgeReport = ref({ group: [] })
 const edgeAccess = ref({ group: [] })
 const edgeLinkCtrl = ref({ group: [] })
+
+// 协议转换配置
+const protocolConversionConfig = ref({
+  enable: 0,
+  protocol: 0, // 0: JSON, 1: Modbus TCP
+  channel: 'MQTT1',
+  subTopic: '/SubTopic',
+  subQos: 'QOS0',
+  pubTopic: '/PubTopic',
+  pubQos: 'QOS0',
+  retain: false,
+  stationAddress: 1,
+  intByteOrder: 'ABCD',
+  floatByteOrder: 'ABCD'
+})
+
+const mappingPoints = ref([])
+const showMappingModal = ref(false)
+const showPointSelectionModal = ref(false)
+const mappingForm = ref({
+  startAddress: 1,
+  points: []
+})
+const selectedMappingSlaveId = ref('')
+const mappingSearchQuery = ref('')
+const tempSelectedPoints = ref([]) // Points selected in the selection modal
 
 // 数据上报相关数据
 const reportGroups = ref([])
@@ -1299,7 +1536,38 @@ const saveCurrentPage = async () => {
       // 保存数据上报配置
       await saveReportData()
       showSuccessModal.value = true
+      showSuccessModal.value = true
       return
+    } else if (activeTab.value === 3) {
+      // 保存协议转换配置
+      // 1. GET Request to update NVRAM
+      const params = {
+        file: 'edge_access',
+        'n_group[0].enable': protocolConversionConfig.value.enable,
+        'n_group[0].proto': protocolConversionConfig.value.protocol,
+        's_group[0].up.link': protocolConversionConfig.value.channel,
+        's_group[0].down.link': protocolConversionConfig.value.channel,
+      }
+
+      if (protocolConversionConfig.value.channel.startsWith('MQTT')) {
+        params['s_group[0].up.topic'] = protocolConversionConfig.value.pubTopic
+        params['n_group[0].up.qos'] = protocolConversionConfig.value.pubQos === 'QOS1' ? 1 : (protocolConversionConfig.value.pubQos === 'QOS2' ? 2 : 0)
+        params['n_group[0].up.retention'] = protocolConversionConfig.value.retain ? 1 : 0
+        params['s_group[0].down.topic'] = protocolConversionConfig.value.subTopic
+        params['n_group[0].down.qos'] = protocolConversionConfig.value.subQos === 'QOS1' ? 1 : (protocolConversionConfig.value.subQos === 'QOS2' ? 2 : 0)
+      }
+
+      await apiClient.get('/update_nv.cgi', { params })
+
+      // 2. POST Request to upload CSV
+      const csvContent = generateConversionCsv()
+      const blob = new Blob([csvContent], { type: 'application/octet-stream' }) // User specified octet-stream
+      const formData = new FormData()
+      formData.append('c', blob, 'conver_csv')
+      
+      await apiClient.post('/upload/conver_csv', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
     }
     
     alert(t('edge.saveSuccess'))
@@ -1469,6 +1737,125 @@ const parseCsvContent = (content) => {
   return newSlaves
 }
 
+// 生成协议转换CSV内容
+const generateConversionCsv = () => {
+  // S,Enable,?,StationAddr,Protocol
+  // C,PointName,SlaveName,DataType,MappingAddr
+  const cfg = protocolConversionConfig.value
+  const protoName = cfg.protocol === 0 ? 'JSON' : 'ModBusTCP'
+  let csv = `S,${cfg.enable},6,${cfg.stationAddress},${protoName}\n`
+  
+  mappingPoints.value.forEach(p => {
+    // Find type code
+    const typeCode = dataTypeMap[p.dataType] || 18
+    csv += `C,${p.pointName},${p.slaveName},${typeCode},${p.mappingAddress}\n`
+  })
+  
+  return csv
+}
+
+// 协议转换 - 映射点位管理
+const showAddMappingModal = () => {
+  mappingForm.value = {
+    startAddress: 1,
+    points: [] // Will store selected points temporarily
+  }
+  tempSelectedPoints.value = []
+  showMappingModal.value = true
+}
+
+const closeMappingModal = () => {
+  showMappingModal.value = false
+}
+
+const deleteMapping = (index) => {
+  mappingPoints.value.splice(index, 1)
+}
+
+const openPointSelectionModal = () => {
+  selectedMappingSlaveId.value = ''
+  mappingSearchQuery.value = ''
+  tempSelectedPoints.value = []
+  showPointSelectionModal.value = true
+}
+
+const closePointSelectionModal = () => {
+  showPointSelectionModal.value = false
+}
+
+// Filtered points for selection modal
+const filteredSelectionPoints = computed(() => {
+  if (!selectedMappingSlaveId.value) return []
+  const slave = slaveList.value.find(s => s.id === selectedMappingSlaveId.value)
+  if (!slave) return []
+  
+  let points = slave.points.filter(p => !p.isDefault) // Exclude default points like State? User image shows "virl_1", "Unsigned".
+  
+  if (mappingSearchQuery.value) {
+    const q = mappingSearchQuery.value.toLowerCase()
+    points = points.filter(p => p.name.toLowerCase().includes(q))
+  }
+  return points
+})
+
+const togglePointSelection = (point) => {
+  const idx = tempSelectedPoints.value.findIndex(p => p.id === point.id)
+  if (idx >= 0) {
+    tempSelectedPoints.value.splice(idx, 1)
+  } else {
+    tempSelectedPoints.value.push(point)
+  }
+}
+
+const isPointSelected = (point) => {
+  return tempSelectedPoints.value.some(p => p.id === point.id)
+}
+
+const confirmPointSelection = () => {
+  // Add selected points to mappingForm.points (or directly to table in Add Modal)
+  // The Add Modal needs to show the selected points.
+  // We'll just store them in mappingForm.points
+  // We need to store slave info too
+  const slave = slaveList.value.find(s => s.id === selectedMappingSlaveId.value)
+  
+  tempSelectedPoints.value.forEach(p => {
+     // Check if already added to avoid duplicates in the current batch?
+     // Or just allow it.
+     mappingForm.value.points.push({
+       ...p,
+       slaveName: slave.name,
+       slaveSource: getSlaveSource(slave)
+     })
+  })
+  
+  closePointSelectionModal()
+}
+
+const saveMapping = () => {
+  // Calculate mapping addresses and add to main list
+  let currentAddr = parseInt(mappingForm.value.startAddress) || 1
+  
+  mappingForm.value.points.forEach(p => {
+    // Determine size
+    let size = 1
+    if (p.dataType.includes('32 Bit') || p.dataType === 'Float') size = 2
+    
+    mappingPoints.value.push({
+      id: `map_${Date.now()}_${Math.random()}`,
+      pointName: p.name,
+      slaveName: p.slaveName,
+      dataType: p.dataType,
+      mappingAddress: currentAddr,
+      rwStatus: '读写', // Default or derived
+      source: p.slaveSource
+    })
+    
+    currentAddr += size
+  })
+  
+  closeMappingModal()
+}
+
 // 加载数据
 const loadData = async () => {
   try {
@@ -1476,12 +1863,13 @@ const loadData = async () => {
     error.value = null
     
     // 并行获取所有数据
-    const [edgeRes, edgeFileRes, edgeReportRes, edgeAccessRes, edgeLinkCtrlRes] = await Promise.all([
+    const [edgeRes, edgeFileRes, edgeReportRes, edgeAccessRes, edgeLinkCtrlRes, edgeProtoAccessRes] = await Promise.all([
       apiClient.get('/download_nv.cgi', { params: { name: 'edge' } }),
       apiClient.get('/download_file.cgi', { params: { name: 'edge' } }),
       apiClient.get('/download_nv.cgi', { params: { name: 'edge_report' } }),
       apiClient.get('/download_nv.cgi', { params: { name: 'edge_access' } }),
-      apiClient.get('/download_nv.cgi', { params: { name: 'edge_link_ctrl' } })
+      apiClient.get('/download_nv.cgi', { params: { name: 'edge_link_ctrl' } }),
+      apiClient.get('/download_file.cgi', { params: { name: 'edge_proto_access' } })
     ])
     
     console.log('=== 边缘计算页面数据加载 ===')
@@ -1535,6 +1923,74 @@ const loadData = async () => {
     }
     edgeAccess.value = edgeAccessRes.data || { group: [] }
     edgeLinkCtrl.value = edgeLinkCtrlRes.data || { group: [] }
+    const edgeProtoAccessContent = edgeProtoAccessRes?.data || ''
+
+    // Update Protocol Conversion Config
+    if (edgeAccess.value.group && edgeAccess.value.group[0]) {
+      const g = edgeAccess.value.group[0]
+      protocolConversionConfig.value = {
+        enable: g.enable || 0,
+        protocol: g.proto || 0,
+        channel: g.up?.link || 'MQTT1',
+        subTopic: g.down?.topic || '/SubTopic',
+        subQos: g.down?.qos === 1 ? 'QOS1' : (g.down?.qos === 2 ? 'QOS2' : 'QOS0'),
+        pubTopic: g.up?.topic || '/PubTopic',
+        pubQos: g.up?.qos === 1 ? 'QOS1' : (g.up?.qos === 2 ? 'QOS2' : 'QOS0'),
+        retain: g.up?.retention === 1,
+        stationAddress: 1, // Default, not in NVRAM? Or need to find where it is stored.
+        intByteOrder: 'ABCD',
+        floatByteOrder: 'ABCD'
+      }
+    }
+
+    // Parse Protocol Conversion CSV
+    // Format: S,Enable,?,StationAddr,Protocol
+    // C,PointName,SlaveName,DataType,MappingAddr
+    if (edgeProtoAccessContent) {
+       const lines = edgeProtoAccessContent.split('\n').filter(line => line.trim())
+       mappingPoints.value = []
+       lines.forEach(line => {
+         const parts = line.split(',')
+         if (parts[0] === 'S') {
+            // S,1,6,10,ModBusTCP
+            // parts[1]: Enable?
+            // parts[3]: Station Address?
+            // parts[4]: Protocol?
+            if (parts.length > 3) {
+               protocolConversionConfig.value.stationAddress = parseInt(parts[3]) || 1
+            }
+         } else if (parts[0] === 'C') {
+            // C,PointName,SlaveName,DataType,MappingAddr
+            // parts[1]: PointName
+            // parts[2]: SlaveName
+            // parts[3]: DataType (Code)
+            // parts[4]: MappingAddr
+            
+            // We need to find the point details (source, rwStatus) from slaveList
+            const pointName = parts[1]
+            const slaveName = parts[2]
+            const typeCode = parseInt(parts[3])
+            const mapAddr = parts[4]
+            
+            // Find slave and point
+            const slave = slaveList.value.find(s => s.name === slaveName)
+            let point = null
+            if (slave) {
+               point = slave.points.find(p => p.name === pointName)
+            }
+            
+            mappingPoints.value.push({
+               id: `map_${Date.now()}_${Math.random()}`,
+               pointName: pointName,
+               slaveName: slaveName,
+               dataType: getDataTypeName(typeCode),
+               mappingAddress: mapAddr,
+               rwStatus: point ? (point.registerDisplay === 'State' ? '只读' : '读写') : '未知', // Simplified
+               source: slave ? getSlaveSource(slave) : '未知'
+            })
+         }
+       })
+    }
     
     // 解析CSV文件内容
     if (edgeFileContent.value) {

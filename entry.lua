@@ -263,7 +263,7 @@ local function handle_download_file(args)
     if name == "edge" then
         content = read_file("/etc/config/device/points.csv") or "V,V1.0,N7X0,;"
     elseif name == "edge_proto_access" then
-        content = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
+        content = read_file("/etc/config/device/proto_map.csv") or "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
     end
 
     ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
@@ -352,7 +352,7 @@ local function handle_upload(uri)
         
     elseif string.find(uri, "/upload/conver_csv") then
         -- 4.2 协议转换 CSV
-        save_file_to_system("proto_map.csv", content)
+        save_file_to_system("/etc/config/device/proto_map.csv", content)
         notify_core_process("proto_map")
         
     elseif string.find(uri, "/upload/scert") then

@@ -367,7 +367,33 @@ export default {
         pleaseInputPointName: '请输入数据点名称',
         confirmDeletePoint: '确定要删除数据点',
         saveSuccess: '保存成功',
-        saveFailed: '保存失败'
+        saveFailed: '保存失败',
+
+        // 协议转换
+        enable: "使能",
+        protocolConversion: '协议转换',
+        protocolType: '协议类型',
+        stationAddress: '站地址',
+        intByteOrder: '32位整数数字序列',
+        floatByteOrder: '32位浮点数字序列',
+        mappingAddress: '映射地址',
+        mappingStartAddress: '映射初始地址',
+        pointSelection: '点位选择',
+        slaveSelection: '从机选择',
+        addMappingPoint: '添加映射点位',
+        pointSource: '点位来源',
+        rwStatus: '读写状态',
+        subTopic: '订阅主题',
+        subQos: '订阅QOS',
+        pubTopic: '发布主题',
+        pubQos: '发布QOS',
+        retainMessage: '保留信息',
+        query: '查询',
+        search: '搜索',
+        addPoint: '添加点位',
+        seq: '序号',
+        confirm: '确认',
+        add: '添加'
     },
 
     // 系统设置页面

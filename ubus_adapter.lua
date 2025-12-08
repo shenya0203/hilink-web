@@ -301,6 +301,35 @@ function _M.set_config(module, args)
         end
         return true
     end
+
+    if module == "edge_access" then
+        ngx.log(ngx.INFO, "Updating edge_access config...")
+        for k, v in pairs(args) do
+            -- Parse n_group[i].key or s_group[i].key
+            local type_prefix, index, key = string.match(k, "([ns])_group%[(%d+)%]%.(.+)")
+            if index and key then
+                index = tonumber(index) + 1
+                if not edge_access_config.group[index] then
+                    edge_access_config.group[index] = { up = {}, down = {} }
+                end
+                
+                local val = v
+                if type_prefix == "n" then val = tonumber(v) or 0 end
+                
+                -- Handle nested keys like up.link, down.qos
+                local sub_key, sub_prop = string.match(key, "([^%.]+)%.([^%.]+)")
+                if sub_key and sub_prop then
+                    if not edge_access_config.group[index][sub_key] then
+                        edge_access_config.group[index][sub_key] = {}
+                    end
+                    edge_access_config.group[index][sub_key][sub_prop] = val
+                else
+                    edge_access_config.group[index][key] = val
+                end
+            end
+        end
+        return true
+    end
     
     return true
 end

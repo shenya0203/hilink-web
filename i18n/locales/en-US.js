@@ -355,7 +355,33 @@ export default {
         pleaseInputPointName: 'Please enter data point name',
         confirmDeletePoint: 'Are you sure you want to delete data point',
         saveSuccess: 'Save successful',
-        saveFailed: 'Save failed'
+        saveFailed: 'Save failed',
+
+        // Protocol Conversion
+        enable: "Enable",
+        protocolConversion: 'Protocol Conversion',
+        protocolType: 'Protocol Type',
+        stationAddress: 'Station Address',
+        intByteOrder: '32-bit Integer Byte Order',
+        floatByteOrder: '32-bit Float Byte Order',
+        mappingAddress: 'Mapping Address',
+        mappingStartAddress: 'Mapping Start Address',
+        pointSelection: 'Point Selection',
+        slaveSelection: 'Slave Selection',
+        addMappingPoint: 'Add Mapping Point',
+        pointSource: 'Point Source',
+        rwStatus: 'R/W Status',
+        subTopic: 'Subscribe Topic',
+        subQos: 'Subscribe QoS',
+        pubTopic: 'Publish Topic',
+        pubQos: 'Publish QoS',
+        retainMessage: 'Retain Message',
+        query: 'Query',
+        search: 'Search',
+        addPoint: 'Add Point',
+        seq: 'Seq',
+        confirm: 'Confirm',
+        add: 'Add'
     },
 
     // System Settings Page
