@@ -315,18 +315,7 @@ function _M.set_config(module, args)
     if module == "edge" then
         -- 处理边缘计算配置更新
         ngx.log(ngx.INFO, "Updating edge config...")
-        for k, v in pairs(args) do
-            if k == "n_all_en" then
-                edge_config.all_en = tonumber(v) or 0
-            elseif k == "n_refresh_frequency" then
-                edge_config.refresh_frequency = tonumber(v) or 100
-            elseif k == "n_calc_period" then
-                edge_config.calc_period = tonumber(v) or 100
-            elseif k == "n_poll_interval" then
-                edge_config.poll_interval = tonumber(v) or 100
-            end
-        end
-        return true
+        return _M.set_edge_config(args)
     end
 
     if module == "edge_access" then
@@ -385,20 +374,34 @@ end
 -- 12. Edge Config - 边缘计算基本配置 (Moved to top)
 
 function _M.get_edge_config()
-    return edge_config
+    local enable = 0
+    local f = io.popen("uci get edge.@edge[0].enable 2>/dev/null")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content then
+            enable = tonumber(content) or 0
+        end
+    end
+    return {
+        all_en = enable,
+        refresh_frequency = 100,
+        calc_period = 100,
+        poll_interval = 100
+    }
 end
 
 function _M.set_edge_config(args)
+    local enable = nil
     for k, v in pairs(args) do
         if k == "n_all_en" then
-            edge_config.all_en = tonumber(v) or 0
-        elseif k == "n_refresh_frequency" then
-            edge_config.refresh_frequency = tonumber(v) or 100
-        elseif k == "n_calc_period" then
-            edge_config.calc_period = tonumber(v) or 100
-        elseif k == "n_poll_interval" then
-            edge_config.poll_interval = tonumber(v) or 100
+            enable = tonumber(v)
         end
+    end
+    
+    if enable ~= nil then
+        os.execute("uci set edge.@edge[0].enable=" .. enable)
+        os.execute("uci commit edge")
     end
     return true
 end
