@@ -41,6 +41,19 @@ local function read_file(path)
     return content
 end
 
+-- UCI Helper
+local function get_uci(key)
+    local f = io.popen("uci get " .. key .. " 2>/dev/null")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content then
+            return string.gsub(content, "\n", "")
+        end
+    end
+    return nil
+end
+
 local _M = {}
 
 -- ==========================================================
@@ -66,34 +79,102 @@ end
 
 -- 2. Network Status Data
 function _M.get_network_status()
+    -- 
+
     return {
         netdev = "EtherNET",
         eth = {
-            link_sta = 1, ip_mode = 0, ip = "192.168.2.177",
-            dns = "223.5.5.5", sdns = "223.6.6.6", netmask = "255.255.255.0"
+            link_sta = 1, 
+            ip_mode = 0, 
+            ip = "192.168.2.177",
+            dns = "223.5.5.5", 
+            sdns = "223.6.6.6", 
+            netmask = "255.255.255.0"
         },
         lte = {
-            ver = "16009.1037.00.01.53.05", iccid = "89861125204091384377",
-            imei = "868892078327435", csq = 21, mode = "4G", oper = 1, sim = 1,
-            cimi = "460113957693001", lte_sta = "Connected", lte_ip = "10.42.78.154",
-            lte_netmask = "255.255.255.255", lte_dns = "202.96.128.86", lte_sdns = "202.96.134.133"
+            ver = "16009.1037.00.01.53.05", 
+            iccid = "89861125204091384377",
+            imei = "868892078327435", 
+            csq = 21, 
+            mode = "4G", 
+            oper = 1, 
+            sim = 1,
+            cimi = "460113957693001", 
+            lte_sta = "Connected", 
+            lte_ip = "10.42.78.154",
+            lte_netmask = "255.255.255.255", 
+            lte_dns = "202.96.128.86", 
+            lte_sdns = "202.96.134.133"
         }
     }
 end
 
 -- 3. Network Config Data
+-- 3. Network Config Data
 function _M.get_network_config()
+    -- Read WAN config from UCI
+    local wan_proto = get_uci("network.wan.proto")
+    local wan_ip = get_uci("network.wan.ipaddr") or ""
+    local wan_netmask = get_uci("network.wan.netmask") or ""
+    local wan_gateway = get_uci("network.wan.gateway") or ""
+    local wan_dns_enable = get_uci("network.wan.peerdns") or 1  --0 手动设置 1 自动获取
+
+    local lte_dns_enable = get_uci("network.lte.peerdns") or 1  --0 手动设置 1 自动获取
+    local lte_device = get_uci("network.lte.modem_device") or ""
+    local lte_apn = get_uci("network.lte.modem_apn") or ""
+    local lte_user = get_uci("network.lte.modem_user") or ""
+    local lte_pswd = get_uci("network.lte.modem_passwd") or ""
+    local lte_auth = get_uci("network.lte.modem_auth") or 0
+    local lte_simnum = get_uci("network.lte.modem_simnum") or 0
+
+    -- Read DNS
+    local wan_dns = {}
+    local f = io.popen("uci get network.wan.dns 2>/dev/null")
+    if f then
+        for line in f:lines() do
+            for dns in string.gmatch(line, "%S+") do
+                table.insert(wan_dns, dns)
+            end
+        end
+        f:close()
+    end
+
+    local lte_dns = {}
+    local f = io.popen("uci get network.lte.dns 2>/dev/null")
+    if f then
+        for line in f:lines() do
+            for dns in string.gmatch(line, "%S+") do
+                table.insert(lte_dns, dns)
+            end
+        end
+        f:close()
+    end
+    
+    local ip_mode = 0
+    if wan_proto == "dhcp" then
+        ip_mode = 1
+    end
+
+    local track_ip1 = get_uci("mwan3.globals.keepalive_ip1") or "223.5.5.5"
+    local track_ip2 = get_uci("mwan3.globals.keepalive_ip2") or "223.6.6.6"    
+    local track_period = get_uci("mwan3.globals.keepalive_period") or 10
+    local net_select = get_uci("mwan3.globals.net_select") or 0
+    
     return {
-        net_select = 0, keepalive_period = 10,
-        keepalive_addr = {"223.5.5.5", "8.8.8.8"},
+        net_select = net_select, keepalive_period = track_period,
+        keepalive_addr = {track_ip1, track_ip2},
         eth0 = {
-            ip_mode = 0, sip = "192.168.2.177", gip = "192.168.2.1",
-            mip = "255.255.255.0", dns_mode = 0, dns_ip = {"223.5.5.5", "223.6.6.6"}
+            ip_mode = ip_mode, 
+            sip = wan_ip, 
+            gip = wan_gateway,
+            mip = wan_netmask, 
+            dns_mode = wan_dns_enable, 
+            dns_ip = {wan_dns[1] or "", wan_dns[2] or ""}
         },
         cell = {
-            sim_switch = 2,
-            apn = { addr = "", user = "", pswd = "", auth = 0 },
-            dns_mode = 1, dns_ip = {"202.96.128.86", "202.96.134.133"}
+            sim_switch = lte_simnum,
+            apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
+            dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
         }
     }
 end
@@ -361,6 +442,102 @@ function _M.set_config(module, args)
             end
         end
         
+        return true
+    end
+    
+    if module == "network" then
+        ngx.log(ngx.INFO, "Updating network config...")
+        
+        local eth_mode = nil
+        local eth_ip = nil
+        local eth_mask = nil
+        local eth_gw = nil
+        local eth_dns1 = nil
+        local eth_dns2 = nil
+        local eth_dns_mode = nil
+        
+        local lte_simnum = nil
+        local lte_apn = nil
+        local lte_user = nil
+        local lte_pswd = nil
+        local lte_auth = nil
+        local lte_dns_mode = nil
+        local lte_dns = nil
+        local lte_sdns = nil
+        local net_select = nil
+        local keepalive_period = nil
+        local keepalive_addr1 = nil
+        local keepalive_addr2 = nil
+        
+        
+        for k, v in pairs(args) do
+            if k == "n_eth0.ip_mode" then eth_mode = tonumber(v) end
+            if k == "s_eth0.sip" then eth_ip = v end
+            if k == "s_eth0.mip" then eth_mask = v end
+            if k == "s_eth0.gip" then eth_gw = v end
+            if k == "s_eth0.dns_ip[0]" then eth_dns1 = v end
+            if k == "s_eth0.dns_ip[1]" then eth_dns2 = v end
+            if k == "n_eth0.dns_mode" then eth_dns_mode = tonumber(v) end   
+            
+            if k == "n_cell.sim_switch" then lte_simnum = tonumber(v) end
+            if k == "s_cell.apn.addr" then lte_apn = v end
+            if k == "s_cell.apn.user" then lte_user = v end
+            if k == "s_cell.apn.pswd" then lte_pswd = v end
+            if k == "s_cell.dns_ip[0]" then lte_dns = v end
+            if k == "s_cell.dns_ip[1]" then lte_sdns = v end
+            if k == "n_cell.dns_mode" then lte_dns_mode = tonumber(v) end
+            if k == "n_cell.apn.auth" then lte_auth = tonumber(v) end
+            if k == "n_keepalive_period" then keepalive_period = tonumber(v) end
+            if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end  
+            if k == "s_keepalive_addr[1]" then keepalive_addr2 = v end
+            if k == "n_net_select" then net_select = tonumber(v) end
+        end
+        
+        if eth_mode ~= nil then
+            if eth_mode == 1 then
+                os.execute("uci set network.wan.proto=dhcp")
+            else
+                os.execute("uci set network.wan.proto=static")
+                if eth_ip then os.execute("uci set network.wan.ipaddr=" .. eth_ip) end
+                if eth_mask then os.execute("uci set network.wan.netmask=" .. eth_mask) end
+                if eth_gw then os.execute("uci set network.wan.gateway=" .. eth_gw) end
+                
+                os.execute("uci set network.wan.peerdns=" .. eth_dns_mode or 0)
+                -- DNS
+                os.execute("uci delete network.wan.dns")
+                if eth_dns1 and eth_dns1 ~= "" then 
+                    os.execute("uci add_list network.wan.dns=" .. eth_dns1) 
+                end
+                if eth_dns2 and eth_dns2 ~= "" then 
+                    os.execute("uci add_list network.wan.dns=" .. eth_dns2) 
+                end
+            end
+            os.execute("uci commit network")
+        end
+
+        os.execute("uci set network.lte.modem_simnum=" .. lte_simnum or "")
+
+        os.execute("uci set network.lte.modem_apn=" .. lte_apn or "")
+
+        os.execute("uci set network.lte.modem_user=" .. lte_user or "")
+
+        os.execute("uci set network.lte.modem_passwd=" .. lte_pswd or "")
+
+        os.execute("uci set network.lte.modem_auth=" .. lte_auth or 0)
+
+        os.execute("uci set network.lte.peerdns=" .. lte_dns_mode or 0)
+
+        os.execute("uci delete network.lte.dns")
+        os.execute("uci add_list network.lte.dns=" .. lte_dns or "") 
+        os.execute("uci add_list network.lte.dns=" .. lte_sdns or "") 
+
+        if net_select then os.execute("uci set mwan3.globals.net_select=" .. net_select) end
+
+        if keepalive_period then os.execute("uci set mwan3.globals.keepalive_period=" .. keepalive_period) end
+        if keepalive_addr1 then os.execute("uci set mwan3.globals.keepalive_ip1=" .. keepalive_addr1) end
+        if keepalive_addr2 then os.execute("uci set mwan3.globals.keepalive_ip2=" .. keepalive_addr2) end
+        os.execute("uci commit mwan3")
+        os.execute("uci commit network")
         return true
     end
     
