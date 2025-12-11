@@ -259,6 +259,7 @@ const loadData = async () => {
       })
     }
     
+    /*
     if (networkFlex) {
       if (networkFlex.eth) {
         Object.assign(config.value, {
@@ -276,6 +277,7 @@ const loadData = async () => {
         })
       }
     }
+    */
     
     console.log('最终配置对象:', config.value)
     
