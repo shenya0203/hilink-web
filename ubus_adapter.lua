@@ -181,37 +181,17 @@ end
 
 -- 4. Misc Config Data (完整配置)
 function _M.get_misc_config()
-    return {
-        web_lang = 2,
-        host_name = "N720",
-        websock_port = 6432,
-        websocket_point = 9,
-        web_port = 80,
-        web_user = "admin",
-        web_psw = "admin",
-        cache_buf = 0,
-        reset_time = 0,
-        telnet_en = 0,
-        telnet_port = 22,
-        ntp_sync_en = 1,
-        ntp_url = {
-            "ntp1.aliyun.com",
-            "time1.cloud.tencent.com",
-            "time.ustc.edu.cn",
-            "cn.pool.ntp.org"
-        },
-        ntp_utc = 8,
-        f485_en = 0,
-        f485_t = 10,
-        port_max = 2,
-        port_view = 0,
-        timing_reset = {
-            enable = 0,
-            hh = 0,
-            mm = 0,
-            ss = 0
-        }
-    }
+    -- 2. 调用 Daemon 接口 (对象名: hilink, 方法名: get_misc_config)
+    -- 第三个参数是参数表，get请求通常为空表 {}
+    local res = ubus_call("hilink", "get_misc_config", {})
+    -- 4. 处理结果
+    if not res then
+        ngx.log(ngx.ERR, "Ubus call 'get_misc_config' failed: " .. tostring(err))
+        return { error = "Failed to fetch config" }
+    end
+
+    -- res 已经是解码后的 Lua table 了
+    return res
 end
 
 -- 5. Comm Tunnel Config
@@ -385,11 +365,21 @@ function _M.set_config(module, args)
     end
     
     if module == "misc" then
-        -- 处理misc配置更新
-        ngx.log(ngx.INFO, "Updating misc config...")
+        local req_args = {}
         for k, v in pairs(args) do
-            ngx.log(ngx.INFO, "misc: " .. k .. " = " .. tostring(v))
+            req_args[k] = v
         end
+        req_args["module"] = "misc" -- 显式指明模块，虽然 set_config 里会用
+
+        local result = ubus_call("hilink", "set_config", req_args)
+
+        if not result then
+            return { result = false, msg = "Backend communication error" }
+        else
+            ngx.log(ngx.INFO, "Ubus result: " .. cjson.encode(result))
+            return result
+        end
+
         return true
     end
     

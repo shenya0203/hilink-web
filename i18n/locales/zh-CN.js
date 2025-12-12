@@ -311,6 +311,7 @@ export default {
         collectFormula: '采集公式',
         controlFormula: '控制公式',
         reportOnChange: '变化上报',
+        changeRange: '变化范围',
 
         // 数据类型
         dataTypeString: '字符串',
@@ -472,7 +473,9 @@ export default {
         formatFailed: 'TF卡格式化失败',
         saveParamsSuccess: '参数配置保存成功',
         saveTimeSuccess: '时间配置保存成功',
-        saveDeviceSuccess: '设备配置保存成功'
+        saveDeviceSuccess: '设备配置保存成功',
+        restartRequired: '系统配置需要重启设备才能生效。',
+        continueConfig: '继续配置'
     },
 
     // 网络配置页面

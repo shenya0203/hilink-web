@@ -209,6 +209,19 @@
         <button type="button" class="btn-action btn-danger" @click="formatTfCard" :disabled="tfInfo.status !== 1">{{ t('system.format') }}</button>
       </div>
     </div>
+    <!-- 重启确认弹窗 -->
+    <div v-if="showRestartModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('common.saveSuccess') }}</h3></div>
+        <div class="modal-body">
+          <p>{{ t('system.restartRequired') }}</p>
+          <div class="modal-actions">
+            <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
+            <button class="btn-continue" @click="handleContinue">{{ t('system.continueConfig') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -224,6 +237,7 @@ const { t } = useI18n()
 const loading = ref(true)
 const error = ref(null)
 const activeTab = ref(0)
+const showRestartModal = ref(false)
 
 // misc 配置数据
 const miscConfig = ref({
@@ -541,7 +555,7 @@ const saveParamsConfig = async () => {
       .join('&')
     
     await apiClient.get(`/update_nv.cgi?${queryString}`)
-    alert(t('system.saveParamsSuccess'))
+    showRestartModal.value = true
   } catch (err) {
     console.error('保存参数配置失败:', err)
     alert('保存配置失败: ' + err.message)
@@ -553,8 +567,10 @@ const saveTimeConfig = async () => {
   try {
     const params = {
       file: 'misc',
+      'n_web_port': miscConfig.value.web_port,
       'n_ntp_utc': miscConfig.value.ntp_utc,
       'n_ntp_sync_en': miscConfig.value.ntp_sync_en,
+      'n_timing_reset.enable': miscConfig.value.timing_reset.enable,
       's_ntp_url[0]': miscConfig.value.ntp_url[0],
       's_ntp_url[1]': miscConfig.value.ntp_url[1],
       's_ntp_url[2]': miscConfig.value.ntp_url[2],
@@ -566,7 +582,7 @@ const saveTimeConfig = async () => {
       .join('&')
     
     await apiClient.get(`/update_nv.cgi?${queryString}`)
-    alert(t('system.saveTimeSuccess'))
+    showRestartModal.value = true
   } catch (err) {
     console.error('保存时间配置失败:', err)
     alert('保存配置失败: ' + err.message)
@@ -673,6 +689,23 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 处理重启
+const handleRestart = async () => {
+  try {
+    await apiClient.get('/action_restart.cgi')
+    alert(t('system.restartSuccess'))
+    showRestartModal.value = false
+  } catch (err) {
+    console.error('重启设备失败:', err)
+    alert(t('system.restartFailed') + ': ' + err.message)
+  }
+}
+
+// 继续配置
+const handleContinue = () => {
+  showRestartModal.value = false
 }
 
 // 组件挂载时加载数据
@@ -796,6 +829,75 @@ onUnmounted(() => {
   color: #0066cc;
   font-weight: 500;
   min-width: 150px;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 8px;
+  width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  background-color: #f8f9fa;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  text-align: center;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.btn-restart {
+  padding: 8px 20px;
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-continue {
+  padding: 8px 20px;
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-continue:hover {
+  background-color: #e0e0e0;
 }
 
 .time-picker {

@@ -12,12 +12,208 @@ local cjson = require "cjson"
 -- 配置数据存储 (实际应用中应该从文件或数据库读取)
 -- ==========================================================
 
+product_name = "HLK_N720"
+
 -- UCI 配置文件操作封装
 local uci_lib = require("uci")
 
 -- 配置缓存标志
 local uart_config_loaded = false
 local comm_tunnel_config_loaded = false
+
+local function get_runtime()
+    return os.time() - start_time
+end
+
+local function log_info(msg)
+    print(string.format("[INFO] %s", msg))
+end
+
+local function log_error(msg)
+    print(string.format("[ERROR] %s", msg))
+end
+
+local function deep_copy(obj)
+    if type(obj) ~= 'table' then return obj end
+    local res = {}
+    for k, v in pairs(obj) do res[deep_copy(k)] = deep_copy(v) end
+    return res
+end
+
+
+local function read_file_content(path)
+    local file = io.open(path, "r")
+    if not file then return nil end
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
+local function write_file_content(path, content)
+    local file = io.open(path, "w")
+    if not file then return false end
+    file:write(content)
+    file:close()
+    return true
+end
+
+
+-- UCI Helper for Timezone
+local function timezone_to_utc_num(tz_str)
+    -- 1. 处理 nil 或空字符串，默认为 0 (UTC)
+    if not tz_str or tz_str == "" then 
+        return 0 
+    end 
+
+    -- 2. 尝试匹配 POSIX 格式中的 "符号" 和 "偏移量数字"
+    -- 匹配逻辑：
+    -- ([%+%-]?)  -> 捕获可选的 + 或 - 号 (sign)
+    -- (%d+)      -> 捕获后面的数字 (offset)
+    local sign, offset_str = string.match(tz_str, "([%+%-]?)(%d+)")
+
+    -- 3. 特殊情况处理：如果字符串里没有数字 (例如 "UTC", "GMT", "Z")
+    -- 你的原代码在这里会失败，因为 regex 匹配不到内容，offset 为 nil
+    if not offset_str then
+        return 0
+    end
+
+    local offset = tonumber(offset_str)
+
+    -- 4. 符号转换 (关键：POSIX 符号与日常习惯相反)
+    if sign == "-" then
+        -- POSIX 的 "-" 代表“东区” (East of Greenwich)
+        -- 比如 CST-8，代表比 UTC 快 8 小时
+        -- 转换结果应为正数: 8
+        return offset
+    else
+        -- POSIX 的 "+" 或 "无符号" 代表“西区” (West of Greenwich)
+        -- 比如 EST5 (无符号) 或 UTC+5
+        -- 转换结果应为负数: -5
+        return -offset
+    end
+end
+
+local function utc_num_to_timezone(num)
+    num = tonumber(num) or 8
+    if num > 0 then
+        return "UTC-" .. num -- UTC-8 for GMT+8
+    elseif num < 0 then
+        return "UTC+" .. math.abs(num)
+    else
+        return "UTC0"
+    end
+end
+
+local function load_system_config_from_uci()
+    local cursor = uci_lib.cursor()
+    local system_conf = {
+        hostname = product_name,
+        timezone = "UTC-8",
+        ntp_enable = 1,
+        ntp_servers = {}
+    }
+
+    cursor:foreach("system", "system", function(section)
+        system_conf.hostname = section.hostname or product_name
+        system_conf.timezone = section.timezone or "UTC-8"
+    end)
+    
+    cursor:foreach("system", "timeserver", function(section)
+        system_conf.ntp_enable = tonumber(section.enabled) or 1
+        if section.server then
+            if type(section.server) == "table" then
+                system_conf.ntp_servers = section.server
+            elseif type(section.server) == "string" then
+                table.insert(system_conf.ntp_servers, section.server)
+            end
+        end
+    end)
+    log_info("system_config: "..cjson.encode(system_conf))
+    
+    return system_conf
+end
+
+local function load_nginx_config_from_uci()
+    -- Assuming nginx config is stored in /etc/config/nginx
+    -- config main global
+    --     option uci_port '80'
+    --     option uci_user 'admin'
+    --     option uci_pass 'admin'
+    
+    local cursor = uci_lib.cursor()
+    local nginx_conf = {}
+    
+    -- Try to read from nginx uci if exists, otherwise fallback or use misc_config defaults
+    -- Note: Standard nginx uci might not have user/pass in cleartext. 
+    -- We will assume a custom section 'global' or similar for this device.
+    
+    local section = cursor:get_all("nginx", "global")
+
+    if section then
+        log_info("Found nginx global section")
+        
+        -- 更新配置，如果uci里有值就用uci的，否则保持默认
+        if section.uci_port then nginx_conf.port = tonumber(section.uci_port) end
+        if section.uci_user then nginx_conf.user = section.uci_user end
+        if section.uci_pass then nginx_conf.pass = section.uci_pass end
+        
+        log_info("uci_port: " .. (section.uci_port or "nil"))
+        log_info("uci_user: " .. (section.uci_user or "nil"))
+    else
+        log_info("Nginx global section not found!")
+    end
+
+    log_info("nginx config :" .. cjson.encode(nginx_conf))
+    
+    return nginx_conf
+end
+
+local function set_nginx_config(port, user, pass)
+    local cursor = uci_lib.cursor()
+    -- Ensure section exists
+    cursor:set("nginx", "global", "global")
+    
+    if port then cursor:set("nginx", "global", "uci_port", tostring(port)) end
+    if user then cursor:set("nginx", "global", "uci_user", user) end
+    if pass then cursor:set("nginx", "global", "uci_pass", pass) end
+    
+    cursor:commit("nginx")
+    
+    -- Also update real nginx config file if needed, or trigger reload
+    -- os.execute("/etc/init.d/nginx reload")
+    return true
+end
+
+local function set_system_config(hostname, timezone_num)
+    local cursor = uci_lib.cursor()
+    
+    -- Update system section
+    cursor:foreach("system", "system", function(section)
+        cursor:set("system", section[".name"], "hostname", hostname)
+        cursor:set("system", section[".name"], "timezone", utc_num_to_timezone(timezone_num))
+    end)
+    
+    cursor:commit("system")
+    return true
+end
+
+local function set_ntp_config(enabled, server_list)
+    local cursor = uci_lib.cursor()
+    
+    -- 设置 NTP 开关
+    cursor:set("system", "ntp", "enabled", enabled)
+    
+    -- 设置 Server 列表
+    -- 既然前端保证合法性，后端直接覆盖即可
+    if server_list and #server_list > 0 then
+        cursor:set("system", "ntp", "server", server_list)
+    else
+        -- 如果传来的列表全是空的（且前端允许这样做），则删除 server 配置
+        -- 这样 /etc/config/system 里就不会有 "list server" 这一行
+        cursor:delete("system", "ntp", "server")
+    end
+    cursor:commit("system")
+end
 
 -- 从UCI读取串口配置到内存
 local function load_uart_config_from_uci()
@@ -699,24 +895,6 @@ local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 
 local start_time = os.time()
 
-local function get_runtime()
-    return os.time() - start_time
-end
-
-local function log_info(msg)
-    print(string.format("[INFO] %s", msg))
-end
-
-local function log_error(msg)
-    print(string.format("[ERROR] %s", msg))
-end
-
-local function deep_copy(obj)
-    if type(obj) ~= 'table' then return obj end
-    local res = {}
-    for k, v in pairs(obj) do res[deep_copy(k)] = deep_copy(v) end
-    return res
-end
 
 -- 更新嵌套表的值
 local function update_nested_value(tbl, key_path, value)
@@ -846,32 +1024,173 @@ local function set_offline_cache(args)
     return true
 end
 
-local function set_misc_config_values(args)
-    for k, v in pairs(args) do
-        local key = string.match(k, "[ns]_(.+)")
-        if key then
-            -- 处理嵌套key
-            if string.find(key, "%.") then
-                local parts = {}
-                for part in string.gmatch(key, "[^%.]+") do
-                    table.insert(parts, part)
-                end
-                
-                local target = misc_config
-                for i = 1, #parts - 1 do
-                    if target[parts[i]] then
-                        target = target[parts[i]]
-                    end
-                end
-                target[parts[#parts]] = tonumber(v) or v
-            else
-                misc_config[key] = tonumber(v) or v
-            end
-            log_info("misc." .. key .. " = " .. tostring(v))
+misc_config = {
+    web_lang = 2,
+    host_name = "N720",
+    websock_port = 6432,
+    websocket_point = 9,
+    web_port = 80,         -- 默认值，启动时会被 sync_nginx_settings 覆盖
+    web_user = "admin",    -- 默认值
+    web_psw = "admin",     -- 默认值
+    cache_buf = 0,
+    reset_time = 0,
+    telnet_en = 0,
+    telnet_port = 22,
+    ntp_sync_en = 1,
+    ntp_url = {
+        "ntp1.aliyun.com",
+        "time1.cloud.tencent.com",
+        "time.ustc.edu.cn",
+        "cn.pool.ntp.org"
+    },
+    ntp_utc = 8,
+    f485_en = 0,
+    f485_t = 10,
+    port_max = 2,
+    port_view = 0,
+    timing_reset = {
+        enable = 0,
+        hh = 0,
+        mm = 0,
+        ss = 0
+    }
+}
+
+-- ==========================================================
+-- 2. 辅助函数：启动时同步 Nginx 真实配置 (可选，但推荐)
+-- ==========================================================
+local function sync_nginx_settings()
+    -- Load initial config from UCI to memory
+    local sys_conf = load_system_config_from_uci()
+    local nginx_conf = load_nginx_config_from_uci()
+    
+    if not misc_config then misc_config = {} end
+    
+    -- Update misc_config with loaded values
+    misc_config.host_name = sys_conf.hostname
+    misc_config.ntp_utc = timezone_to_utc_num(sys_conf.timezone)
+    misc_config.ntp_sync_en = sys_conf.ntp_enable
+    
+    -- Ensure ntp_url is a table of 4 strings
+    misc_config.ntp_url = {"", "", "", ""}
+    for i, s in ipairs(sys_conf.ntp_servers) do
+        if i <= 4 then misc_config.ntp_url[i] = s end
+    end
+    
+    misc_config.web_port = nginx_conf.port
+    misc_config.web_user = nginx_conf.user
+    misc_config.web_psw = nginx_conf.pass
+end
+
+
+-- ==========================================================
+-- 3. 修改：set_misc_config_values 函数
+--    (这个函数在你的代码中被 methods["hilink"]["set_misc_config"] 调用)
+-- ==========================================================
+function set_misc_config_values(msg)
+    log_info("Setting misc config: " .. cjson.encode(msg))
+    
+    -- 确保内存配置表已初始化
+    if not misc_config then misc_config = {} end
+
+    -- ============================================================
+    -- 1. Nginx Config (Web Port, User, Password)
+    -- ============================================================
+    if msg.n_web_port or msg.s_web_user or msg.s_web_psw then
+        local port = msg.n_web_port or misc_config.web_port
+        local user = msg.s_web_user or misc_config.web_user
+        local pass = msg.s_web_psw or misc_config.web_psw
+        
+        -- 只有当参数有实际意义时才调用设置
+        set_nginx_config(port, user, pass)
+        
+        -- 更新内存缓存
+        if msg.n_web_port then misc_config.web_port = port end
+        if msg.s_web_user then misc_config.web_user = user end
+        if msg.s_web_psw  then misc_config.web_psw  = pass end
+    end
+
+    -- ============================================================
+    -- 2. System Config (Hostname, Timezone)
+    -- ============================================================
+    if msg.s_host_name or msg.n_ntp_utc then
+        local hostname = msg.s_host_name or misc_config.host_name
+        local utc_val = msg.n_ntp_utc or misc_config.ntp_utc
+        
+        set_system_config(hostname, utc_val)
+
+        -- 更新内存缓存
+        if msg.s_host_name then misc_config.host_name = hostname end
+        if msg.n_ntp_utc then misc_config.ntp_utc = utc_val end
+    end
+    
+    -- ============================================================
+    -- 3. NTP Config (Enable, Server List)
+    -- ============================================================
+    -- 检测是否有 NTP 相关的参数 (开关 或 具体的URL key)
+    local has_ntp_update = false
+    if msg.n_ntp_sync_en then has_ntp_update = true end
+    
+    -- 检测是否存在 s_ntp_url[x] 格式的参数
+    local url_params_exist = false
+    for i = 0, 9 do -- 假设最多支持10个，或者按你页面实际数量写 3
+        if msg["s_ntp_url["..i.."]"] ~= nil then
+            url_params_exist = true
+            has_ntp_update = true
+            break
         end
     end
+
+    if has_ntp_update then
+        local en = msg.n_ntp_sync_en or misc_config.ntp_sync_en
+        local new_servers = {}
+
+        if url_params_exist then
+            -- A. 前端传来了新的 URL 列表：提取并重组
+            for i = 0, 9 do
+                local val = msg["s_ntp_url["..i.."]"]
+                -- 仅保留非空字符串
+                if val and val ~= "" then
+                    table.insert(new_servers, val)
+                end
+            end
+        else
+            -- B. 前端只改了开关，没传 URL：沿用旧配置
+            new_servers = misc_config.ntp_url or {}
+        end
+        log_info("new_servers: " .. cjson.encode(new_servers))
+        
+        -- 写入 UCI
+        set_ntp_config(en, new_servers)
+
+        -- 关键：更新内存缓存中的 ntp_url 为标准的数组格式
+        -- 这样下次 get 接口返回给前端的就是整洁的 ["a", "b"] 而不是散乱的 key
+        misc_config.ntp_sync_en = en
+        misc_config.ntp_url = new_servers
+    end
+
+    -- ============================================================
+    -- 4. Update Other Memory Cache (通用兜底更新)
+    -- ============================================================
+    for k, v in pairs(msg) do
+        -- 过滤掉 module 参数，且跳过 s_ntp_url[...] 这种扁平 key，
+        -- 因为我们在上面已经处理并生成标准的 ntp_url 数组了，避免污染 misc_config
+        if k ~= "module" and not string.find(k, "s_ntp_url%[") then
+            -- Handle nested timing_reset
+            if k == "timing_reset" and type(v) == "table" then
+                if not misc_config.timing_reset then misc_config.timing_reset = {} end
+                for tk, tv in pairs(v) do
+                    misc_config.timing_reset[tk] = tv
+                end
+            else
+                misc_config[k] = v
+            end
+        end
+    end
+
     return true
 end
+
 
 local function set_network_config_values(args)
     for k, v in pairs(args) do
@@ -973,8 +1292,12 @@ local methods = {
         },
         
         -- 获取杂项配置
+        -- 获取杂项配置
         get_misc_config = {
             function(req, msg)
+                -- Refresh from UCI to ensure we have latest values (e.g. if changed by other means)
+                log_info("get misc config")
+                sync_nginx_settings()
                 reply(req, deep_copy(misc_config))
             end,
             {}

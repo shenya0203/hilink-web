@@ -21,7 +21,7 @@ export async function fetchNetworkData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=network:', error)
-        return getDefaultNetworkData()
+        /*return getDefaultNetworkData()*/
     }
 }
 
