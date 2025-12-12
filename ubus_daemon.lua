@@ -84,23 +84,23 @@ local function timezone_to_utc_num(tz_str)
         -- POSIX 的 "-" 代表“东区” (East of Greenwich)
         -- 比如 CST-8，代表比 UTC 快 8 小时
         -- 转换结果应为正数: 8
-        return offset
+        return -offset
     else
         -- POSIX 的 "+" 或 "无符号" 代表“西区” (West of Greenwich)
         -- 比如 EST5 (无符号) 或 UTC+5
         -- 转换结果应为负数: -5
-        return -offset
+        return offset
     end
 end
 
 local function utc_num_to_timezone(num)
     num = tonumber(num) or 8
     if num > 0 then
-        return "UTC-" .. num -- UTC-8 for GMT+8
+        return "UTC+" .. num -- UTC-8 for GMT+8
     elseif num < 0 then
-        return "UTC+" .. math.abs(num)
+        return "UTC-" .. math.abs(num)
     else
-        return "UTC0"
+        return "UTC"
     end
 end
 
@@ -1414,8 +1414,28 @@ local methods = {
             function(req, msg)
                 local timestamp = msg.timestamp
                 log_info("Setting system time to: " .. tostring(timestamp))
-                -- 实际应该调用: os.execute("date -s @" .. timestamp)
-                reply(req, {result = true})
+                if timestamp then
+                    -- 格式化时间字符串，例如 "2023-10-27 10:00:00"
+                    -- 注意：date -s @timestamp 在某些嵌入式系统中可能不支持 @ 语法
+                    -- 如果不支持，可以使用 os.date 格式化后再设置
+                    -- 这里假设支持 date -s @timestamp 或者 date -s "YYYY-MM-DD HH:MM:SS"
+                    
+                    -- 方法1: 直接使用 timestamp (如果 date 支持 @)
+                    -- os.execute("date -s @" .. timestamp)
+                    
+                    -- 方法2: 格式化后设置 (更通用)
+                    local date_str = os.date("%Y-%m-%d %H:%M:%S", timestamp)
+                    local cmd = string.format("date -s \"%s\"", date_str)
+                    log_info("Executing: " .. cmd)
+                    os.execute(cmd)
+                    
+                    -- 同步到硬件时钟 (可选)
+                    os.execute("hwclock -w")
+                    
+                    reply(req, {result = true})
+                else
+                    reply(req, {result = false})
+                end
             end,
             { timestamp = ubus.INT32 }
         },

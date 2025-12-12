@@ -298,8 +298,14 @@ end
 function _M.set_system_time(timestamp)
     -- 设置系统时间
     ngx.log(ngx.INFO, "Setting system time to: " .. tostring(timestamp))
-    -- 实际应该调用: os.execute("date -s @" .. timestamp)
-    return true
+    
+    local result = ubus_call("hilink", "set_system_time", { timestamp = timestamp })
+    if result and result.result then
+        return true
+    else
+        ngx.log(ngx.ERR, "Failed to set system time via ubus")
+        return false
+    end
 end
 
 -- 11. Set Config
