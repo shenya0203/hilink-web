@@ -428,6 +428,12 @@ local function handle_upload(uri)
             save_cert_file(target_name, "client_key.pem", content)
         end
         notify_core_process("client_key")
+
+    elseif string.find(uri, "/upload/firmware") then
+        -- 固件上传
+        ngx.log(ngx.ERR, "[DEBUG] Uploading firmware")
+        -- 保存到 /tmp/firmware.bin
+        save_file_to_system("/tmp/firmware.bin", content)
     end
 
     send_success()
@@ -510,6 +516,21 @@ local function handle_reset(args)
     end
 end
 
+-- 处理 /action_upgrade.cgi (固件升级)
+local function handle_upgrade(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_upgrade triggered")
+    local reset_factory = tonumber(args.reset_factory) or 0
+    
+    -- 调用 ubus 触发升级
+    local success, msg = ubus_adapter.upgrade_firmware(reset_factory)
+    
+    if success then
+        send_success()
+    else
+        send_error(msg or "Failed to start upgrade")
+    end
+end
+
 -- ==========================================================
 -- 3. 主路由入口
 -- ==========================================================
@@ -550,6 +571,9 @@ elseif uri == "/action_time.cgi" then
 
 elseif uri == "/action_reset.cgi" then
     handle_reset(args)
+
+elseif uri == "/action_upgrade.cgi" then
+    handle_upgrade(args)
 
 -- 匹配 /upload/ 开头的 URI
 elseif string.sub(uri, 1, 8) == "/upload/" then

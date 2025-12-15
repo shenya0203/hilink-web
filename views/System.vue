@@ -222,6 +222,41 @@
         </div>
       </div>
     </div>
+
+    <!-- 升级确认弹窗 -->
+    <div v-if="showUpgradeConfirmModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>192.168.18.254</h3></div>
+        <div class="modal-body">
+          <p>{{ t('system.confirmUpgrade') }} {{ t('system.dontPowerOff') }}</p>
+          <div class="checkbox-group" style="margin: 15px 0;">
+            <label>
+              <input type="checkbox" v-model="upgradeResetFactory"> {{ t('system.factoryReset') }}
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-restart" @click="executeUpgrade">{{ t('common.confirm') }}</button>
+            <button class="btn-continue" @click="showUpgradeConfirmModal = false">{{ t('common.cancel') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 升级进度弹窗 -->
+    <div v-if="isUpgrading" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.firmwareUpgrade') }}</h3></div>
+        <div class="modal-body">
+          <p>{{ upgradeStatus }}</p>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" :style="{ width: upgradeProgress + '%' }">
+              <span class="progress-text">{{ upgradeProgress }}%</span>
+            </div>
+          </div>
+          <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -238,6 +273,8 @@ const loading = ref(true)
 const error = ref(null)
 const activeTab = ref(0)
 const showRestartModal = ref(false)
+const showUpgradeConfirmModal = ref(false)
+const upgradeResetFactory = ref(false)
 
 // misc 配置数据
 const miscConfig = ref({
@@ -457,18 +494,28 @@ const setManualTime = async () => {
   }
 }
 
+// 升级状态
+const isUpgrading = ref(false)
+const upgradeProgress = ref(0)
+const upgradeStatus = ref('')
+
 // 固件升级
-const upgradeFirmware = async () => {
+// 固件升级
+const upgradeFirmware = () => {
   if (!firmwareFile.value) {
     alert(t('common.selectFile'))
     return
   }
+  showUpgradeConfirmModal.value = true
+  upgradeResetFactory.value = false
+}
 
-  if (!confirm(t('system.confirmUpgrade'))) {
-    return
-  }
-
+const executeUpgrade = async () => {
+  showUpgradeConfirmModal.value = false
+  
   try {
+    loading.value = true
+    // 1. 上传固件
     const formData = new FormData()
     formData.append('firmware', firmwareFile.value)
     
@@ -479,11 +526,90 @@ const upgradeFirmware = async () => {
       timeout: 300000 // 5分钟超时
     })
     
-    alert(t('system.upgradeSuccess'))
-    firmwareFile.value = null
+    // 2. 触发升级
+    await apiClient.get('/action_upgrade.cgi', {
+      params: {
+        reset_factory: upgradeResetFactory.value ? 1 : 0
+      }
+    })
+    
+    // 3. 进入升级流程
+    loading.value = false
+    isUpgrading.value = true
+    upgradeProgress.value = 0
+    upgradeStatus.value = t('system.upgrading') // "正在升级中..."
+    
+    startUpgradeProcess()
+    
   } catch (err) {
+    loading.value = false
     console.error('固件升级失败:', err)
     alert(t('system.upgradeFailed') + ': ' + err.message)
+  }
+}
+
+// 升级流程控制
+const startUpgradeProcess = () => {
+  let progress = 0
+  const totalTime = 180 // 180秒超时
+  const intervalTime = 100 // 100ms更新一次
+  const steps = totalTime * 1000 / intervalTime
+  let currentStep = 0
+  
+  const timer = setInterval(() => {
+    currentStep++
+    progress = Math.floor((currentStep / steps) * 100)
+    
+    // 限制进度条最大值，最后由ping成功来完成
+    if (progress > 99) progress = 99
+    
+    upgradeProgress.value = progress
+    
+    // 进度超过50%开始探测
+    if (progress >= 50) {
+      checkDeviceOnline()
+    }
+    
+    // 超时处理
+    if (currentStep >= steps) {
+      clearInterval(timer)
+      isUpgrading.value = false
+      alert(t('system.upgradeTimeout'))
+      window.location.reload()
+    }
+  }, intervalTime)
+  
+  // 保存定时器ID以便清理（虽然这里简化了没存到ref，但在组件销毁时应该清理，这里简单处理）
+}
+
+// 检测设备是否在线
+let isChecking = false
+const checkDeviceOnline = async () => {
+  if (isChecking) return
+  isChecking = true
+  
+  try {
+    // 尝试请求一个静态资源或API，设置较短超时
+    await fetch('/favicon.ico?' + new Date().getTime(), { 
+      method: 'HEAD',
+      cache: 'no-store',
+      mode: 'no-cors', // 允许跨域（虽然是同源）
+      signal: AbortSignal.timeout(2000) // 2秒超时
+    })
+    
+    // 如果成功返回，说明设备已重启完成
+    upgradeProgress.value = 100
+    upgradeStatus.value = t('system.upgradeComplete')
+    
+    setTimeout(() => {
+      alert(t('system.upgradeComplete'))
+      window.location.reload()
+    }, 1000)
+    
+  } catch (e) {
+    // 失败则继续等待，由主定时器控制循环
+  } finally {
+    isChecking = false
   }
 }
 
@@ -797,6 +923,37 @@ onUnmounted(() => {
   text-align: right;
   flex-shrink: 0;
   font-size: 13px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 20px;
+  background-color: #f0f0f0;
+  border-radius: 10px;
+  margin: 15px 0;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: #0066cc;
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-text {
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.warning-text {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 10px;
+  text-align: center;
 }
 
 .form-group input[type="text"],

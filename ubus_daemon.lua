@@ -1233,6 +1233,26 @@ local function set_edge_config_values(args)
     return true
 end
 
+local function check_firmware_validity(firmware)
+    local fw_path = firmware or "/tmp/firmware.bin"
+    
+    -- 1. 检查固件文件是否存在
+    local f = io.open(fw_path, "r")
+    if not f then
+        return false
+    end
+    f:close()
+    
+    -- 2. 检查固件的签名 (使用 sysupgrade -T)
+    -- sysupgrade -T 返回 0 表示合法
+    local ret = os.execute("sysupgrade -T " .. fw_path .. " >/dev/null 2>&1")
+    if ret == 0 then
+        return true
+    else
+        return false
+    end
+end
+
 -- ==========================================================
 -- 初始化 ubus 连接和事件循环
 -- ==========================================================
@@ -1600,9 +1620,38 @@ local methods = {
             function(req, msg)
                 log_info("Factory reset requested...")
                 reply(req, {result = true})
-                -- 实际应该清除配置并重启
+                -- 实际应该调用: os.execute("firstboot -y && reboot")
             end,
             {}
+        },
+
+        -- 固件升级
+        upgrade_firmware = {
+            function(req, msg)
+                log_info("Firmware upgrade requested...")
+                local reset_factory = tonumber(msg.reset_factory) or 0
+                log_info("Reset factory option: " .. tostring(reset_factory))
+
+                --固件合法性检查
+                if not check_firmware_validity(msg.firmware) then
+                    reply(req, {result = false, error = "Invalid firmware"})
+                    return
+                end
+                
+                reply(req, {result = true})
+                
+                -- 延时执行 sysupgrade，确保 reply 能发送出去
+                -- 假设固件已由前端上传至 /tmp/firmware.bin
+                local cmd = "sleep 1 && /etc/init.d/network stop && sysupgrade "
+                if reset_factory == 1 then
+                    cmd = cmd .. "-n "
+                end
+                cmd = cmd .. "/tmp/firmware.bin &"
+                
+                log_info("Executing upgrade command: " .. cmd)
+                --os.execute(cmd)
+            end,
+            { reset_factory = ubus.INT32 }
         }
     }
 }

@@ -682,4 +682,15 @@ function _M.set_edge_proto_access_csv(content)
     return true
 end
 
+-- 18. Upgrade Firmware
+function _M.upgrade_firmware(reset_factory)
+    ngx.log(ngx.INFO, "Triggering firmware upgrade via ubus... reset_factory=" .. tostring(reset_factory))
+    local result = ubus_call("hilink", "upgrade_firmware", { reset_factory = reset_factory })
+    if result and result.result then
+        return true
+    else
+        return false, (result and result.error) or "Unknown error"
+    end
+end
+
 return _M

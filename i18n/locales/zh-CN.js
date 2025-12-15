@@ -459,7 +459,7 @@ export default {
         importSuccess: '参数导入成功',
         importFailed: '参数导入失败',
         configFormatError: '配置文件格式错误',
-        syncSuccess: '时间同步成功',
+        syncSuccess: '校时成功!',
         syncFailed: '时间同步失败',
         timeSetSuccess: '时间设置成功',
         timeSetFailed: '时间设置失败',
@@ -475,7 +475,11 @@ export default {
         saveTimeSuccess: '时间配置保存成功',
         saveDeviceSuccess: '设备配置保存成功',
         restartRequired: '系统配置需要重启设备才能生效。',
-        continueConfig: '继续配置'
+        continueConfig: '继续配置',
+        upgrading: '正在升级中...',
+        upgradeTimeout: '升级超时，请手动刷新页面',
+        dontPowerOff: '升级过程中请勿断电或关闭页面',
+        upgradeComplete: '升级成功，正在刷新...'
     },
 
     // 网络配置页面
