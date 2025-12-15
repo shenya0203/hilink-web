@@ -479,6 +479,7 @@ export default {
         upgrading: '正在升级中...',
         upgradeTimeout: '升级超时，请手动刷新页面',
         dontPowerOff: '升级过程中请勿断电或关闭页面',
+        uploading: '固件正在上传中...',
         upgradeComplete: '升级成功，正在刷新...'
     },
 

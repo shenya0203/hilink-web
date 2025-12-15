@@ -257,6 +257,18 @@
         </div>
       </div>
     </div>
+
+    <!-- 上传中弹窗 -->
+    <div v-if="isUploading" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.firmwareUpgrade') }}</h3></div>
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('system.uploading') }}</p>
+          <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -496,6 +508,7 @@ const setManualTime = async () => {
 
 // 升级状态
 const isUpgrading = ref(false)
+const isUploading = ref(false)
 const upgradeProgress = ref(0)
 const upgradeStatus = ref('')
 
@@ -514,7 +527,7 @@ const executeUpgrade = async () => {
   showUpgradeConfirmModal.value = false
   
   try {
-    loading.value = true
+    isUploading.value = true
     // 1. 上传固件
     const formData = new FormData()
     formData.append('firmware', firmwareFile.value)
@@ -534,7 +547,7 @@ const executeUpgrade = async () => {
     })
     
     // 3. 进入升级流程
-    loading.value = false
+    isUploading.value = false
     isUpgrading.value = true
     upgradeProgress.value = 0
     upgradeStatus.value = t('system.upgrading') // "正在升级中..."
@@ -542,7 +555,7 @@ const executeUpgrade = async () => {
     startUpgradeProcess()
     
   } catch (err) {
-    loading.value = false
+    isUploading.value = false
     console.error('固件升级失败:', err)
     alert(t('system.upgradeFailed') + ': ' + err.message)
   }
@@ -551,7 +564,7 @@ const executeUpgrade = async () => {
 // 升级流程控制
 const startUpgradeProcess = () => {
   let progress = 0
-  const totalTime = 180 // 180秒超时
+  const totalTime = 300 // 180秒超时
   const intervalTime = 100 // 100ms更新一次
   const steps = totalTime * 1000 / intervalTime
   let currentStep = 0
@@ -1197,5 +1210,20 @@ onUnmounted(() => {
   border-radius: 4px;
   margin-bottom: 20px;
   font-size: 13px;
+}
+
+.loading-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0066cc;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
