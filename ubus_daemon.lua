@@ -1096,8 +1096,8 @@ local function sync_nginx_settings()
     end
     
     misc_config.web_port = nginx_conf.port
-    misc_config.web_user = nginx_conf.user
-    misc_config.web_psw = nginx_conf.pass
+    misc_config.web_user = nginx_conf.user or "admin"
+    misc_config.web_psw = nginx_conf.pass or "admin"
     misc_config.timing_reset = {
         enable = timing_reset_conf.enable,
         hh = timing_reset_conf.hh,
