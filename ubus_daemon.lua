@@ -532,14 +532,14 @@ local status_data = {
 local network_status = {
     netdev = "EtherNET",
     eth = {
-        link_sta = 1, ip_mode = 0, ip = "192.168.2.177",
-        dns = "223.5.5.5", sdns = "223.6.6.6", netmask = "255.255.255.0"
+        link_sta = 0, ip_mode = 0, ip = "",
+        dns = "", sdns = "", netmask = ""
     },
     lte = {
-        ver = "16009.1037.00.01.53.05", iccid = "89861125204091384377",
-        imei = "868892078327435", csq = 21, mode = "4G", oper = 1, sim = 1,
-        cimi = "460113957693001", lte_sta = "Connected", lte_ip = "10.42.78.154",
-        lte_netmask = "255.255.255.255", lte_dns = "202.96.128.86", lte_sdns = "202.96.134.133"
+        ver = "", iccid = "",
+        imei = "", csq = 21, mode = "4G", oper = 1, sim = 1,
+        cimi = "", lte_sta = "DisConnect", lte_ip = "",
+        lte_netmask = "", lte_dns = "", lte_sdns = ""
     }
 }
 
@@ -1030,8 +1030,8 @@ misc_config = {
     websock_port = 6432,
     websocket_point = 9,
     web_port = 80,         -- 默认值，启动时会被 sync_nginx_settings 覆盖
-    web_user = "admin",    -- 默认值
-    web_psw = "admin",     -- 默认值
+    web_user = "",    -- 默认值
+    web_psw = "",     -- 默认值
     cache_buf = 0,
     reset_time = 0,
     telnet_en = 0,
@@ -1056,6 +1056,23 @@ misc_config = {
     }
 }
 
+local function load_timing_reset_config_from_uci()
+    local cursor = uci_lib.cursor()
+    local enable = cursor:get("system", "auto_reboot", "enable")
+    local hh = cursor:get("system", "auto_reboot", "hh")
+    local mm = cursor:get("system", "auto_reboot", "mm")
+    local ss = cursor:get("system", "auto_reboot", "ss")
+
+    local reset_cfg = {
+        enable = enable or 0,
+        hh = hh or 0,
+        mm = mm or 0,
+        ss = ss or 0
+    }
+    return reset_cfg
+end
+
+
 -- ==========================================================
 -- 2. 辅助函数：启动时同步 Nginx 真实配置 (可选，但推荐)
 -- ==========================================================
@@ -1063,7 +1080,8 @@ local function sync_nginx_settings()
     -- Load initial config from UCI to memory
     local sys_conf = load_system_config_from_uci()
     local nginx_conf = load_nginx_config_from_uci()
-    
+    local timing_reset_conf = load_timing_reset_config_from_uci()
+
     if not misc_config then misc_config = {} end
     
     -- Update misc_config with loaded values
@@ -1080,6 +1098,80 @@ local function sync_nginx_settings()
     misc_config.web_port = nginx_conf.port
     misc_config.web_user = nginx_conf.user
     misc_config.web_psw = nginx_conf.pass
+    misc_config.timing_reset = {
+        enable = timing_reset_conf.enable,
+        hh = timing_reset_conf.hh,
+        mm = timing_reset_conf.mm,
+        ss = timing_reset_conf.ss
+    }
+
+end
+
+-- ==========================================================
+-- 新增辅助函数：设置定时重启任务 (直接操作 crontab)
+-- ==========================================================
+local function apply_cron_reboot(enable, hh, mm)
+    local cron_file = "/etc/crontabs/root"
+    local id_tag = "# HLK_AUTO_REBOOT_TASK" -- 唯一标记，用于识别本程序的任务
+    local lines = {}
+    log_info("apply cron reboot ")
+    
+    -- 1. 读取现有的 crontab 内容
+    local f = io.open(cron_file, "r")
+    if f then
+        for line in f:lines() do
+            -- 如果这行不包含我们的标记，就保留它（防止覆盖系统或其他程序的任务）
+            if not string.find(line, id_tag, 1, true) then
+                table.insert(lines, line)
+            end
+        end
+        f:close()
+    end
+
+    -- 2. 如果开启了定时重启，添加新任务
+    -- Cron 格式: 分 时 日 月 周 命令
+    -- 注意: Cron 不支持“秒”，所以我们忽略 UI 传来的秒，或者默认为0
+    if tonumber(enable) == 1 then
+        hh = tonumber(hh) or 0
+        mm = tonumber(mm) or 0
+        -- 生成命令: 每天 hh:mm 执行重启
+        local cmd = string.format("%d %d * * * /sbin/reboot %s", mm, hh, id_tag)
+        table.insert(lines, cmd)
+        log_info("Scheduled reboot added: " .. cmd)
+    else
+        log_info("Scheduled reboot disabled")
+    end
+
+    -- 3. 写回文件
+    f = io.open(cron_file, "w")
+    if f then
+        for _, line in ipairs(lines) do
+            f:write(line .. "\n")
+        end
+        f:close()
+        
+        -- 4. 重启 cron 服务使配置生效
+        os.execute("/etc/init.d/cron restart")
+        return true
+    else
+        log_error("Failed to write to crontab")
+        return false
+    end
+end
+
+-- ==========================================================
+-- 新增辅助函数：保存定时配置到 UCI (用于断电保存)
+-- ==========================================================
+local function save_reboot_config_to_uci(enable, hh, mm, ss)
+    log_info("save reboot config to uci")
+    local cursor = uci_lib.cursor()
+    -- 我们借用 system 配置文件，创建一个名为 'auto_reboot' 的节点
+    cursor:set("system", "auto_reboot", "reboot")
+    cursor:set("system", "auto_reboot", "enable", tostring(enable))
+    cursor:set("system", "auto_reboot", "hh", tostring(hh))
+    cursor:set("system", "auto_reboot", "mm", tostring(mm))
+    cursor:set("system", "auto_reboot", "ss", tostring(ss))
+    cursor:commit("system")
 end
 
 
@@ -1172,21 +1264,26 @@ function set_misc_config_values(msg)
     -- ============================================================
     -- 4. Update Other Memory Cache (通用兜底更新)
     -- ============================================================
-    for k, v in pairs(msg) do
-        -- 过滤掉 module 参数，且跳过 s_ntp_url[...] 这种扁平 key，
-        -- 因为我们在上面已经处理并生成标准的 ntp_url 数组了，避免污染 misc_config
-        if k ~= "module" and not string.find(k, "s_ntp_url%[") then
-            -- Handle nested timing_reset
-            if k == "timing_reset" and type(v) == "table" then
-                if not misc_config.timing_reset then misc_config.timing_reset = {} end
-                for tk, tv in pairs(v) do
-                    misc_config.timing_reset[tk] = tv
-                end
-            else
-                misc_config[k] = v
-            end
-        end
+    log_info("update other memory cache: "..cjson.encode(msg))
+    --{"n_timing_reset.mm":"0","file":"misc","n_timing_reset.hh":"5","n_timing_reset.enable":"1","n_timing_reset.ss":"0"}
+    --解析 定时配置参数
+    if msg["n_timing_reset.enable"] ~= nil then
+        if msg["n_timing_reset.enable"] then misc_config.timing_reset.enable = tonumber(msg["n_timing_reset.enable"]) end
+        if msg["n_timing_reset.hh"]     then misc_config.timing_reset.hh     = tonumber(msg["n_timing_reset.hh"]) end
+        if msg["n_timing_reset.mm"]     then misc_config.timing_reset.mm     = tonumber(msg["n_timing_reset.mm"]) end
+        if msg["n_timing_reset.ss"]     then misc_config.timing_reset.ss     = tonumber(msg["n_timing_reset.ss"]) end
+        local en = msg["n_timing_reset.enable"] or 0
+        local hh = msg["n_timing_reset.hh"]     or 0
+        local mm = msg["n_timing_reset.mm"]     or 0
+        local ss = msg["n_timing_reset.ss"]     or 0
+
+        -- B. 保存到 UCI (实现掉电保存)
+        save_reboot_config_to_uci(en, hh, mm, ss)
+
+        -- A. 应用到系统 Cron (实现功能)
+        apply_cron_reboot(en, hh, mm)
     end
+
 
     return true
 end
@@ -1450,7 +1547,7 @@ local methods = {
                     os.execute(cmd)
                     
                     -- 同步到硬件时钟 (可选)
-                    os.execute("hwclock -w")
+                    --os.execute("hwclock -w")
                     
                     reply(req, {result = true})
                 else
@@ -1621,6 +1718,7 @@ local methods = {
                 log_info("Factory reset requested...")
                 reply(req, {result = true})
                 -- 实际应该调用: os.execute("firstboot -y && reboot")
+                os.execute("sleep 1;/etc/init.d/network stop;umount /dev/mtdblock6;firstboot -y ; reboot")
             end,
             {}
         },
@@ -1642,14 +1740,14 @@ local methods = {
                 
                 -- 延时执行 sysupgrade，确保 reply 能发送出去
                 -- 假设固件已由前端上传至 /tmp/firmware.bin
-                local cmd = "sleep 1 && /etc/init.d/network stop && sysupgrade "
+                local cmd = "(sleep 2;/etc/init.d/network stop;/etc/init.d/cron stop;sysupgrade "
                 if reset_factory == 1 then
                     cmd = cmd .. "-n "
                 end
-                cmd = cmd .. "/tmp/firmware.bin &"
+                cmd = cmd .. "/tmp/firmware.bin ) &"
                 
                 log_info("Executing upgrade command: " .. cmd)
-                --os.execute(cmd)
+                os.execute(cmd)
             end,
             { reset_factory = ubus.INT32 }
         }

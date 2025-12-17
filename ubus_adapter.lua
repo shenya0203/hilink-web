@@ -79,34 +79,133 @@ end
 
 -- 2. Network Status Data
 function _M.get_network_status()
-    -- 
-
-    return {
+    local net_status = {
         netdev = "EtherNET",
         eth = {
-            link_sta = 1, 
+            link_sta = 0, 
             ip_mode = 0, 
-            ip = "192.168.2.177",
-            dns = "223.5.5.5", 
-            sdns = "223.6.6.6", 
-            netmask = "255.255.255.0"
+            ip = "",
+            dns = "", 
+            sdns = "", 
+            netmask = ""
         },
         lte = {
-            ver = "16009.1037.00.01.53.05", 
-            iccid = "89861125204091384377",
-            imei = "868892078327435", 
-            csq = 21, 
-            mode = "4G", 
-            oper = 1, 
+            ver = "", 
+            iccid = "",
+            imei = "", 
+            csq = 0, 
+            mode = "", 
+            oper = "", 
             sim = 1,
-            cimi = "460113957693001", 
-            lte_sta = "Connected", 
-            lte_ip = "10.42.78.154",
-            lte_netmask = "255.255.255.255", 
-            lte_dns = "202.96.128.86", 
-            lte_sdns = "202.96.134.133"
+            cimi = "", 
+            lte_sta = "Disconnected",
+            lte_ip = "",
+            lte_netmask = "",
+            lte_dns = "", 
+            lte_sdns = ""
         }
     }
+
+    -- 1. ETH IP Mode
+    local wan_proto = get_uci("network.wan.proto")
+    if wan_proto == "dhcp" then
+        net_status.eth.ip_mode = 1
+    else
+        net_status.eth.ip_mode = 0
+    end
+
+    -- 2. Network Params via Ubus
+    local wan_status = ubus_call("network.interface.wan", "status", {})
+    if wan_status then
+        if wan_status["ipv4-address"] and #wan_status["ipv4-address"] > 0 then
+            net_status.eth.ip = wan_status["ipv4-address"][1].address
+            local mask = wan_status["ipv4-address"][1].mask
+            if type(mask) == "number" then
+                local m = math.floor(2^(32) - 2^(32-mask))
+                net_status.eth.netmask = string.format("%d.%d.%d.%d",
+                    math.floor(m / 2^24) % 256,
+                    math.floor(m / 2^16) % 256,
+                    math.floor(m / 2^8) % 256,
+                    m % 256)
+            else
+                net_status.eth.netmask = mask
+            end
+        end
+        if wan_status["dns-server"] then
+            net_status.eth.dns = wan_status["dns-server"][1] or ""
+            net_status.eth.sdns = wan_status["dns-server"][2] or ""
+        end
+    end
+
+    -- 3. LTE Info from /tmp/modem_info.json
+    local modem_info_str = read_file("/tmp/modem_info.json")
+    if modem_info_str then
+        local ok, info = pcall(cjson.decode, modem_info_str)
+        if ok then
+            net_status.lte.iccid = info.iccid
+            net_status.lte.imei = info.imei
+            net_status.lte.cimi = info.cimi
+            net_status.lte.mode = info.network_type
+            net_status.lte.oper = info.sim_operator
+            net_status.lte.lte_ip = info.local_ip
+            net_status.lte.lte_sta = info.connection_status
+
+            if info.signal_value then
+                local dbm = tonumber(string.match(info.signal_value, "([-%d]+)"))
+                if dbm then
+                    local csq = math.floor((dbm + 113) / 2)
+                    if csq < 0 then csq = 0 end
+                    if csq > 31 then csq = 31 end
+                    net_status.lte.csq = csq
+                end
+            end
+        end
+    end
+
+    -- 4. LTE Params via Ubus (Fill gaps)
+    local lte_status = ubus_call("network.interface.lte", "status", {})
+    if lte_status then
+        if lte_status["ipv4-address"] and #lte_status["ipv4-address"] > 0 then
+            if net_status.lte.lte_ip == "" then
+                net_status.lte.lte_ip = lte_status["ipv4-address"][1].address
+            end
+            local mask = lte_status["ipv4-address"][1].mask
+            if type(mask) == "number" then
+                local m = math.floor(2^(32) - 2^(32-mask))
+                net_status.lte.lte_netmask = string.format("%d.%d.%d.%d",
+                    math.floor(m / 2^24) % 256,
+                    math.floor(m / 2^16) % 256,
+                    math.floor(m / 2^8) % 256,
+                    m % 256)
+            else
+                net_status.lte.lte_netmask = mask
+            end
+        end
+        if lte_status["dns-server"] then
+            net_status.lte.lte_dns = lte_status["dns-server"][1] or ""
+            net_status.lte.lte_sdns = lte_status["dns-server"][2] or ""
+        end
+    end
+    
+    -- 5. SIM Num
+    net_status.lte.sim = get_uci("network.lte.modem_simnum") or 1
+
+    -- 6. Connection Status via mwan3
+    local f = io.popen("mwan3 status")
+    if f then
+        local mwan3_out = f:read("*a")
+        f:close()
+        if mwan3_out then
+            if string.find(mwan3_out, "wan is online") then
+                net_status.eth.link_sta = 1
+            end
+            if string.find(mwan3_out, "lte is online") then
+                net_status.lte.lte_sta = "Connected"
+            end
+        end
+    end
+
+    return net_status
 end
 
 -- 3. Network Config Data
@@ -140,7 +239,12 @@ function _M.get_network_config()
     end
 
     local lte_dns = {}
-    local f = io.popen("uci get network.lte.dns 2>/dev/null")
+    local f = nil
+    if lte_dns_enable == 0 then
+        f = io.popen("uci get network.lte.dns 2>/dev/null")
+    else
+        f = io.popen("uci get network.lte._dns 2>/dev/null")
+    end
     if f then
         for line in f:lines() do
             for dns in string.gmatch(line, "%S+") do
@@ -521,11 +625,18 @@ function _M.set_config(module, args)
 
         os.execute("uci set network.lte.modem_auth=" .. lte_auth or 0)
 
+        os.execute("uci delete network.lte.dns")
+        os.execute("uci delete network.lte._dns")
+        if lte_dns_mode == 1 then --自动获取
+            os.execute("uci add_list network.lte._dns=" .. lte_dns or "")   --配置为自动获取时 修改dns的option名称
+            os.execute("uci add_list network.lte._dns=" .. lte_sdns or "") 
+        else
+            os.execute("uci add_list network.lte.dns=" .. lte_dns or "") 
+            os.execute("uci add_list network.lte.dns=" .. lte_sdns or "") 
+        end
+
         os.execute("uci set network.lte.peerdns=" .. lte_dns_mode or 0)
 
-        os.execute("uci delete network.lte.dns")
-        os.execute("uci add_list network.lte.dns=" .. lte_dns or "") 
-        os.execute("uci add_list network.lte.dns=" .. lte_sdns or "") 
 
         if net_select then os.execute("uci set mwan3.globals.net_select=" .. net_select) end
 

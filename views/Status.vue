@@ -110,7 +110,7 @@
             <td>{{ networkInfo.lte?.lte_ip }}</td>
           </tr>
           <tr>
-            <td class="title">{{ t('status.gatewayAddress') }}:</td>
+            <td class="title">{{ t('status.netmask') }}:</td>
             <td>{{ networkInfo.lte?.lte_netmask }}</td>
           </tr>
           <tr>

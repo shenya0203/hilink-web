@@ -1,15 +1,15 @@
 import axios from 'axios'
-import { getBasicAuth } from '../config/auth'
+// import { getBasicAuth } from '../config/auth'
 
 // 获取 Basic Auth 凭证
-const BASIC_AUTH = getBasicAuth()
+// const BASIC_AUTH = getBasicAuth()
 
 // 创建 axios 实例，带有代理配置和 Basic Auth
 const apiClient = axios.create({
     timeout: 5000,
     headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${BASIC_AUTH}`  // 添加 Basic Auth 认证头
+        // 'Authorization': `Basic ${BASIC_AUTH}`  // 移除硬编码的 Basic Auth，生产环境由浏览器自动处理
     }
 })
 

@@ -295,8 +295,8 @@ const miscConfig = ref({
   websock_port: 6432,
   websocket_point: 9,
   web_port: 80,
-  web_user: 'admin',
-  web_psw: 'admin',
+  web_user: '',
+  web_psw: '',
   cache_buf: 0,
   reset_time: 0,
   telnet_en: 0,
@@ -564,7 +564,7 @@ const executeUpgrade = async () => {
 // 升级流程控制
 const startUpgradeProcess = () => {
   let progress = 0
-  const totalTime = 300 // 180秒超时
+  const totalTime = 240 // 180秒超时
   const intervalTime = 100 // 100ms更新一次
   const steps = totalTime * 1000 / intervalTime
   let currentStep = 0

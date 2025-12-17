@@ -90,7 +90,7 @@ export default {
         cimi: 'CIMI',
         signalValue: '信号值',
         signalStrength: '信号强度',
-        gatewayAddress: '网关地址',
+        netmask: '子网掩码',
 
         // 信号强度描述
         signalNone: '无信号',

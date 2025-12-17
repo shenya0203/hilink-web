@@ -6,7 +6,7 @@
 // 设备 IP 地址
 export const DEVICE_IP = '192.168.18.254'
 
-// Basic Auth 认证信息
+// Basic Auth 认证信息 (仅用于开发环境代理，生产环境请勿依赖此配置)
 export const AUTH = {
     username: 'admin',
     password: 'admin'

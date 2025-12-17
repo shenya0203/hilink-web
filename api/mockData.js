@@ -106,25 +106,25 @@ function getDefaultNetworkData() {
         eth: {
             link_sta: 1,
             ip_mode: 0,
-            ip: "192.168.2.177",
-            dns: "223.5.5.5",
-            sdns: "223.6.6.6",
-            netmask: "255.255.255.0"
+            ip: "",
+            dns: "",
+            sdns: "",
+            netmask: ""
         },
         lte: {
-            ver: "16009.1037.00.01.53.05",
-            iccid: "89861125204091384377",
-            imei: "868892078327435",
-            csq: 21,
-            mode: "4G",
+            ver: "",
+            iccid: "",
+            imei: "",
+            csq: -1,
+            mode: "",
             oper: 1,
             sim: 1,
-            cimi: "460113957693001",
-            lte_sta: "Connected",
-            lte_ip: "10.42.78.154",
-            lte_netmask: "255.255.255.255",
-            lte_dns: "202.96.128.86",
-            lte_sdns: "202.96.134.133"
+            cimi: "",
+            lte_sta: "DisConnect",
+            lte_ip: "",
+            lte_netmask: "",
+            lte_dns: "",
+            lte_sdns: ""
         }
     }
 }

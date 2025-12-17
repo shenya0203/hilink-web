@@ -90,7 +90,7 @@ export default {
         cimi: 'CIMI',
         signalValue: 'Signal Value',
         signalStrength: 'Signal Strength',
-        gatewayAddress: 'Gateway Address',
+        netmask: 'NetMask',
 
         // Signal Strength Descriptions
         signalNone: 'No Signal',
