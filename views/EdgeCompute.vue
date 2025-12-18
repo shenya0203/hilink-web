@@ -474,7 +474,7 @@
       <div class="modal" style="min-width: 300px; text-align: center;">
         <h3 style="border: none; margin-bottom: 10px;">{{ t('edge.saveSuccess') }}</h3>
         <div class="modal-buttons">
-          <button class="btn-save" @click="handleReconfigure">{{ t('edge.reconfigure') }}</button>
+          <button class="btn-save" @click="handleRestart">{{ t('system.restart') }}</button>
           <button class="btn-next" @click="handleContinue">{{ t('edge.continueConfig') }}</button>
         </div>
       </div>
@@ -667,6 +667,10 @@
           <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.reportOnChange') }}:</label>
             <input type="checkbox" v-model="pointForm.reportOnChange" />
+          </div>
+          <div class="form-group" v-if="!pointForm.isDefault && pointForm.reportOnChange">
+            <label>{{ t('edge.changeRange') }}:</label>
+            <input v-model.number="pointForm.changeRange" type="number" placeholder="2" />
           </div>
         </div>
         <div class="modal-buttons">
@@ -1400,7 +1404,14 @@ const saveReportData = async () => {
   }
 }
 
-const handleReconfigure = () => {
+const handleRestart = async () => {
+  try {
+    await apiClient.get('/action_restart.cgi')
+    alert(t('system.restartSuccess'))
+  } catch (err) {
+    console.error(err)
+    alert(t('system.restartFailed'))
+  }
   showSuccessModal.value = false
 }
 
@@ -1572,7 +1583,8 @@ const showAddPointModal = () => {
     timeout: 200,
     collectFormula: '',
     controlFormula: '',
-    reportOnChange: false
+    reportOnChange: false,
+    changeRange: 2
   }
   showPointModal.value = true
 }
@@ -1583,7 +1595,7 @@ const editPoint = (index) => {
   const point = currentSlave.value.points[index]
   isEditingPoint.value = true
   editingPointIndex.value = index
-  pointForm.value = { bitIndex: 0, ...point }
+  pointForm.value = { bitIndex: 0, changeRange: 2, ...point }
   showPointModal.value = true
 }
 
@@ -1777,6 +1789,8 @@ const saveCurrentPage = async () => {
       await apiClient.post('/upload/edge', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      showSuccessModal.value = true
+      return
     } else if (activeTab.value === 2) {
       // 保存数据上报配置
       await saveReportData()
@@ -1875,7 +1889,7 @@ const generateCsvContent = () => {
           registerStr = String(point.registerType) + String(point.registerAddress).padStart(5, '0')
         }
 
-        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${registerStr},${bitIndex},0,0,${point.timeout || 200},${report},0,${point.controlFormula || ''},;\n`
+        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${registerStr},${bitIndex},0,0,${point.timeout || 200},${report},${point.changeRange || 2},${point.controlFormula || ''},;\n`
       }
     })
   })
@@ -1971,6 +1985,7 @@ const parseCsvContent = (content) => {
           collectFormula: parts[11] || '',
           timeout: parseInt(parts[16]) || 200,
           reportOnChange: parts[17] === '1',
+          changeRange: parseInt(parts[18]) || 2,
           controlFormula: parts[19] || '',
           value: null,
           isDefault: false
