@@ -336,6 +336,8 @@ export default {
         reportTemplate: 'Report Template',
         reconfigure: 'Reconfigure',
         continueConfig: 'Continue Configuration',
+        selectedPoints: 'Selected Points List',
+        configPoints: 'Config Points',
 
         // New Options
         reportTime: 'Report Time',

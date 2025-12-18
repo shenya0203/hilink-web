@@ -349,24 +349,31 @@
             <select v-model="reportGroupForm.channel">
               <option value="MQTT1">MQTT1</option>
               <option value="MQTT2">MQTT2</option>
+              <option value="SocketA">SocketA</option>
+              <option value="SocketB">SocketB</option>
+              <option value="Cloud">Cloud</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>{{ t('edge.reportTopic') }}:</label>
-            <input v-model="reportGroupForm.topic" type="text" />
-          </div>
-          <div class="form-group">
-            <label>QOS:</label>
-            <select v-model="reportGroupForm.qos">
-              <option value="QOS0">QOS0</option>
-              <option value="QOS1">QOS1</option>
-              <option value="QOS2">QOS2</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>{{ t('edge.messageRetain') }}:</label>
-            <input type="checkbox" v-model="reportGroupForm.retain" />
-          </div>
+          <template v-if="['MQTT1', 'MQTT2'].includes(reportGroupForm.channel)">
+            <div class="form-group">
+              <label>{{ t('edge.reportTopic') }}:</label>
+              <input v-model="reportGroupForm.topic" type="text" />
+            </div>
+            <div class="form-group">
+              <label>QOS:</label>
+              <select v-model="reportGroupForm.qos">
+                <option value="QOS0">QOS0</option>
+                <option value="QOS1">QOS1</option>
+                <option value="QOS2">QOS2</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.messageRetain') }}:</label>
+              <input type="checkbox" v-model="reportGroupForm.retain" />
+            </div>
+          </template>
+          
+
           <div class="form-group">
             <label>{{ t('edge.periodicReport') }}:</label>
             <input type="checkbox" v-model="reportGroupForm.periodic" />
@@ -434,7 +441,19 @@
             <label>{{ t('edge.errorMessage') }}:</label>
             <input v-model="reportGroupForm.errorMsg" type="text" placeholder="error" />
           </div>
-          <div class="form-group" style="align-items: flex-start;">
+          
+          <div class="form-group" v-if="reportGroupForm.channel === 'Cloud'">
+             <label>{{ t('edge.selectedPoints') }}:</label>
+             <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+               <textarea 
+                 v-model="reportGroupForm.selectedPointsText" 
+                 rows="5" 
+                 disabled 
+                 style="width: 100%; padding: 5px; background-color: #f5f5f5; resize: none; cursor: default; color: #666;"
+               ></textarea>
+             </div>
+          </div>
+          <div class="form-group" style="align-items: flex-start;" v-if="reportGroupForm.channel !== 'Cloud'">
             <label style="margin-top: 5px;">{{ t('edge.reportTemplate') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <textarea v-model="reportGroupForm.template" rows="10" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 2px; font-family: monospace;"></textarea>
@@ -445,6 +464,7 @@
         <div class="modal-buttons">
           <button class="btn-save" @click="saveReportGroup">{{ t('edge.save') }}</button>
           <button class="btn-cancel" @click="closeReportGroupModal">{{ t('edge.cancel') }}</button>
+          <button v-if="reportGroupForm.channel === 'Cloud'" class="btn-save" @click="openCloudPointModal">{{ t('edge.configPoints') }}</button>
         </div>
       </div>
     </div>
@@ -756,6 +776,51 @@
         </div>
       </div>
     </div>
+    <!-- Cloud Point Configuration Modal -->
+    <div v-if="showCloudPointModal" class="modal-overlay" @click.self="closeCloudPointModal">
+      <div class="modal" style="max-width: 700px;">
+        <h3>{{ t('edge.configPoints') }}</h3>
+        <div class="modal-form">
+           <div class="form-group">
+             <label>{{ t('edge.slaveSelection') }}:</label>
+             <select v-model="cloudPointForm.slaveId">
+               <option v-for="slave in availableCloudSlaves" :key="slave.id" :value="slave.id">
+                 {{ slave.name }}
+               </option>
+             </select>
+             <input v-model="cloudPointForm.searchQuery" type="text" :placeholder="t('edge.search')" style="margin-left: 10px;" />
+             <button class="btn-outline">{{ t('edge.query') }}</button>
+           </div>
+           
+           <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+             <table>
+               <thead>
+                 <tr>
+                   <th style="width: 50px;">
+                     <!-- Optional: Select All for current view -->
+                   </th>
+                   <th>{{ t('edge.pointName') }}</th>
+                   <th>{{ t('edge.dataType') }}</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 <tr v-for="point in cloudPointList" :key="point.id">
+                   <td>
+                     <input type="checkbox" :checked="isCloudPointSelected(point)" @change="toggleCloudPointSelection(point)" />
+                   </td>
+                   <td>{{ point.name }}</td>
+                   <td>{{ point.dataType }}</td>
+                 </tr>
+               </tbody>
+             </table>
+           </div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-save" @click="saveCloudPoints">{{ t('edge.save') }}</button>
+          <button class="btn-cancel" @click="closeCloudPointModal">{{ t('edge.cancel') }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -854,10 +919,79 @@ const reportGroupForm = ref({
   format: 'Original',
   errorFill: false,
   errorMsg: '',
-  template: ''
+  template: '',
+  selectedPointsText: '' // New field for Cloud points display
 })
 
 const isJsonError = ref(false)
+
+// Cloud Point Configuration
+const showCloudPointModal = ref(false)
+const cloudPointForm = ref({
+  slaveId: '',
+  searchQuery: '',
+  selectedPoints: [] // Array of strings "SlaveName-PointName"
+})
+
+const availableCloudSlaves = computed(() => {
+  return slaveList.value.filter(s => !s.isSystem)
+})
+
+const cloudPointList = computed(() => {
+  if (!cloudPointForm.value.slaveId) return []
+  const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
+  if (!slave) return []
+  
+  let points = slave.points
+  if (cloudPointForm.value.searchQuery) {
+    const q = cloudPointForm.value.searchQuery.toLowerCase()
+    points = points.filter(p => p.name.toLowerCase().includes(q))
+  }
+  return points
+})
+
+const openCloudPointModal = () => {
+  // Initialize with current selection
+  const currentText = reportGroupForm.value.selectedPointsText || ''
+  const currentSelection = currentText ? currentText.split('\n').filter(s => s.trim()) : []
+  
+  const firstSlave = availableCloudSlaves.value.length > 0 ? availableCloudSlaves.value[0].id : ''
+  
+  cloudPointForm.value = {
+    slaveId: firstSlave,
+    searchQuery: '',
+    selectedPoints: [...currentSelection]
+  }
+  showCloudPointModal.value = true
+}
+
+const closeCloudPointModal = () => {
+  showCloudPointModal.value = false
+}
+
+const isCloudPointSelected = (point) => {
+  const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
+  if (!slave) return false
+  const key = `${slave.name}-${point.name}`
+  return cloudPointForm.value.selectedPoints.includes(key)
+}
+
+const toggleCloudPointSelection = (point) => {
+  const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
+  if (!slave) return
+  const key = `${slave.name}-${point.name}`
+  const idx = cloudPointForm.value.selectedPoints.indexOf(key)
+  if (idx >= 0) {
+    cloudPointForm.value.selectedPoints.splice(idx, 1)
+  } else {
+    cloudPointForm.value.selectedPoints.push(key)
+  }
+}
+
+const saveCloudPoints = () => {
+  reportGroupForm.value.selectedPointsText = cloudPointForm.value.selectedPoints.join('\n')
+  closeCloudPointModal()
+}
 
 // Time selection parts
 const timeParts = ref({ h: '00', m: '00', s: '00' })
@@ -1127,7 +1261,9 @@ const showAddReportGroupModal = () => {
     format: 'Original',
     errorFill: false,
     errorMsg: '',
-    template: '{\n  "device01": {\n    "node0101": "node0101",\n    "node0102": "node0102"\n  },\n  "time": "sys_local_time"\n}'
+    errorMsg: '',
+    template: '{\n  "device01": {\n    "node0101": "node0101",\n    "node0102": "node0102"\n  },\n  "time": "sys_local_time"\n}',
+    selectedPointsText: ''
   }
   showReportGroupModal.value = true
   isJsonError.value = false
@@ -1182,12 +1318,33 @@ const saveReportData = async () => {
   const groupConfig = {
     group: reportGroups.value.map(g => {
       const isCloud = g.channel === 'Cloud'
+      
+      // Construct ucld_node for Cloud
+      let ucldNode = []
+      if (isCloud && g.selectedPointsText) {
+        const lines = g.selectedPointsText.split('\n').filter(l => l.trim())
+        const map = {}
+        lines.forEach(line => {
+          const parts = line.split('-')
+          if (parts.length >= 2) {
+            const slaveName = parts[0]
+            const nodeName = parts.slice(1).join('-') // In case node name has hyphen
+            if (!map[slaveName]) map[slaveName] = []
+            map[slaveName].push(nodeName)
+          }
+        })
+        ucldNode = Object.keys(map).map(slaveName => ({
+          slave_name: slaveName,
+          node_list: map[slaveName]
+        }))
+      }
+
       return {
         name: g.name,
         link: g.channel,
-        topic: g.topic,
-        qos: g.qos === 'QOS0' ? 0 : (g.qos === 'QOS1' ? 1 : 2),
-        retention: g.retain ? 1 : 0,
+        topic: g.topic, // Keep value even if hidden
+        qos: g.qos === 'QOS0' ? 0 : (g.qos === 'QOS1' ? 1 : 2), // Keep value
+        retention: g.retain ? 1 : 0, // Keep value
         cond: {
           period: g.periodic ? g.periodicInterval : 0,
           timed: {
@@ -1202,30 +1359,45 @@ const saveReportData = async () => {
         err_info: g.errorMsg,
         tmpl_file: isCloud ? "" : `/template/${g.name}.json`,
         fkey_md5: "00000000000000000000000000000000",
-        ucld_node: []
+        ucld_node: ucldNode
         // tmpl_cont excluded for save
       }
     })
   }
   
+  // Request 1: POST /upload/nv1
   await apiClient.post('/upload/nv1', JSON.stringify(groupConfig), {
     headers: { 'Content-Type': 'application/json' }
   })
   
-  // 2. Save Templates (report_template.json)
+  // Request 2: POST /upload/nv2 (Only if nv1 succeeds)
+  // Payload: name="c", filename="edge_report", content=JSON string
+  const formDataNv2 = new FormData()
+  // Create a blob from the JSON string
+  const jsonBlob = new Blob([JSON.stringify(groupConfig)], { type: 'application/octet-stream' })
+  formDataNv2.append('c', jsonBlob, 'edge_report')
+  
+  await apiClient.post('/upload/nv2', formDataNv2, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+
+  // 3. Save Templates (report_template.json) - Only for non-Cloud groups or if needed
   // Format: GroupName:{...}\nGroupName:{...}
   let templateContent = ''
   reportGroups.value.forEach((g) => {
-    templateContent += `${g.name}:${g.template}\n`
+    if (g.channel !== 'Cloud') {
+       templateContent += `${g.name}:${g.template}\n`
+    }
   })
   
-  const formData = new FormData()
-  // filename="report" as per user request
-  formData.append('c', new Blob([templateContent]), 'report')
-  
-  await apiClient.post('/upload/template', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  if (templateContent) {
+    const formData = new FormData()
+    formData.append('c', new Blob([templateContent]), 'report')
+    
+    await apiClient.post('/upload/template', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
 }
 
 const handleReconfigure = () => {
@@ -1546,7 +1718,10 @@ const importReportJson = () => {
             format: (g.data_report_type === 0 || g.format === 'Original') ? 'Original' : 'JSON',
             errorFill: g.err_enable === 1 || g.errorFill === 1,
             errorMsg: g.err_info || g.errorMsg || '',
-            template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : (g.template || '')
+            template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : (g.template || ''),
+            selectedPointsText: (g.ucld_node && Array.isArray(g.ucld_node)) 
+              ? g.ucld_node.flatMap(node => node.node_list.map(n => `${node.slave_name}-${n}`)).join('\n') 
+              : ''
           }
         })
         
@@ -2271,7 +2446,10 @@ const loadData = async () => {
           format: (g.data_report_type === 0 || g.format === 'Original') ? 'Original' : 'JSON',
           errorFill: g.err_enable === 1 || g.errorFill === 1,
           errorMsg: g.err_info || g.errorMsg || '',
-          template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : tmplContent
+          template: g.tmpl_cont ? JSON.stringify(g.tmpl_cont, null, 2) : tmplContent,
+          selectedPointsText: (g.ucld_node && Array.isArray(g.ucld_node)) 
+              ? g.ucld_node.flatMap(node => node.node_list.map(n => `${node.slave_name}-${n}`)).join('\n') 
+              : ''
         }
       })
     } else {

@@ -341,6 +341,8 @@ export default {
         reportTemplate: '上报模板',
         reconfigure: '重新配置',
         continueConfig: '继续配置',
+        selectedPoints: '已选择点位列表',
+        configPoints: '配置点',
 
         // 新增选项
         reportTime: '上报时间',
