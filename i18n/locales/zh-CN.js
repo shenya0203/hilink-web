@@ -336,6 +336,7 @@ export default {
         reportPeriod: '上报周期',
         reportDataFormat: '上报数据格式',
         originalType: '原类型',
+        stringType: "字符串",
         errorFill: '错误填充',
         errorMessage: '错误信息',
         reportTemplate: '上报模板',
@@ -397,7 +398,8 @@ export default {
         addPoint: '添加点位',
         seq: '序号',
         confirm: '确认',
-        add: '添加'
+        add: '添加',
+        nameExists: '名称已存在'
     },
 
     // 系统设置页面

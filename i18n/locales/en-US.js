@@ -331,6 +331,7 @@ export default {
         reportPeriod: 'Report Period',
         reportDataFormat: 'Report Data Format',
         originalType: 'Original Type',
+        stringType: "String",
         errorFill: 'Error Fill',
         errorMessage: 'Error Message',
         reportTemplate: 'Report Template',
@@ -384,7 +385,8 @@ export default {
         addPoint: 'Add Point',
         seq: 'Seq',
         confirm: 'Confirm',
-        add: 'Add'
+        add: 'Add',
+        nameExists: 'Name already exists'
     },
 
     // System Settings Page

@@ -430,7 +430,7 @@
             <label>{{ t('edge.reportDataFormat') }}:</label>
             <select v-model="reportGroupForm.format">
               <option value="Original">{{ t('edge.originalType') }}</option>
-              <option value="JSON">JSON</option>
+              <option value="String">{{ t('edge.stringType') }}</option>
             </select>
           </div>
           <div class="form-group">
@@ -540,9 +540,17 @@
       <div class="modal">
         <h3>{{ isEditingSlave ? t('edge.editSlaveTitle') : t('edge.addSlaveTitle') }}</h3>
         <div class="modal-form">
-          <div class="form-group">
-            <label>{{ t('edge.name') }}:</label>
-            <input v-model="slaveForm.name" type="text" placeholder="Device1" />
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.name') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="slaveForm.name" 
+                type="text" 
+                placeholder="Device1" 
+                :style="{ color: slaveNameError ? 'red' : '', borderColor: slaveNameError ? 'red' : '' }"
+              />
+              <span v-if="slaveNameError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveNameError }}</span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('edge.detail') }}:</label>
@@ -596,7 +604,14 @@
           </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="saveSlave">{{ t('edge.save') }}</button>
+          <button 
+            class="btn-save" 
+            @click="saveSlave"
+            :disabled="!!slaveNameError"
+            :style="{ backgroundColor: slaveNameError ? '#ccc' : '', cursor: slaveNameError ? 'not-allowed' : 'pointer', opacity: slaveNameError ? 0.6 : 1 }"
+          >
+            {{ t('edge.save') }}
+          </button>
           <button class="btn-cancel" @click="closeSlaveModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
@@ -607,9 +622,18 @@
       <div class="modal">
         <h3>{{ isEditingPoint ? t('edge.editPointTitle') : t('edge.addPointTitle') }}</h3>
         <div class="modal-form">
-          <div class="form-group">
-            <label>{{ t('edge.name') }}:</label>
-            <input v-model="pointForm.name" type="text" placeholder="node0101" :disabled="pointForm.isDefault" />
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.name') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="pointForm.name" 
+                type="text" 
+                placeholder="node0101" 
+                :disabled="pointForm.isDefault" 
+                :style="{ color: pointNameError ? 'red' : '', borderColor: pointNameError ? 'red' : '' }"
+              />
+              <span v-if="pointNameError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointNameError }}</span>
+            </div>
           </div>
           <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.detail') }}:</label>
@@ -674,7 +698,14 @@
           </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="savePoint">{{ t('edge.save') }}</button>
+          <button 
+            class="btn-save" 
+            @click="savePoint"
+            :disabled="!!pointNameError"
+            :style="{ backgroundColor: pointNameError ? '#ccc' : '', cursor: pointNameError ? 'not-allowed' : 'pointer', opacity: pointNameError ? 0.6 : 1 }"
+          >
+            {{ t('edge.save') }}
+          </button>
           <button class="btn-cancel" @click="closePointModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
@@ -1198,6 +1229,39 @@ const availableDataTypes = computed(() => {
   return ['Bool']
 })
 
+// 计算属性：数据点名称校验
+const pointNameError = computed(() => {
+  if (!pointForm.value.name) return null
+  const name = pointForm.value.name.trim()
+  
+  if (!currentSlave.value) return null
+  
+  // Check for duplicates in current slave's points
+  const duplicate = currentSlave.value.points.some((point, index) => {
+    // Skip the point being edited
+    if (isEditingPoint.value && index === editingPointIndex.value) return false
+    return point.name === name
+  })
+  
+  return duplicate ? t('edge.nameExists') : null
+})
+
+// 计算属性：从机名称校验
+const slaveNameError = computed(() => {
+  if (!slaveForm.value.name) return null
+  const name = slaveForm.value.name.trim()
+  
+  // Check for duplicates
+  const duplicate = slaveList.value.some((slave, index) => {
+    // Skip system slave if needed (though system usually has distinct name)
+    // Skip the slave being edited
+    if (isEditingSlave.value && index === editingSlaveIndex.value) return false
+    return slave.name === name
+  })
+  
+  return duplicate ? t('edge.nameExists') : null
+})
+
 // 计算属性：生成寄存器地址显示
 const computedRegisterAddress = computed(() => {
   const type = pointForm.value.registerType
@@ -1482,8 +1546,17 @@ const exportCsv = async () => {
 const showAddSlaveModal = () => {
   isEditingSlave.value = false
   editingSlaveIndex.value = -1
+  
+  // Generate unique default name
+  let counter = 1
+  let defaultName = `Device${counter}`
+  while (slaveList.value.some(s => s.name === defaultName)) {
+    counter++
+    defaultName = `Device${counter}`
+  }
+
   slaveForm.value = {
-    name: `Device${slaveList.value.length}`,
+    name: defaultName,
     detail: '',
     protocol: 1,
     remoteAddress: '192.168.0.21',
@@ -1513,6 +1586,10 @@ const closeSlaveModal = () => {
 const saveSlave = () => {
   if (!slaveForm.value.name) {
     alert(t('edge.pleaseInputSlaveName'))
+    return
+  }
+  
+  if (slaveNameError.value) {
     return
   }
   
@@ -1568,9 +1645,16 @@ const showAddPointModal = () => {
   
   // 2. Point Index (ignoring default points like State)
   const existingUserPoints = currentSlave.value.points.filter(p => !p.isDefault).length
-  const pointIdxStr = String(existingUserPoints + 1).padStart(2, '0')
+  let counter = existingUserPoints + 1
+  let pointIdxStr = String(counter).padStart(2, '0')
+  let defaultName = `node${slaveIdxStr}${pointIdxStr}`
   
-  const defaultName = `node${slaveIdxStr}${pointIdxStr}`
+  // Ensure uniqueness
+  while (currentSlave.value.points.some(p => p.name === defaultName)) {
+    counter++
+    pointIdxStr = String(counter).padStart(2, '0')
+    defaultName = `node${slaveIdxStr}${pointIdxStr}`
+  }
 
   pointForm.value = {
     name: defaultName,
@@ -1606,6 +1690,10 @@ const closePointModal = () => {
 const savePoint = () => {
   if (!pointForm.value.name) {
     alert(t('edge.pleaseInputPointName'))
+    return
+  }
+  
+  if (pointNameError.value) {
     return
   }
   
