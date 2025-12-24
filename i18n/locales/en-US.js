@@ -354,6 +354,7 @@ export default {
         importSuccess: 'Import successful',
         importFailed: 'Import failed',
         exportFailed: 'Export failed',
+        exportOptions: 'Export Options',
         pleaseInputSlaveName: 'Please enter slave name',
         confirmDeleteSlave: 'Are you sure you want to delete slave',
         pleaseInputPointName: 'Please enter data point name',

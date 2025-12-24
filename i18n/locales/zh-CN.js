@@ -367,6 +367,7 @@ export default {
         errorReason: '错误原因',
 
         exportFailed: '导出失败',
+        exportOptions: '导出选项',
         pleaseInputSlaveName: '请输入从机名称',
         confirmDeleteSlave: '确定要删除从机',
         pleaseInputPointName: '请输入数据点名称',

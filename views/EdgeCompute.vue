@@ -50,7 +50,7 @@
         <span class="label">{{ t('edge.pointImport') }}</span>
         <button class="btn-outline" @click="triggerFileSelect">{{ t('edge.selectFile') }}</button>
         <button class="btn-outline" @click="importCsv" :disabled="!selectedCsvFile">{{ t('edge.import') }}</button>
-        <button class="btn-outline" @click="exportCsv">{{ t('edge.export') }}</button>
+        <button class="btn-outline" @click="showExportModal">{{ t('edge.export') }}</button>
         <span class="file-hint">{{ t('edge.pleaseSelectFile') }}</span>
         <input type="file" ref="csvFileInput" @change="handleCsvSelect" accept=".csv" style="display:none" />
       </div>
@@ -856,6 +856,17 @@
         </div>
       </div>
     </div>
+    <!-- Export Options Modal -->
+    <div v-if="showExportOptionsModal" class="modal-overlay" @click.self="showExportOptionsModal = false">
+      <div class="modal" style="max-width: 400px; text-align: center;">
+        <h3 style="border: none; margin-bottom: 20px;">{{ t('edge.exportOptions') || '导出选项' }}</h3>
+        <div class="modal-buttons" style="justify-content: center; gap: 20px;">
+          <button class="btn-save" @click="exportToCloud">到Cloud</button>
+          <button class="btn-save" @click="exportToDevice">到设备</button>
+          <button class="btn-cancel" @click="showExportOptionsModal = false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1101,6 +1112,7 @@ const ipAddress = ref(window.location.hostname)
 // CSV文件选择
 const csvFileInput = ref(null)
 const selectedCsvFile = ref(null)
+const showExportOptionsModal = ref(false)
 
 // 协议转换CSV文件选择
 const protocolCsvFileInput = ref(null)
@@ -1521,8 +1533,14 @@ const importCsv = async () => {
   }
 }
 
-// 导出CSV
-const exportCsv = async () => {
+// 导出选项对话框
+const showExportModal = () => {
+  showExportOptionsModal.value = true
+}
+
+// 导出到设备 (原导出CSV)
+const exportToDevice = async () => {
+  showExportOptionsModal.value = false
   try {
     const response = await apiClient.get('/download_file.cgi', {
       params: { name: 'edge' },
@@ -1539,6 +1557,30 @@ const exportCsv = async () => {
   } catch (err) {
     console.error('导出失败:', err)
     alert(t('edge.exportFailed') + ': ' + (err.response?.data?.msg || err.message))
+  }
+}
+
+// 导出到Cloud
+const exportToCloud = () => {
+  try {
+    // 获取当前点表的CSV内容
+    const csvContent = generateCsvContent()
+
+    // Base64 encode (handling UTF-8)
+    const base64Str = btoa(unescape(encodeURIComponent(csvContent)))
+    
+    const blob = new Blob([base64Str], { type: 'text/plain' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'point_table.cloud'
+    a.click()
+    window.URL.revokeObjectURL(url)
+    
+    showExportOptionsModal.value = false
+  } catch (err) {
+    console.error('Export to Cloud failed:', err)
+    alert(t('edge.exportFailed') + ': ' + err.message)
   }
 }
 
