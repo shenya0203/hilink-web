@@ -1267,20 +1267,39 @@ const availableDataTypes = computed(() => {
 })
 
 // 计算属性：数据点名称校验
-const pointNameError = computed(() => {
-  if (!pointForm.value.name) return null
-  const name = pointForm.value.name.trim()
+// 数据点名称校验
+const pointNameError = ref('')
+
+const validatePointName = () => {
+  const name = pointForm.value.name
   
-  if (!currentSlave.value) return null
+  // Layer 1: Format Validation
+  const regex = /^[a-zA-Z0-9_]{1,20}$/
+  if (!name || !regex.test(name)) {
+    pointNameError.value = "(1-20字节 支持'a'-'z'/'A'-'Z'/'0'-'9'和'_')"
+    return
+  }
   
-  // Check for duplicates in current slave's points
+  if (!currentSlave.value) return
+  
+  // Layer 2: Duplicate Validation
   const duplicate = currentSlave.value.points.some((point, index) => {
-    // Skip the point being edited
     if (isEditingPoint.value && index === editingPointIndex.value) return false
     return point.name === name
   })
   
-  return duplicate ? t('edge.nameExists') : null
+  if (duplicate) {
+    pointNameError.value = "(名称重复！)"
+    return
+  }
+  
+  pointNameError.value = ''
+}
+
+watch(() => pointForm.value.name, () => {
+  if (showPointModal.value) {
+    validatePointName()
+  }
 })
 
 // 获取下一个可用寄存器地址
@@ -1319,19 +1338,37 @@ const pointRegisterError = computed(() => {
 })
 
 // 计算属性：从机名称校验
-const slaveNameError = computed(() => {
-  if (!slaveForm.value.name) return null
-  const name = slaveForm.value.name.trim()
+// 从机名称校验
+const slaveNameError = ref('')
+
+const validateSlaveName = () => {
+  const name = slaveForm.value.name
   
-  // Check for duplicates
+  // Layer 1: Format Validation
+  const regex = /^[a-zA-Z0-9_]{1,20}$/
+  if (!name || !regex.test(name)) {
+    slaveNameError.value = "(1-20字节 支持'a'-'z'/'A'-'Z'/'0'-'9'和'_')"
+    return
+  }
+  
+  // Layer 2: Duplicate Validation
   const duplicate = slaveList.value.some((slave, index) => {
-    // Skip system slave if needed (though system usually has distinct name)
-    // Skip the slave being edited
     if (isEditingSlave.value && index === editingSlaveIndex.value) return false
     return slave.name === name
   })
   
-  return duplicate ? t('edge.nameExists') : null
+  if (duplicate) {
+    slaveNameError.value = "(名称重复！)"
+    return
+  }
+  
+  slaveNameError.value = ''
+}
+
+watch(() => slaveForm.value.name, () => {
+  if (showSlaveModal.value) {
+    validateSlaveName()
+  }
 })
 
 // 计算属性：生成寄存器地址显示
@@ -1725,6 +1762,7 @@ const showAddSlaveModal = () => {
     mergeCollect: false
   }
   showSlaveModal.value = true
+  slaveNameError.value = ''
 }
 
 const editSlave = (index) => {
@@ -1735,6 +1773,7 @@ const editSlave = (index) => {
   editingSlaveIndex.value = index
   slaveForm.value = { ...slave }
   showSlaveModal.value = true
+  slaveNameError.value = ''
 }
 
 const closeSlaveModal = () => {
@@ -1746,6 +1785,8 @@ const saveSlave = () => {
     alert(t('edge.pleaseInputSlaveName'))
     return
   }
+  
+  validateSlaveName()
   
   if (slaveNameError.value) {
     return
@@ -1829,6 +1870,7 @@ const showAddPointModal = () => {
     changeRange: 2
   }
   showPointModal.value = true
+  pointNameError.value = ''
 }
 
 const editPoint = (index) => {
@@ -1839,6 +1881,7 @@ const editPoint = (index) => {
   editingPointIndex.value = index
   pointForm.value = { bitIndex: 0, changeRange: 2, ...point }
   showPointModal.value = true
+  pointNameError.value = ''
 }
 
 const closePointModal = () => {
@@ -1850,6 +1893,8 @@ const savePoint = () => {
     alert(t('edge.pleaseInputPointName'))
     return
   }
+  
+  validatePointName()
   
   if (pointNameError.value || pointRegisterError.value) {
     return
