@@ -387,7 +387,8 @@ export default {
         seq: 'Seq',
         confirm: 'Confirm',
         add: 'Add',
-        nameExists: 'Name already exists'
+        nameExists: 'Name already exists',
+        addressExists: 'Address already exists, please modify'
     },
 
     // System Settings Page

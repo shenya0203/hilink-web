@@ -639,27 +639,37 @@
             <label>{{ t('edge.detail') }}:</label>
             <input v-model="pointForm.detail" type="text" />
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault">
-            <label>{{ t('edge.registerType') }}:</label>
-            <div class="register-input">
-              <select v-model.number="pointForm.registerType">
-                <option :value="0">0</option>
-                <option :value="1">1</option>
-                <option :value="3">3</option>
-                <option :value="4">4</option>
-              </select>
-              <input v-model.number="pointForm.registerAddress" type="number" placeholder="1" />
-              <input 
-                v-if="pointForm.registerType === 4 && pointForm.dataType === 'Bit'"
-                v-model.number="pointForm.bitIndex" 
-                type="number" 
-                min="0" 
-                max="15" 
-                placeholder="0" 
-                style="width: 60px; flex: none;"
-              />
+          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.registerType') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center;">
+                <div class="register-input">
+                  <select v-model.number="pointForm.registerType">
+                    <option :value="0">0</option>
+                    <option :value="1">1</option>
+                    <option :value="3">3</option>
+                    <option :value="4">4</option>
+                  </select>
+                  <input 
+                    v-model.number="pointForm.registerAddress" 
+                    type="number" 
+                    placeholder="1" 
+                    :style="{ color: pointRegisterError ? 'red' : '', borderColor: pointRegisterError ? 'red' : '' }"
+                  />
+                  <input 
+                    v-if="pointForm.registerType === 4 && pointForm.dataType === 'Bit'"
+                    v-model.number="pointForm.bitIndex" 
+                    type="number" 
+                    min="0" 
+                    max="15" 
+                    placeholder="0" 
+                    style="width: 60px; flex: none;"
+                  />
+                </div>
+                <span class="register-display">{{ computedRegisterAddress }}</span>
+              </div>
+              <span v-if="pointRegisterError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointRegisterError }}</span>
             </div>
-            <span class="register-display">{{ computedRegisterAddress }}</span>
           </div>
           <div class="form-group">
             <label>{{ t('edge.dataType') }}:</label>
@@ -701,8 +711,8 @@
           <button 
             class="btn-save" 
             @click="savePoint"
-            :disabled="!!pointNameError"
-            :style="{ backgroundColor: pointNameError ? '#ccc' : '', cursor: pointNameError ? 'not-allowed' : 'pointer', opacity: pointNameError ? 0.6 : 1 }"
+            :disabled="!!pointNameError || !!pointRegisterError"
+            :style="{ backgroundColor: (pointNameError || pointRegisterError) ? '#ccc' : '', cursor: (pointNameError || pointRegisterError) ? 'not-allowed' : 'pointer', opacity: (pointNameError || pointRegisterError) ? 0.6 : 1 }"
           >
             {{ t('edge.save') }}
           </button>
@@ -1258,6 +1268,41 @@ const pointNameError = computed(() => {
   return duplicate ? t('edge.nameExists') : null
 })
 
+// 获取下一个可用寄存器地址
+const getNextRegisterAddress = (type) => {
+  if (!currentSlave.value) return 1
+  
+  // Filter points by register type
+  const points = currentSlave.value.points.filter(p => p.registerType === type)
+  
+  if (points.length === 0) return 1
+  
+  // Find max address
+  const maxAddr = Math.max(...points.map(p => p.registerAddress || 0))
+  
+  let nextAddr = maxAddr + 1
+  if (nextAddr > 65535) {
+     return null
+  }
+  return nextAddr
+}
+
+// 计算属性：寄存器地址重复校验
+const pointRegisterError = computed(() => {
+  if (!currentSlave.value) return null
+  const type = pointForm.value.registerType
+  const addr = pointForm.value.registerAddress
+  
+  if (addr === null || addr === undefined || addr === '') return null
+  
+  const duplicate = currentSlave.value.points.some((point, index) => {
+    if (isEditingPoint.value && index === editingPointIndex.value) return false
+    return point.registerType === type && point.registerAddress === addr
+  })
+  
+  return duplicate ? t('edge.addressExists') : null
+})
+
 // 计算属性：从机名称校验
 const slaveNameError = computed(() => {
   if (!slaveForm.value.name) return null
@@ -1293,6 +1338,11 @@ watch(() => pointForm.value.registerType, (newType) => {
   const types = availableDataTypes.value
   if (!types.includes(pointForm.value.dataType)) {
     pointForm.value.dataType = types[0]
+  }
+  
+  // 自动填充地址（仅在添加模式下）
+  if (!isEditingPoint.value) {
+    pointForm.value.registerAddress = getNextRegisterAddress(newType)
   }
 })
 
@@ -1702,7 +1752,7 @@ const showAddPointModal = () => {
     name: defaultName,
     detail: '',
     registerType: 0,
-    registerAddress: 1,
+    registerAddress: getNextRegisterAddress(0),
     bitIndex: 0,
     dataType: 'Bool',
     decimalPlaces: 3,
@@ -1735,7 +1785,7 @@ const savePoint = () => {
     return
   }
   
-  if (pointNameError.value) {
+  if (pointNameError.value || pointRegisterError.value) {
     return
   }
   

@@ -400,7 +400,8 @@ export default {
         seq: '序号',
         confirm: '确认',
         add: '添加',
-        nameExists: '名称已存在'
+        nameExists: '名称已存在',
+        addressExists: '该地址已存在，请修改'
     },
 
     // 系统设置页面
