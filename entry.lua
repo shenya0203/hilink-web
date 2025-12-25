@@ -358,14 +358,13 @@ local function handle_upload(uri)
             -- save_group_config(clean_json)
             -- Split group config and save to /etc/config/device/edge_report/
             --先删除所有的edge_report文件
-            os.execute("rm -f /etc/config/device/edge_report/*.json")       
+            os.execute("rm -f /etc/config/device/edge_report/*.json")
             os.execute("rm -f /etc/config/device/template/*.json")
             
             local data = cjson.decode(clean_json)
             if data and data.group then
                 os.execute("mkdir -p /etc/config/device/edge_report")
                 -- Optional: Clear existing files? For now, we just overwrite/add.
-                -- os.execute("rm -f /etc/config/device/edge_report/*.json") 
                 
                 for _, g in ipairs(data.group) do
                     if g.name then

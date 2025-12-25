@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     // 默认启动端口，可以根据需要修改
-    port: 5173, 
+    port: 5173,
     // 配置代理，解决开发环境跨域问题
     proxy: {
       // 匹配所有 /download_flex.cgi 请求

@@ -342,7 +342,14 @@
         <div class="modal-form">
           <div class="form-group">
             <label>{{ t('edge.name') }}:</label>
-            <input v-model="reportGroupForm.name" type="text" />
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="reportGroupForm.name" 
+                type="text" 
+                :style="{ color: reportGroupNameError ? 'red' : '', borderColor: reportGroupNameError ? 'red' : '' }"
+              />
+              <span v-if="reportGroupNameError" style="color: red; font-size: 12px; margin-top: 4px;">{{ reportGroupNameError }}</span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('edge.channelSelection') }}:</label>
@@ -462,7 +469,14 @@
           </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="saveReportGroup">{{ t('edge.save') }}</button>
+          <button 
+            class="btn-save" 
+            @click="saveReportGroup"
+            :disabled="!!reportGroupNameError"
+            :style="{ backgroundColor: reportGroupNameError ? '#ccc' : '', cursor: reportGroupNameError ? 'not-allowed' : 'pointer', opacity: reportGroupNameError ? 0.6 : 1 }"
+          >
+            {{ t('edge.save') }}
+          </button>
           <button class="btn-cancel" @click="closeReportGroupModal">{{ t('edge.cancel') }}</button>
           <button v-if="reportGroupForm.channel === 'Cloud'" class="btn-save" @click="openCloudPointModal">{{ t('edge.configPoints') }}</button>
         </div>
@@ -980,6 +994,7 @@ const reportGroupForm = ref({
 })
 
 const isJsonError = ref(false)
+const reportGroupNameError = ref('')
 
 // Cloud Point Configuration
 const showCloudPointModal = ref(false)
@@ -1377,8 +1392,16 @@ const selectPoint = (index) => {
 const showAddReportGroupModal = () => {
   isEditingReportGroup.value = false
   editingReportGroupIndex.value = -1
+  
+  let counter = reportGroups.value.length + 1
+  let defaultName = `Report${counter}`
+  while (reportGroups.value.some(g => g.name === defaultName)) {
+    counter++
+    defaultName = `Report${counter}`
+  }
+
   reportGroupForm.value = {
-    name: `Report${reportGroups.value.length + 1}`,
+    name: defaultName,
     channel: 'MQTT1',
     topic: '/UploadTopic',
     qos: 'QOS0',
@@ -1397,6 +1420,7 @@ const showAddReportGroupModal = () => {
   }
   showReportGroupModal.value = true
   isJsonError.value = false
+  reportGroupNameError.value = ''
 }
 
 const editReportGroup = (index) => {
@@ -1404,6 +1428,7 @@ const editReportGroup = (index) => {
   editingReportGroupIndex.value = index
   reportGroupForm.value = { ...reportGroups.value[index] }
   showReportGroupModal.value = true
+  reportGroupNameError.value = ''
   // Validate initial value
   try {
     if (reportGroupForm.value.template) {
@@ -1423,9 +1448,50 @@ const closeReportGroupModal = () => {
   showReportGroupModal.value = false
 }
 
+const validateReportGroupName = () => {
+  const name = reportGroupForm.value.name
+  
+  // Layer 1: Format Validation
+  const regex = /^[a-zA-Z0-9_]{1,20}$/
+  if (!name || !regex.test(name)) {
+    // If empty, it also fails this regex (length 1-20)
+    // But if we want to be specific about "entering content", usually empty is handled by "Required".
+    // However, the regex requires 1 char minimum.
+    // If the user clears the input, we should probably show the format error or a required error.
+    // Given the prompt's specific error message for the regex failure:
+    reportGroupNameError.value = "(1-20字节 支持'a'-'z'/'A'-'Z'/'0'-'9'和'_')"
+    return
+  }
+  
+  // Layer 2: Duplicate Validation
+  const duplicate = reportGroups.value.some((g, i) => {
+    if (isEditingReportGroup.value && i === editingReportGroupIndex.value) return false
+    return g.name === name
+  })
+  
+  if (duplicate) {
+    reportGroupNameError.value = "(名称重复！)"
+    return
+  }
+  
+  reportGroupNameError.value = ''
+}
+
+watch(() => reportGroupForm.value.name, () => {
+  if (showReportGroupModal.value) {
+    validateReportGroupName()
+  }
+})
+
 const saveReportGroup = () => {
   if (!reportGroupForm.value.name) {
     alert(t('edge.pleaseInputPointName')) // Reuse
+    return
+  }
+  
+  validateReportGroupName()
+  
+  if (reportGroupNameError.value) {
     return
   }
   
