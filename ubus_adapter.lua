@@ -62,25 +62,20 @@ local _M = {}
 
 -- 1. Status Data
 function _M.get_status()
-    return {
-        systime = os.time(),
-        runtime = 1575947,
-        cloud_sta = 1,
-        socketa_sta = 0,
-        socketb_sta = 0,
-        mqtt1_sta = 0,
-        mqtt2_sta = 0,
-        soft_ver = "V1.0.13.000000.0000",
-        mac = "D4AD20DBBF2F",
-        sn = "03300225101400005387",
-        user_sn = "ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ"
-    }
+    ngx.log(ngx.ERR, "-------------------- get_status ")
+    local result = ubus_call("hilink", "get_status", {})
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_status result: " .. cjson.encode(result))
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for get_status")
+    return nil
 end
 
 -- 2. Network Status Data
 function _M.get_network_status()
     local net_status = {
-        netdev = "EtherNET",
+        netdev = "-",
         eth = {
             link_sta = 0, 
             ip_mode = 0, 

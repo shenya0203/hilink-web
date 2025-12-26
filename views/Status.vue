@@ -25,7 +25,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.productType') }}:</td>
-            <td>{{ getProductType() }}</td>
+            <td>{{ statusInfo.product_type || '-' }}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.runtime') }}:</td>
@@ -33,11 +33,11 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.os') }}:</td>
-            <td>OpenHarmonyOS</td>
+            <td>{{statusInfo.os}}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.mac') }}:</td>
-            <td>{{ formatMac(statusInfo.mac) }}</td>
+            <td>{{ statusInfo.mac}}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.sn') }}:</td>
@@ -49,7 +49,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.currentNetwork') }}:</td>
-            <td>{{ networkInfo.netdev || '-' }}</td>
+            <td>{{ statusInfo.netdev || '-' }}</td>
           </tr>
         </tbody>
       </table>
@@ -83,7 +83,7 @@
         <tbody>
           <tr>
             <td class="title">{{ t('status.activeSim') }}:</td>
-            <td>{{ networkInfo.lte?.sim === 1 ? 'SIM1' : 'SIM2' }}</td>
+            <td>{{ networkInfo.lte?.sim === "1" ? 'SIM1' : 'SIM2' }}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.imei') }}:</td>

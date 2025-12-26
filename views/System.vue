@@ -291,10 +291,10 @@ const upgradeResetFactory = ref(false)
 // misc 配置数据
 const miscConfig = ref({
   web_lang: 2,
-  host_name: 'N720',
+  host_name: '',
   websock_port: 6432,
   websocket_point: 9,
-  web_port: 80,
+  web_port: '',
   web_user: '',
   web_psw: '',
   cache_buf: 0,
@@ -302,7 +302,7 @@ const miscConfig = ref({
   telnet_en: 0,
   telnet_port: 22,
   ntp_sync_en: 1,
-  ntp_url: ['ntp1.aliyun.com', 'time1.cloud.tencent.com', 'time.ustc.edu.cn', 'cn.pool.ntp.org'],
+  ntp_url: [],
   ntp_utc: 8,
   f485_en: 0,
   f485_t: 10,

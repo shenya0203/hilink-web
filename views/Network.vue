@@ -59,7 +59,7 @@
         <tbody>
           <tr>
             <td class="title">联网SIM:</td>
-            <td>{{ networkData.lte?.sim === 1 ? 'SIM1' : 'SIM2' }}</td>
+            <td>{{ networkData.lte?.sim === "1" ? 'SIM1' : 'SIM2' }}</td>
           </tr>
           <tr>
             <td class="title">网络模式:</td>

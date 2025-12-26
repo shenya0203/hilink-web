@@ -102,7 +102,7 @@ function getDefaultStatusData() {
 
 function getDefaultNetworkData() {
     return {
-        netdev: "EtherNET",
+        netdev: "-",
         eth: {
             link_sta: 1,
             ip_mode: 0,

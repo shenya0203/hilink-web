@@ -17,12 +17,17 @@ product_name = "HLK_N720"
 -- UCI 配置文件操作封装
 local uci_lib = require("uci")
 
+local mac = nil
+
 -- 配置缓存标志
 local uart_config_loaded = false
 local comm_tunnel_config_loaded = false
 
 local function get_runtime()
-    return os.time() - start_time
+   local f = io.popen("cut -d' ' -f1 /proc/uptime")
+   local uptime = f:read("*all")
+   f:close()
+   return tonumber(string.format("%.0f", tonumber(uptime)))  --转成整数
 end
 
 local function log_info(msg)
@@ -38,6 +43,149 @@ local function deep_copy(obj)
     local res = {}
     for k, v in pairs(obj) do res[deep_copy(k)] = deep_copy(v) end
     return res
+end
+
+local function get_system_mac()
+    -- 如果已经获取过，直接返回缓存值
+    if mac then return mac end
+    
+    local f = io.open("/dev/mtd2", "rb")
+    if f then
+        -- 移动指针到 0x4 (根据你的原始代码)
+        f:seek("set", 0x4)
+        
+        -- 读取 6 字节二进制数据
+        local content = f:read(6)
+        f:close()
+        
+        if content and #content == 6 then
+            -- 1. 将二进制流解包为 6 个独立的数字
+            local b1, b2, b3, b4, b5, b6 = string.byte(content, 1, 6)
+            
+            -- 2. 格式化为标准 MAC 地址 (大写十六进制，不足两位自动补0)
+            -- 你的错误结果 E4::3:8... 看起来像是把 38 变成了 3:8，
+            -- 使用 %02X 可以强制保证每个字节占两位，中间用单冒号连接。
+            mac = string.format("%02X:%02X:%02X:%02X:%02X:%02X", b1, b2, b3, b4, b5, b6)
+        end
+    end
+    
+    return mac
+end
+
+local function get_system_sn()
+    -- 假设编译好的程序名为 tuple_read，如果在特定目录下请加上路径，例如 "/usr/bin/tuple_read get_dn"
+    local handle = io.popen("tuple-read get_dn", "r")
+    
+    -- 如果无法启动进程
+    if not handle then 
+        return nil 
+    end
+
+    -- 读取所有输出内容 (*a 表示 all)
+    local result = handle:read("*a")
+    print("get_system_sn result: "..result)
+    
+    -- 关闭文件句柄
+    handle:close()
+
+    -- 如果读取到了内容，进行清洗
+    if result then
+        -- 使用gsub去除尾部的换行符(\n)和可能存在的空白字符
+        -- 模式匹配解释: ^%s*(.-)%s*$ 匹配首尾空白并在中间捕获内容
+        result = string.gsub(result, "^%s*(.-)%s*$", "%1")
+        
+        -- 再次校验是否为空字符串
+        if result == "" then return nil end
+        
+        return result
+    end
+
+    return nil
+end
+
+local function get_product_type()
+    return ""
+end
+
+
+local function get_current_run_net()
+    
+    -- 内部辅助函数：读取接口状态
+    -- 返回 true 表示在线，false 表示离线
+    local function check_is_online(iface_name)
+        local path = "/var/run/mwan3/iface_state/" .. iface_name
+        local f = io.open(path, "r")
+        
+        -- 1. 如果文件不存在，直接视为离线 (mwan3 未启动或接口未接管)
+        if not f then return false end
+        
+        local content = f:read("*a")
+        f:close()
+        
+        -- 2. 判断内容是否包含 "online"
+        if content and string.find(content, "online") then
+            return true
+        end
+        
+        return false
+    end
+
+    -- 内部辅助函数：获取 UCI 策略配置
+    local function get_uci_policy()
+        -- 使用 -q 防止报错
+        local handle = io.popen("uci -q get mwan3.default_rule.use_policy", "r")
+        if not handle then return nil end
+        
+        local result = handle:read("*a")
+        handle:close()
+        
+        if result then
+            -- 去除首尾的换行符和空格
+            return string.gsub(result, "^%s*(.-)%s*$", "%1")
+        end
+        return nil
+    end
+
+    -- --- 主逻辑开始 ---
+
+    -- 1. 获取接口物理状态
+    local wan_online = check_is_online("wan")
+    local lte_online = check_is_online("lte")
+
+    -- 2. 互斥判断：只有一个接口在线的情况
+    if wan_online and not lte_online then
+        return "EtherNet"
+    elseif not wan_online and lte_online then
+        return "LTE"
+    elseif not wan_online and not lte_online then
+        return "None" -- 全部离线
+    end
+
+    -- 3. 冲突判断：两个接口都在线
+    -- 此时需要读取 UCI 配置来决定谁是主路由
+    local policy = get_uci_policy()
+
+    if policy then
+        -- 3.1 明确匹配 LTE 优先策略
+        if policy == "policy_cell_pri" then
+            return "LTE"
+        end
+        
+        -- 3.2 模糊匹配（增强健壮性，防止策略名微调）
+        if string.find(policy, "cell") or string.find(policy, "lte") then
+            return "LTE"
+        end
+        
+        -- 3.3 明确匹配 EtherNet 优先策略 (如 policy_eth_pri)
+        if string.find(policy, "eth") or string.find(policy, "wan") then
+            return "EtherNet"
+        end
+    end
+
+    -- 4. 默认兜底
+    -- 如果两个都在线，且无法识别策略（或策略为 balanced），
+    -- 通常默认认为有线网络（EtherNet）优先级更高。
+    return "EtherNet"
 end
 
 
@@ -56,7 +204,6 @@ local function write_file_content(path, content)
     file:close()
     return true
 end
-
 
 -- UCI Helper for Timezone
 local function timezone_to_utc_num(tz_str)
@@ -522,15 +669,17 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.0.13.000000.0000",
-    mac = "D4AD20DBBF2F",
+    soft_ver = "V1.000",
+    os = "Openwrt",
+    mac = "",
     sn = "03300225101400005387",
-    user_sn = ""
+    user_sn = "",
+    product_type = ""
 }
 
 -- 2. 网络状态数据
 local network_status = {
-    netdev = "EtherNET",
+    netdev = "None",   --当前使用网络 EtherNet/LET/WIFI/No
     eth = {
         link_sta = 0, ip_mode = 0, ip = "",
         dns = "", sdns = "", netmask = ""
@@ -561,7 +710,7 @@ local network_config = {
 -- 4. 杂项配置
 local misc_config = {
     web_lang = 2,
-    host_name = "N720",
+    host_name = "",
     websock_port = 6432,
     websocket_point = 9,
     web_port = 80,
@@ -573,10 +722,6 @@ local misc_config = {
     telnet_port = 22,
     ntp_sync_en = 1,
     ntp_url = {
-        "ntp1.aliyun.com",
-        "time1.cloud.tencent.com",
-        "time.ustc.edu.cn",
-        "cn.pool.ntp.org"
     },
     ntp_utc = 8,
     f485_en = 0,
@@ -893,7 +1038,6 @@ local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 -- 辅助函数
 -- ==========================================================
 
-local start_time = os.time()
 
 
 -- 更新嵌套表的值
@@ -1095,7 +1239,7 @@ local function sync_nginx_settings()
         if i <= 4 then misc_config.ntp_url[i] = s end
     end
     
-    misc_config.web_port = nginx_conf.port
+    misc_config.web_port = nginx_conf.port or 80
     misc_config.web_user = nginx_conf.user or "admin"
     misc_config.web_psw = nginx_conf.pass or "admin"
     misc_config.timing_reset = {
@@ -1105,6 +1249,11 @@ local function sync_nginx_settings()
         ss = timing_reset_conf.ss
     }
 
+    status_data.os = "Openwrt"
+    status_data.mac = get_system_mac()
+    status_data.sn = get_system_sn()
+    status_data.product_type = get_product_type()
+    status_data.netdev = get_current_run_net()
 end
 
 -- ==========================================================
@@ -1377,7 +1526,8 @@ local methods = {
             function(req, msg)
                 local data = deep_copy(status_data)
                 data.systime = os.time()
-                data.runtime = get_runtime()
+                data.runtime = get_runtime()*1000
+                data.mac = 
                 reply(req, data)
             end,
             {}
@@ -1386,7 +1536,9 @@ local methods = {
         -- 获取网络状态
         get_network_status = {
             function(req, msg)
-                reply(req, deep_copy(network_status))
+                local data = deep_copy(network_status)
+                data.netdev = get_current_run_net()
+                reply(req, data)
             end,
             {}
         },
@@ -1753,6 +1905,8 @@ local methods = {
         }
     }
 }
+
+sync_nginx_settings()
 
 -- ==========================================================
 -- 注册 ubus 对象并启动事件循环
