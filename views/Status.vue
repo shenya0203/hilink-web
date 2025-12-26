@@ -83,7 +83,7 @@
         <tbody>
           <tr>
             <td class="title">{{ t('status.activeSim') }}:</td>
-            <td>{{ networkInfo.lte?.sim === "1" ? 'SIM1' : 'SIM2' }}</td>
+            <td>{{ networkInfo.lte?.sim === '1' ? t('status.sim_ready') : t('status.sim_absent') }}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.imei') }}:</td>

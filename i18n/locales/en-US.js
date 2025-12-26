@@ -84,7 +84,13 @@ export default {
 
         // Cellular Network
         cellular: 'Cellular Network',
-        activeSim: 'Active SIM',
+        activeSim: 'SIM Status',
+        sim_ready: "Ready",
+        sim_absent: "Absent",
+        sim_locked: "SIM Locked",
+        sim_puk_required: "SIM PUK Required",
+        sim_failed: "SIM Failed",
+        sim_unknown: "SIM Unknown",
         imei: 'IMEI',
         iccid: 'ICCID',
         cimi: 'CIMI',
@@ -138,7 +144,8 @@ export default {
         flowHardware: 'Hardware',
         flowSoftware: 'Software',
         restartRequired: 'Serial port settings require a device restart to take effect.',
-        continueConfig: 'Continue Configuration'
+        continueConfig: 'Continue Configuration',
+        upgrading: "Upgrading..."
     },
 
     // Socket Configuration Page

@@ -84,7 +84,14 @@ export default {
 
         // 蜂窝网络
         cellular: '蜂窝网络',
-        activeSim: '联网SIM',
+        activeSim: 'SIM卡状态',
+        sim_ready: "SIM卡正常",
+        sim_absent: "SIM卡未插入",
+        sim_locked: "SIM卡锁定",
+        sim_puk_required: "SIM卡PUK Required",
+        sim_failed: "SIM卡失败",
+        sim_unknown: "SIM卡状态未知",
+
         imei: 'IMEI',
         iccid: 'ICCID',
         cimi: 'CIMI',

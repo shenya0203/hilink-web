@@ -108,27 +108,28 @@ local function get_product_type()
 end
 
 
+local function check_is_online(iface_name)
+    local path = "/var/run/mwan3/iface_state/" .. iface_name
+    local f = io.open(path, "r")
+    
+    -- 1. 如果文件不存在，直接视为离线 (mwan3 未启动或接口未接管)
+    if not f then return false end
+    
+    local content = f:read("*a")
+    f:close()
+    
+    -- 2. 判断内容是否包含 "online"
+    if content and string.find(content, "online") then
+        return true
+    end
+    
+    return false
+end
+
 local function get_current_run_net()
     
     -- 内部辅助函数：读取接口状态
     -- 返回 true 表示在线，false 表示离线
-    local function check_is_online(iface_name)
-        local path = "/var/run/mwan3/iface_state/" .. iface_name
-        local f = io.open(path, "r")
-        
-        -- 1. 如果文件不存在，直接视为离线 (mwan3 未启动或接口未接管)
-        if not f then return false end
-        
-        local content = f:read("*a")
-        f:close()
-        
-        -- 2. 判断内容是否包含 "online"
-        if content and string.find(content, "online") then
-            return true
-        end
-        
-        return false
-    end
 
     -- 内部辅助函数：获取 UCI 策略配置
     local function get_uci_policy()
@@ -1515,6 +1516,156 @@ end
 -- 定义 ubus 方法
 -- ==========================================================
 
+
+local function collect_network_status()
+    local net_status = {
+        netdev = get_current_run_net(),
+        eth = {
+            link_sta = 0, 
+            ip_mode = 0, 
+            ip = "",
+            dns = "", 
+            sdns = "", 
+            netmask = ""
+        },
+        lte = {
+            ver = "", 
+            iccid = "",
+            imei = "", 
+            csq = 0, 
+            mode = "", 
+            oper = "", 
+            sim = 1,
+            cimi = "", 
+            lte_sta = "Disconnected",
+            lte_ip = "",
+            lte_netmask = "",
+            lte_dns = "", 
+            lte_sdns = ""
+        }
+    }
+
+    local cursor = uci_lib.cursor()
+
+    -- 1. ETH IP Mode
+    local wan_proto = cursor:get("network", "wan", "proto")
+    if wan_proto == "dhcp" then
+        net_status.eth.ip_mode = 1
+    else
+        net_status.eth.ip_mode = 0
+    end
+
+    -- 2. Network Params via Ubus (WAN)
+    local wan_status = conn:call("network.interface.wan", "status", {})
+    if wan_status then
+        if wan_status["ipv4-address"] and #wan_status["ipv4-address"] > 0 then
+            net_status.eth.ip = wan_status["ipv4-address"][1].address
+            local mask = wan_status["ipv4-address"][1].mask
+            if type(mask) == "number" then
+                local m = math.floor(2^(32) - 2^(32-mask))
+                net_status.eth.netmask = string.format("%d.%d.%d.%d",
+                    math.floor(m / 2^24) % 256,
+                    math.floor(m / 2^16) % 256,
+                    math.floor(m / 2^8) % 256,
+                    m % 256)
+            else
+                net_status.eth.netmask = mask
+            end
+        end
+        if wan_status["dns-server"] then
+            net_status.eth.dns = wan_status["dns-server"][1] or ""
+            net_status.eth.sdns = wan_status["dns-server"][2] or ""
+        end
+    end
+
+    -- 3. LTE Info from /tmp/modem_info.json
+    --net_status.lte.sim --改为表示sim状态 1 表示ready 其他值暂时表示Not ready
+    net_status.lte.sim = "0"
+
+    local modem_info_str = read_file_content("/tmp/modem_info.json")
+    log_info("modem_info_str: "..modem_info_str)
+    if modem_info_str then
+        local ok, info = pcall(cjson.decode, modem_info_str)
+        if ok then
+            net_status.lte.iccid = info.iccid
+            net_status.lte.imei = info.imei
+            net_status.lte.cimi = info.imsi
+            net_status.lte.mode = info.network_type
+            net_status.lte.oper = info.sim_operator
+            net_status.lte.lte_ip = info.local_ip
+            net_status.lte.lte_sta = info.connection_status
+            net_status.lte.sim = info.sim_status == "ready" and "1" or "0"
+            log_info("net_status: "..cjson.encode(net_status))
+
+
+            if info.signal then
+                local dbm = tonumber(string.match(info.signal, "([-%d]+)"))
+                if dbm then
+                    local csq = math.floor((dbm + 113) / 2)
+                    if csq < 0 then csq = 0 end
+                    if csq > 31 then csq = 31 end
+                    net_status.lte.csq = csq
+                end
+            end
+        end
+        -- 4. LTE Params via Ubus (Fill gaps)
+        local lte_status = conn:call("network.interface.lte", "status", {})
+        if lte_status then
+            if lte_status["ipv4-address"] and #lte_status["ipv4-address"] > 0 then
+                if net_status.lte.lte_ip == "" then
+                    net_status.lte.lte_ip = lte_status["ipv4-address"][1].address
+                end
+                local mask = lte_status["ipv4-address"][1].mask
+                if type(mask) == "number" then
+                    local m = math.floor(2^(32) - 2^(32-mask))
+                    net_status.lte.lte_netmask = string.format("%d.%d.%d.%d",
+                        math.floor(m / 2^24) % 256,
+                        math.floor(m / 2^16) % 256,
+                        math.floor(m / 2^8) % 256,
+                        m % 256)
+                else
+                    net_status.lte.lte_netmask = mask
+                end
+            end
+            if lte_status["dns-server"] then
+                net_status.lte.lte_dns = lte_status["dns-server"][1] or ""
+                net_status.lte.lte_sdns = lte_status["dns-server"][2] or ""
+            end
+        end
+    end
+    
+    -- 5. SIM Num
+    --local sim_num = cursor:get("network", "lte", "modem_simnum")
+    --net_status.lte.sim = sim_num or 1
+
+    -- 6. Connection Status via mwan3
+    local wan_online = check_is_online("wan")
+    local lte_online = check_is_online("lte")
+    if wan_online then
+        net_status.eth.link_sta = 1
+    end
+    if lte_online then
+        net_status.lte.lte_sta = "Connected"
+    end
+    --[[
+    local f = io.popen("mwan3 status")
+    if f then
+        local mwan3_out = f:read("*a")
+        f:close()
+        if mwan3_out then
+            if string.find(mwan3_out, "wan is online") then
+                net_status.eth.link_sta = 1
+            end
+            if string.find(mwan3_out, "lte is online") then
+                net_status.lte.lte_sta = "Connected"
+            end
+        end
+    end
+    ]]--
+
+    return net_status
+end
+
 local function reply(req, data)
     conn:reply(req, data or {})
 end
@@ -1527,7 +1678,7 @@ local methods = {
                 local data = deep_copy(status_data)
                 data.systime = os.time()
                 data.runtime = get_runtime()*1000
-                data.mac = 
+                data.mac = get_system_mac()
                 reply(req, data)
             end,
             {}
@@ -1536,8 +1687,7 @@ local methods = {
         -- 获取网络状态
         get_network_status = {
             function(req, msg)
-                local data = deep_copy(network_status)
-                data.netdev = get_current_run_net()
+                local data = collect_network_status()
                 reply(req, data)
             end,
             {}
