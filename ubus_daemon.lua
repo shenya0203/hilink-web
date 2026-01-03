@@ -7,6 +7,7 @@
 local ubus = require "ubus"
 local uloop = require "uloop"
 local cjson = require "cjson"
+local shm = require "shm_reader"
 
 -- ==========================================================
 -- 配置数据存储 (实际应用中应该从文件或数据库读取)
@@ -2052,6 +2053,19 @@ local methods = {
                 os.execute(cmd)
             end,
             { reset_factory = ubus.INT32 }
+        },
+
+        -- 获取边缘计算实时数据 (从共享内存读取)
+        get_edge_values = {
+            function(req, msg)
+                local values = shm.read_values()
+                if values then
+                    reply(req, { result = true, data = values })
+                else
+                    reply(req, { result = false, error = "Failed to read shared memory" })
+                end
+            end,
+            {}
         }
     }
 }

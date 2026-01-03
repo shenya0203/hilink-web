@@ -895,7 +895,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 
@@ -1168,6 +1168,85 @@ const slaveList = ref([
     points: [] // 初始化为空数组，后续填充
   }
 ])
+
+// 实时数据轮询
+const pollTimer = ref(null)
+
+const fetchEdgeValues = async () => {
+  if (activeTab.value !== 1) return // Only for Data Collection tab (index 1)
+  
+  try {
+    const res = await apiClient.get('/download_flex.cgi', { params: { name: 'edge_values' } })
+    // ubus_adapter returns the data directly if successful, or wrapped?
+    // entry.lua: response = ubus_adapter.get_edge_values()
+    // ubus_adapter: return result.data (which is the table)
+    // So res.data should be the table directly, or wrapped in standard response?
+    // entry.lua uses send_json(response).
+    // So if ubus_adapter returns { "Device1": ... }, then res.data is that object.
+    // But wait, ubus_adapter.get_edge_values returns result.data.
+    // Let's check ubus_daemon.lua again.
+    // reply(req, { result = true, data = values })
+    // So ubus_call returns { result = true, data = values }.
+    // ubus_adapter returns result.data (values).
+    // So entry.lua sends values.
+    // So res.data is values.
+    
+    if (res.data) {
+      updatePointsValue(res.data)
+    }
+  } catch (e) {
+    console.error("Failed to fetch edge values", e)
+  }
+}
+
+const updatePointsValue = (data) => {
+  // data format: { "Device1": { "node0101": 12.5 }, ... }
+  slaveList.value.forEach(slave => {
+    const deviceData = data[slave.name]
+    if (deviceData && slave.points) {
+      slave.points.forEach(point => {
+        if (deviceData[point.name] !== undefined) {
+          point.value = deviceData[point.name]
+        }
+      })
+    }
+  })
+}
+
+const startPolling = () => {
+  stopPolling()
+  fetchEdgeValues()
+  pollTimer.value = setInterval(fetchEdgeValues, 5000)
+}
+
+const stopPolling = () => {
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value)
+    pollTimer.value = null
+  }
+}
+
+// Watch activeTab
+watch(activeTab, (newTab) => {
+  // activeTab is index in visibleTabs? No, originalIndex.
+  // In template: activeTab = tab.originalIndex.
+  // Tab 2: Data Collection is index 1.
+  if (newTab === 1) {
+    startPolling()
+  } else {
+    stopPolling()
+  }
+})
+
+onMounted(() => {
+  if (activeTab.value === 1) {
+    startPolling()
+  }
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 
 // 选中的从机和数据点索引
 const selectedSlaveIndex = ref(0)

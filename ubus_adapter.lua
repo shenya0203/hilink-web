@@ -680,4 +680,13 @@ function _M.upgrade_firmware(reset_factory)
     end
 end
 
+-- 19. Get Edge Values (Real-time data from SHM)
+function _M.get_edge_values()
+    local result = ubus_call("hilink", "get_edge_values", {})
+    if result and result.result then
+        return result.data
+    end
+    return nil
+end
+
 return _M
