@@ -255,8 +255,8 @@
             <select v-model="protocolConversionConfig.channel">
               <option value="MQTT1">MQTT1</option>
               <option value="MQTT2">MQTT2</option>
-              <option value="SocketA">SocketA</option>
-              <option value="SocketB">SocketB</option>
+              <option value="SOCKA">SOCKA</option>
+              <option value="SOCKB">SOCKB</option>
             </select>
           </div>
 
@@ -356,8 +356,8 @@
             <select v-model="reportGroupForm.channel">
               <option value="MQTT1">MQTT1</option>
               <option value="MQTT2">MQTT2</option>
-              <option value="SocketA">SocketA</option>
-              <option value="SocketB">SocketB</option>
+              <option value="SOCKA">SOCKA</option>
+              <option value="SOCKB">SOCKB</option>
               <option value="Cloud">Cloud</option>
             </select>
           </div>

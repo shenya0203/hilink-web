@@ -14,8 +14,8 @@
 
     <!-- 标签页选择 -->
     <div class="tabs">
-      <button class="tab-btn" :class="{ active: activeTab === 0 }" @click="activeTab = 0">SocketA</button>
-      <button v-if="socketList.length > 1" class="tab-btn" :class="{ active: activeTab === 1 }" @click="activeTab = 1">SocketB</button>
+      <button class="tab-btn" :class="{ active: activeTab === 0 }" @click="activeTab = 0">SOCKA</button>
+      <button v-if="socketList.length > 1" class="tab-btn" :class="{ active: activeTab === 1 }" @click="activeTab = 1">SOCKB</button>
     </div>
 
     <!-- Socket配置表单 -->
