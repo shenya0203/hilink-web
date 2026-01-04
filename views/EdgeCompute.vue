@@ -354,11 +354,9 @@
           <div class="form-group">
             <label>{{ t('edge.channelSelection') }}:</label>
             <select v-model="reportGroupForm.channel">
-              <option value="MQTT1">MQTT1</option>
-              <option value="MQTT2">MQTT2</option>
-              <option value="SOCKA">SOCKA</option>
-              <option value="SOCKB">SOCKB</option>
-              <option value="Cloud">Cloud</option>
+              <option v-for="channel in availableChannels" :key="channel" :value="channel">
+                {{ channel }}
+              </option>
             </select>
           </div>
           <template v-if="['MQTT1', 'MQTT2'].includes(reportGroupForm.channel)">
@@ -969,7 +967,22 @@ const computedEditingAddress = computed(() => {
 })
 
 // 数据上报相关数据
+const allChannels = ['MQTT1', 'MQTT2', 'SOCKA', 'SOCKB', 'Cloud']
 const reportGroups = ref([])
+
+const availableChannels = computed(() => {
+  const usedChannels = reportGroups.value
+    .filter((g, index) => {
+      // If editing, exclude the current group being edited
+      if (isEditingReportGroup.value && index === editingReportGroupIndex.value) {
+        return false
+      }
+      return true
+    })
+    .map(g => g.channel)
+    
+  return allChannels.filter(c => !usedChannels.includes(c))
+})
 const showReportGroupModal = ref(false)
 const isEditingReportGroup = ref(false)
 const editingReportGroupIndex = ref(-1)
@@ -1516,9 +1529,14 @@ const showAddReportGroupModal = () => {
     defaultName = `Report${counter}`
   }
 
+  // Calculate default channel
+  const usedChannels = reportGroups.value.map(g => g.channel)
+  const freeChannels = allChannels.filter(c => !usedChannels.includes(c))
+  const defaultChannel = freeChannels.length > 0 ? freeChannels[0] : ''
+
   reportGroupForm.value = {
     name: defaultName,
-    channel: 'MQTT1',
+    channel: defaultChannel,
     topic: '/UploadTopic',
     qos: 'QOS0',
     retain: false,
