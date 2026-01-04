@@ -1040,7 +1040,50 @@ local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 -- 辅助函数
 -- ==========================================================
 
-
+-- ==========================================================
+-- Helper: 获取连接状态 (读取文件)
+-- ==========================================================
+local function get_communication_status(link)
+    -- 假设状态文件存放在 /tmp/ 目录下，请根据实际情况修改
+    local status_dir = "/tmp/" 
+    
+    local prefix = "socket_" -- 默认为 socket
+    
+    -- 根据 link 类型判断文件前缀
+    if string.find(link, "MQTT") then
+        prefix = "mqtt_"
+    elseif link == "CLOUD" then
+        prefix = "cloud_"
+    end
+    
+    -- 拼接完整路径: /tmp/socket_SOCKA_status
+    local filename = status_dir .. prefix .. link .. "_status"
+    
+    -- 1. 尝试打开文件
+    local file = io.open(filename, "r")
+    if not file then
+        -- 文件不存在，视为未连接
+        -- ngx.log(ngx.ERR, "Status file not found: " .. filename)
+        return 0 
+    end
+    
+    -- 2. 读取内容
+    local content = file:read("*a")
+    file:close()
+    
+    if not content or content == "" then
+        return 0
+    end
+    
+    -- 3. 解析 JSON (使用 pcall 防止 JSON 格式错误导致崩溃)
+    local ok, data = pcall(cjson.decode, content)
+    if ok and data then
+        -- 确保返回的是数字 0 或 1
+        return tonumber(data.connected) or 0
+    end
+    
+    return 0
+end
 
 -- 更新嵌套表的值
 local function update_nested_value(tbl, key_path, value)
@@ -1680,6 +1723,11 @@ local methods = {
                 data.systime = os.time()
                 data.runtime = get_runtime()*1000
                 data.mac = get_system_mac()
+                data.socketa_sta = get_communication_status("SOCKA")
+                data.socketb_sta = get_communication_status("SOCKB")
+                data.mqtt1_sta = get_communication_status("MQTT1")
+                data.mqtt2_sta = get_communication_status("MQTT2")
+                data.cloud_sta = get_communication_status("CLOUD")
                 reply(req, data)
             end,
             {}
