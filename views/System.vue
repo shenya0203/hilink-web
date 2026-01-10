@@ -399,16 +399,80 @@ const handleFirmwareFileSelect = (event) => {
 
 // 导出参数
 const exportParams = async () => {
+  loading.value = true
   try {
-    const response = await apiClient.get('/download_nv.cgi?name=misc')
-    const data = response.data
-    
-    // 创建下载
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    // 1. 定义所有需要获取的配置项名称
+    const configNames = [
+      'misc', 
+      'network', 
+      'comm_tunnel', 
+      'uart', 
+      'offline_cache',
+      'edge', 
+      'edge_report', 
+      'edge_access', 
+      'edge_link_ctrl'
+    ]
+
+    // 2. 并行获取所有 JSON 配置
+    const configPromises = configNames.map(name => 
+      apiClient.get(`/download_nv.cgi?name=${name}`)
+        .then(res => ({ type: 'config', name, data: res.data }))
+        .catch(err => {
+          console.warn(`Failed to fetch config ${name}:`, err)
+          return { type: 'config', name, data: null, error: err.message }
+        })
+    )
+
+    // 3. 获取特殊文件 (CSV等)
+    const filePromises = [
+      // 边缘计算点位表
+      apiClient.get('/download_file.cgi?name=edge')
+        .then(res => ({ type: 'file', name: 'edge_points_csv', data: res.data })),
+      // 协议转换映射表
+      apiClient.get('/download_file.cgi?name=edge_proto_access')
+        .then(res => ({ type: 'file', name: 'edge_proto_access_csv', data: res.data })),
+      // 上报模板
+      apiClient.get('/download_multi_file.cgi?name=template')
+        .then(res => ({ type: 'template', name: 'templates', data: res.data }))
+    ].map(p => p.catch(err => {
+      console.warn('Failed to fetch file:', err)
+      return { type: 'error', error: err.message }
+    }))
+
+    // 4. 等待所有请求完成
+    const results = await Promise.all([...configPromises, ...filePromises])
+
+    // 5. 组装最终的导出对象
+    const fullConfig = {
+      meta: {
+        version: '1.0',
+        exportTime: new Date().toISOString(),
+        timestamp: new Date().getTime()
+      },
+      configs: {},
+      files: {},
+      templates: {}
+    }
+
+    results.forEach(item => {
+      if (item.data === null || item.type === 'error') return
+
+      if (item.type === 'config') {
+        fullConfig.configs[item.name] = item.data
+      } else if (item.type === 'file') {
+        fullConfig.files[item.name] = item.data
+      } else if (item.type === 'template') {
+        fullConfig.templates = item.data
+      }
+    })
+
+    // 6. 创建下载
+    const blob = new Blob([JSON.stringify(fullConfig, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `config_${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `hilink_full_config_${new Date().toISOString().slice(0, 10)}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -418,6 +482,8 @@ const exportParams = async () => {
   } catch (err) {
     console.error('参数导出失败:', err)
     alert(t('system.exportFailed') + ': ' + err.message)
+  } finally {
+    loading.value = false
   }
 }
 

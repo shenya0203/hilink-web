@@ -1627,8 +1627,9 @@ local function collect_network_status()
     net_status.lte.sim = "0"
 
     local modem_info_str = read_file_content("/tmp/modem_info.json")
-    log_info("modem_info_str: "..modem_info_str)
+    
     if modem_info_str then
+        log_info("modem_info_str: "..modem_info_str)
         local ok, info = pcall(cjson.decode, modem_info_str)
         if ok then
             net_status.lte.iccid = info.iccid
