@@ -2215,6 +2215,8 @@ const saveCurrentPage = async () => {
       await apiClient.post('/upload/conver_csv', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      showSuccessModal.value = true
+      return
     }
     
     alert(t('edge.saveSuccess'))

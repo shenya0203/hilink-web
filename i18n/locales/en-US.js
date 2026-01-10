@@ -473,7 +473,14 @@ export default {
         formatFailed: 'Failed to format TF card',
         saveParamsSuccess: 'Parameters saved successfully',
         saveTimeSuccess: 'Time configuration saved successfully',
-        saveDeviceSuccess: 'Device configuration saved successfully'
+        saveDeviceSuccess: 'Device configuration saved successfully',
+        restartRequired: 'System configuration requires a device restart to take effect.',
+        continueConfig: 'Continue Configuration',
+        upgrading: 'Upgrading...',
+        upgradeTimeout: 'Upgrade timeout, please refresh manually',
+        dontPowerOff: 'Do not power off or close this page during upgrade',
+        uploading: 'Firmware uploading...',
+        upgradeComplete: 'Upgrade complete, refreshing...'
     },
 
     // Network Configuration Page

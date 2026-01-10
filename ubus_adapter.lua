@@ -491,27 +491,27 @@ function _M.set_config(module, args)
             os.execute("uci commit network")
         end
 
-        os.execute("uci set network.lte.modem_simnum=" .. lte_simnum or "")
+        os.execute("uci set network.lte.modem_simnum=" .. (lte_simnum or ""))
 
-        os.execute("uci set network.lte.modem_apn=" .. lte_apn or "")
+        os.execute("uci set network.lte.modem_apn=" .. (lte_apn or ""))
 
-        os.execute("uci set network.lte.modem_user=" .. lte_user or "")
+        os.execute("uci set network.lte.modem_user=" .. (lte_user or ""))
 
-        os.execute("uci set network.lte.modem_passwd=" .. lte_pswd or "")
+        os.execute("uci set network.lte.modem_passwd=" .. (lte_pswd or ""))
 
-        os.execute("uci set network.lte.modem_auth=" .. lte_auth or 0)
+        os.execute("uci set network.lte.modem_auth=" .. (lte_auth or 0))
 
         os.execute("uci delete network.lte.dns")
         os.execute("uci delete network.lte._dns")
         if lte_dns_mode == 1 then --自动获取
-            os.execute("uci add_list network.lte._dns=" .. lte_dns or "")   --配置为自动获取时 修改dns的option名称
-            os.execute("uci add_list network.lte._dns=" .. lte_sdns or "") 
+            os.execute("uci add_list network.lte._dns=" .. (lte_dns or ""))   --配置为自动获取时 修改dns的option名称
+            os.execute("uci add_list network.lte._dns=" .. (lte_sdns or "")) 
         else
-            os.execute("uci add_list network.lte.dns=" .. lte_dns or "") 
-            os.execute("uci add_list network.lte.dns=" .. lte_sdns or "") 
+            os.execute("uci add_list network.lte.dns=" .. (lte_dns or "")) 
+            os.execute("uci add_list network.lte.dns=" .. (lte_sdns or "")) 
         end
 
-        os.execute("uci set network.lte.peerdns=" .. lte_dns_mode or 0)
+        os.execute("uci set network.lte.peerdns=" .. (lte_dns_mode or 0))
 
 
         if net_select then os.execute("uci set mwan3.globals.net_select=" .. net_select) end
