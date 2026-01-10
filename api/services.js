@@ -8,7 +8,7 @@ import axios from 'axios'
 const apiClient = axios.create({
     timeout: 5000,
     headers: {
-        'Content-Type': 'application/json',
+        // 'Content-Type': 'application/json', // 移除默认 Content-Type，让 axios 根据数据类型自动处理 (特别是 FormData)
         // 'Authorization': `Basic ${BASIC_AUTH}`  // 移除硬编码的 Basic Auth，生产环境由浏览器自动处理
     }
 })

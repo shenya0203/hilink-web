@@ -414,17 +414,33 @@ const exportParams = async () => {
       'edge_link_ctrl'
     ]
 
-    // 2. 并行获取所有 JSON 配置
-    const configPromises = configNames.map(name => 
+    // 2. 获取所有 JSON 配置
+    const configResults = await Promise.all(configNames.map(name => 
       apiClient.get(`/download_nv.cgi?name=${name}`)
         .then(res => ({ type: 'config', name, data: res.data }))
         .catch(err => {
           console.warn(`Failed to fetch config ${name}:`, err)
           return { type: 'config', name, data: null, error: err.message }
         })
-    )
+    ))
 
-    // 3. 获取特殊文件 (CSV等)
+    // 3. 分析 edge_report 获取模板列表
+    let templateNames = []
+    const edgeReport = configResults.find(item => item.name === 'edge_report')
+    if (edgeReport && edgeReport.data && Array.isArray(edgeReport.data.group)) {
+      edgeReport.data.group.forEach(g => {
+        if (g.tmpl_file) {
+           // /template/Report1.json -> Report1
+           const match = g.tmpl_file.match(/\/template\/(.+)\.json/)
+           if (match && match[1]) {
+             templateNames.push(match[1])
+           }
+        }
+      })
+    }
+    templateNames = [...new Set(templateNames)] // 去重
+
+    // 4. 获取特殊文件 (CSV等) 和 模板
     const filePromises = [
       // 边缘计算点位表
       apiClient.get('/download_file.cgi?name=edge')
@@ -432,16 +448,25 @@ const exportParams = async () => {
       // 协议转换映射表
       apiClient.get('/download_file.cgi?name=edge_proto_access')
         .then(res => ({ type: 'file', name: 'edge_proto_access_csv', data: res.data })),
-      // 上报模板
-      apiClient.get('/download_multi_file.cgi?name=template')
-        .then(res => ({ type: 'template', name: 'templates', data: res.data }))
-    ].map(p => p.catch(err => {
+    ]
+
+    // 添加模板下载请求
+    if (templateNames.length > 0) {
+       const query = templateNames.map(n => `name=${encodeURIComponent(n)}`).join('&')
+       filePromises.push(
+         apiClient.get(`/download_multi_file.cgi?name=template&${query}`)
+           .then(res => ({ type: 'template', name: 'templates', data: res.data }))
+       )
+    } else {
+       filePromises.push(Promise.resolve({ type: 'template', name: 'templates', data: {} }))
+    }
+
+    const fileResults = await Promise.all(filePromises.map(p => p.catch(err => {
       console.warn('Failed to fetch file:', err)
       return { type: 'error', error: err.message }
-    }))
+    })))
 
-    // 4. 等待所有请求完成
-    const results = await Promise.all([...configPromises, ...filePromises])
+    const results = [...configResults, ...fileResults]
 
     // 5. 组装最终的导出对象
     const fullConfig = {
@@ -467,6 +492,18 @@ const exportParams = async () => {
       }
     })
 
+    // 将模板内容注入到 edge_report 配置中，以便直观查看
+    if (fullConfig.configs.edge_report && fullConfig.configs.edge_report.group && fullConfig.templates) {
+        fullConfig.configs.edge_report.group.forEach(g => {
+            if (g.tmpl_file) {
+                 const match = g.tmpl_file.match(/\/template\/(.+)\.json/)
+                 if (match && match[1] && fullConfig.templates[match[1]]) {
+                     g.tmpl_content = fullConfig.templates[match[1]]
+                 }
+            }
+        })
+    }
+
     // 6. 创建下载
     const blob = new Blob([JSON.stringify(fullConfig, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -487,6 +524,93 @@ const exportParams = async () => {
   }
 }
 
+// 扁平化配置对象以适配后端 update_nv.cgi 接口
+const flattenConfig = (moduleName, data) => {
+  const result = {}
+  
+  // 定义必须作为数字处理的字段后缀 (针对 network 模块等)
+  const forceNumberKeys = new Set([
+    'ip_mode',
+    'dns_mode',
+    'sim_switch',
+    'auth',
+    'keepalive_period',
+    'net_select'
+  ])
+
+  const process = (obj, prefix = '') => {
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        const value = obj[key]
+        const newKey = prefix ? `${prefix}.${key}` : key
+        
+        if (value === null || value === undefined) continue
+
+        if (Array.isArray(value)) {
+          // 特殊处理数组
+          if (moduleName === 'uart') {
+            // UART 数组: n_UART[0].baud_rate
+            value.forEach((item, index) => {
+              process(item, `UART[${index}]`)
+            })
+          } else if (moduleName === 'offline_cache' && key === 'tunnel') {
+            // Offline Cache Tunnel: n_tunnel[0].enable
+            value.forEach((item, index) => {
+              process(item, `tunnel[${index}]`)
+            })
+          } else if (moduleName === 'edge_access' && key === 'group') {
+             // Edge Access Group: n_group[0].id
+             value.forEach((item, index) => {
+               process(item, `group[${index}]`)
+             })
+          } else {
+            // 普通数组 (如 dns_ip): s_eth0.dns_ip[0]
+            value.forEach((item, index) => {
+              const typePrefix = typeof item === 'number' ? 'n_' : 's_'
+              result[`${typePrefix}${newKey}[${index}]`] = item
+            })
+          }
+        } else if (typeof value === 'object') {
+          process(value, newKey)
+        } else {
+          // 判断是否强制转换为数字
+          let finalValue = value
+          let isNumber = typeof value === 'number'
+          
+          if (moduleName === 'network' && forceNumberKeys.has(key)) {
+             const num = Number(value)
+             if (!isNaN(num)) {
+               finalValue = num
+               isNumber = true
+             }
+          }
+
+          // 基本类型，添加类型前缀
+          const typePrefix = isNumber ? 'n_' : 's_'
+          
+          // 特殊处理 edge 模块
+          if (moduleName === 'edge' && key === 'all_en') {
+             result[`n_all_en`] = finalValue
+          } else {
+             result[`${typePrefix}${newKey}`] = finalValue
+          }
+        }
+      }
+    }
+  }
+
+  // 特殊模块预处理
+  if (moduleName === 'uart' && data.UART) {
+      process({ UART: data.UART }) // 保持原有结构处理
+  } else {
+      process(data)
+  }
+  
+  // 补充 module 参数
+  result['file'] = moduleName
+  return result
+}
+
 // 导入参数
 const importParams = async () => {
   if (!importFile.value) {
@@ -494,32 +618,103 @@ const importParams = async () => {
     return
   }
 
+  loading.value = true
   try {
     const reader = new FileReader()
     reader.onload = async (e) => {
       try {
-        const config = JSON.parse(e.target.result)
+        const fullConfig = JSON.parse(e.target.result)
         
-        // 发送导入请求
-        const formData = new FormData()
-        formData.append('config', importFile.value)
+        // 验证文件格式
+        if (!fullConfig.configs && !fullConfig.files) {
+           throw new Error('Invalid configuration file format')
+        }
+
+        // 1. 恢复普通配置 (通过 update_nv.cgi)
+        const configModules = ['misc', 'network', 'comm_tunnel', 'uart', 'offline_cache', 'edge', 'edge_access', 'edge_link_ctrl']
         
-        await apiClient.post('/upload/config', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
+        for (const name of configModules) {
+          if (fullConfig.configs && fullConfig.configs[name]) {
+            console.log(`Restoring config: ${name}`)
+            const flatParams = flattenConfig(name, fullConfig.configs[name])
+            
+            // 构建查询字符串
+            const queryString = Object.entries(flatParams)
+              .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+              .join('&')
+            
+            await apiClient.get(`/update_nv.cgi?${queryString}`)
           }
-        })
+        }
+
+        // 2. 恢复 Edge Report (通过上传文件)
+        if (fullConfig.configs && fullConfig.configs.edge_report) {
+           console.log('Restoring Edge Report...')
+           // 构造符合后端预期的 JSON 结构 (包含 group 字段)
+           const reportData = fullConfig.configs.edge_report
+           // 后端 entry.lua 中 handle_upload -> /upload/nv1 处理 edge_report
+           // 需要包含 "group" 关键字来触发逻辑
+           const blob = new Blob([JSON.stringify(reportData)], { type: 'application/json' })
+           const formData = new FormData()
+           formData.append('file', blob, 'edge_report.json') // Filename doesn't matter much here, content does
+           
+           // 注意：后端逻辑是通过检查内容包含 "group" 来判断是 edge_report
+           await apiClient.post('/upload/nv1', formData)
+        }
+
+        // 3. 恢复 CSV 文件
+        if (fullConfig.files) {
+          // Edge Points
+          if (fullConfig.files.edge_points_csv) {
+            console.log('Restoring Edge Points CSV...')
+            const blob = new Blob([fullConfig.files.edge_points_csv], { type: 'text/plain' })
+            const formData = new FormData()
+            formData.append('file', blob, 'points.csv')
+            await apiClient.post('/upload/edge', formData)
+          }
+          
+          // Protocol Access
+          if (fullConfig.files.edge_proto_access_csv) {
+            console.log('Restoring Protocol Access CSV...')
+            const blob = new Blob([fullConfig.files.edge_proto_access_csv], { type: 'text/plain' })
+            const formData = new FormData()
+            formData.append('file', blob, 'proto.csv')
+            await apiClient.post('/upload/conver_csv', formData)
+          }
+        }
+
+        // 4. 恢复模板
+        if (fullConfig.templates) {
+          console.log('Restoring Templates...')
+          // 转换为 Key:Value 格式
+          let templateContent = ''
+          for (const [key, value] of Object.entries(fullConfig.templates)) {
+            const jsonStr = typeof value === 'string' ? value : JSON.stringify(value)
+            templateContent += `${key}:${jsonStr}\n`
+          }
+          
+          if (templateContent) {
+            const blob = new Blob([templateContent], { type: 'text/plain' })
+            const formData = new FormData()
+            formData.append('file', blob, 'templates.txt')
+            await apiClient.post('/upload/template', formData)
+          }
+        }
         
-        // 更新本地配置
-        Object.assign(miscConfig.value, config)
         alert(t('system.importSuccess'))
         importFile.value = null
+        showRestartModal.value = true // 提示重启
+
       } catch (parseErr) {
+        console.error(parseErr)
         alert(t('system.configFormatError') + ': ' + parseErr.message)
+      } finally {
+        loading.value = false
       }
     }
     reader.readAsText(importFile.value)
   } catch (err) {
+    loading.value = false
     console.error('参数导入失败:', err)
     alert(t('system.importFailed') + ': ' + err.message)
   }
@@ -599,9 +794,6 @@ const executeUpgrade = async () => {
     formData.append('firmware', firmwareFile.value)
     
     await apiClient.post('/upload/firmware', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      },
       timeout: 300000 // 5分钟超时
     })
     
@@ -810,7 +1002,7 @@ const saveDeviceConfig = async () => {
       .join('&')
     
     await apiClient.get(`/update_nv.cgi?${queryString}`)
-    alert(t('system.saveDeviceSuccess'))
+    showRestartModal.value = true
   } catch (err) {
     console.error('保存设备配置失败:', err)
     alert('保存配置失败: ' + err.message)

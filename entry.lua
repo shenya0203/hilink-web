@@ -264,9 +264,11 @@ local function handle_download_file(args)
     local content = ""
     
     if name == "edge" then
-        content = read_file("/etc/config/device/points.csv") or "V,V1.0,N7X0,;"
+        content = read_file("/etc/config/device/points.csv")
+        if not content or content == "" then content = "V,V1.0,N7X0,;" end
     elseif name == "edge_proto_access" then
-        content = read_file("/etc/config/device/edge_access/edge_proto_access") or "S,1,6,10,ModBusTCP"
+        content = read_file("/etc/config/device/edge_access/edge_proto_access")
+        if not content or content == "" then content = "S,1,6,10,ModBusTCP" end
     end
 
     ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
@@ -362,7 +364,7 @@ local function handle_upload(uri)
             -- Split group config and save to /etc/config/device/edge_report/
             --先删除所有的edge_report文件
             os.execute("rm -f /etc/config/device/edge_report/*.json")
-            os.execute("rm -f /etc/config/device/template/*.json")
+            -- os.execute("rm -f /etc/config/device/template/*.json") -- 不要删除模板文件，这是独立的上传逻辑
             
             local data = cjson.decode(clean_json)
             if data and data.group then
