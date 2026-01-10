@@ -684,11 +684,26 @@ const importParams = async () => {
         }
 
         // 4. 恢复模板
-        if (fullConfig.templates) {
+        let templatesToRestore = fullConfig.templates || {}
+        
+        // 从 edge_report 中提取内嵌的模板内容 (如果有)
+        if (fullConfig.configs && fullConfig.configs.edge_report && Array.isArray(fullConfig.configs.edge_report.group)) {
+             fullConfig.configs.edge_report.group.forEach(g => {
+                 if (g.tmpl_file && g.tmpl_content) {
+                     const match = g.tmpl_file.match(/\/template\/(.+)\.json/)
+                     if (match && match[1]) {
+                         // 优先使用内嵌的内容，因为用户可能直接修改了这里
+                         templatesToRestore[match[1]] = g.tmpl_content
+                     }
+                 }
+             })
+        }
+
+        if (Object.keys(templatesToRestore).length > 0) {
           console.log('Restoring Templates...')
           // 转换为 Key:Value 格式
           let templateContent = ''
-          for (const [key, value] of Object.entries(fullConfig.templates)) {
+          for (const [key, value] of Object.entries(templatesToRestore)) {
             const jsonStr = typeof value === 'string' ? value : JSON.stringify(value)
             templateContent += `${key}:${jsonStr}\n`
           }
