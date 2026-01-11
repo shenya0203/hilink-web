@@ -269,6 +269,32 @@
         </div>
       </div>
     </div>
+
+    <!-- 恢复出厂等待弹窗 -->
+    <div v-if="isResetting" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.factoryReset') }}</h3></div>
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('system.resetting') }}</p>
+          <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 恢复出厂确认弹窗 -->
+    <div v-if="showFactoryResetConfirmModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.factoryReset') }}</h3></div>
+        <div class="modal-body">
+          <p>{{ t('system.confirmFactoryReset') }}</p>
+          <div class="modal-actions">
+            <button class="btn-restart" @click="executeFactoryReset">{{ t('common.confirm') }}</button>
+            <button class="btn-continue" @click="showFactoryResetConfirmModal = false">{{ t('common.cancel') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -286,7 +312,9 @@ const error = ref(null)
 const activeTab = ref(0)
 const showRestartModal = ref(false)
 const showUpgradeConfirmModal = ref(false)
+const showFactoryResetConfirmModal = ref(false)
 const upgradeResetFactory = ref(false)
+const isResetting = ref(false)
 
 // misc 配置数据
 const miscConfig = ref({
@@ -900,17 +928,25 @@ const checkDeviceOnline = async () => {
 }
 
 // 恢复出厂设置
-const factoryReset = async () => {
-  if (!confirm(t('system.confirmFactoryReset'))) {
-    return
-  }
+const factoryReset = () => {
+  showFactoryResetConfirmModal.value = true
+}
 
+const executeFactoryReset = async () => {
+  showFactoryResetConfirmModal.value = false
   try {
     await apiClient.get('/action_reset.cgi', {
       params: { act: 'factory' }
     })
     
-    alert(t('system.factoryResetSuccess'))
+    // 显示等待弹窗
+    isResetting.value = true
+    
+    // 等待10秒刷新页面
+    setTimeout(() => {
+      window.location.reload()
+    }, 1000)
+    
   } catch (err) {
     console.error('恢复出厂失败:', err)
     alert(t('system.factoryResetFailed') + ': ' + err.message)

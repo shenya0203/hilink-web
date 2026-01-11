@@ -510,10 +510,12 @@ local function handle_reset(args)
     local act = args.act
     
     if act == "factory" then
-        ngx.say(cjson.encode({ err = 0 }))
-        ngx.flush(true)
-        -- 执行恢复出厂设置
-        os.execute("sleep 1 && factory_reset &")
+        local success, msg = ubus_adapter.factory_reset()
+        if success then
+            ngx.say(cjson.encode({ err = 0 }))
+        else
+            send_error(msg or "Failed to factory reset")
+        end
         ngx.exit(ngx.HTTP_OK)
     else
         send_error("Unknown action")

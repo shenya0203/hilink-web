@@ -689,4 +689,15 @@ function _M.get_edge_values()
     return nil
 end
 
+-- 20. Factory Reset
+function _M.factory_reset()
+    ngx.log(ngx.INFO, "Triggering factory reset via ubus...")
+    local result = ubus_call("hilink", "factory_reset", {})
+    if result and result.result then
+        return true
+    else
+        return false, (result and result.error) or "Unknown error"
+    end
+end
+
 return _M

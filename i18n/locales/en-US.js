@@ -434,6 +434,7 @@ export default {
         selectFirmware: 'Select File',
         flashFirmware: 'Flash Firmware',
         factoryReset: 'Factory Reset',
+        resetting: 'Resetting factory settings...',
         restart: 'Restart',
         restartNow: 'Restart Now',
         scheduledRestart: 'Scheduled Restart',

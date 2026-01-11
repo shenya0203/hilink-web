@@ -9,7 +9,7 @@ export async function fetchStatusData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=status:', error)
-        return getDefaultStatusData()
+        return null
     }
 }
 
@@ -22,6 +22,7 @@ export async function fetchNetworkData() {
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=network:', error)
         /*return getDefaultNetworkData()*/
+        return null
     }
 }
 
@@ -33,7 +34,7 @@ export async function fetchNetworkConfigData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=network:', error)
-        return getDefaultNetworkConfigData()
+        return null
     }
 }
 
@@ -43,7 +44,7 @@ export async function fetchMiscData() {
         return await getMisc()
     } catch (error) {
         console.error('获取杂项数据失败:', error)
-        return getDefaultMiscData()
+        return null
     }
 }
 
@@ -55,7 +56,7 @@ export async function fetchUartConfigData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=uart:', error)
-        return getDefaultUartConfigData()
+        return null
     }
 }
 
@@ -67,7 +68,8 @@ export async function fetchSocketConfigData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=comm_tunnel:', error)
-        return getDefaultCommTunnelData()
+        // 不需要默认值
+        return null
     }
 }
 
@@ -79,307 +81,16 @@ export async function fetchOfflineCacheData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=offline_cache:', error)
-        return getDefaultOfflineCacheData()
+        // 不需要默认值
+        return null
     }
 }
 
-// 默认状态数据
-function getDefaultStatusData() {
-    return {
-        systime: 1763950948,
-        runtime: 1575947,
-        cloud_sta: 1,
-        socketa_sta: 0,
-        socketb_sta: 0,
-        mqtt1_sta: 0,
-        mqtt2_sta: 0,
-        soft_ver: "V1.0.13.000000.0000",
-        mac: "D4AD20DBBF2F",
-        sn: "03300225101400005387",
-        user_sn: "ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ"
-    }
-}
 
-function getDefaultNetworkData() {
-    return {
-        netdev: "-",
-        eth: {
-            link_sta: 1,
-            ip_mode: 0,
-            ip: "",
-            dns: "",
-            sdns: "",
-            netmask: ""
-        },
-        lte: {
-            ver: "",
-            iccid: "",
-            imei: "",
-            csq: -1,
-            mode: "",
-            oper: 1,
-            sim: 1,
-            cimi: "",
-            lte_sta: "DisConnect",
-            lte_ip: "",
-            lte_netmask: "",
-            lte_dns: "",
-            lte_sdns: ""
-        }
-    }
-}
 
-function getDefaultMiscData() {
-    return {
-        host_name: "N720",
-        web_lang: 1
-    }
-}
-
-function getDefaultCommTunnelData() {
-    return {
-        SOCK: [
-            {
-                enable: 1,
-                name: "SOCKA",
-                mode: 2,
-                tcpc: {
-                    server_ip: "192.168.0.201",
-                    dns_timeout: 30,
-                    reconn_interval: 5,
-                    server_port: 8234,
-                    local_port: 0,
-                    ssl_mode: 0,
-                    ssl_verify: 0,
-                    ssl_server_name: "null",
-                    ssl_client_name: "null",
-                    ssl_client_key: "null",
-                    regp_en: 0,
-                    regp_fmt: 0,
-                    regp_ctx: "",
-                    regp_tim: 0,
-                    hrtp_en: 0,
-                    hrtp_fmt: 0,
-                    hrtp_ctx: "",
-                    hrtp_tim: 60
-                },
-                tcps: {
-                    local_port: 8029,
-                    conn_max_num: 4,
-                    timeout_handling: 0,
-                    idle_handling: 0,
-                    idle_timeout: 3600
-                },
-                udpc: {
-                    server_ip: "192.168.20.21",
-                    dns_timeout: 30,
-                    server_port: 1593,
-                    local_port: 0,
-                    ip_port_verify: 0
-                },
-                httpc: {
-                    mode: 0,
-                    url: "/1.php?",
-                    header: "Accept:text/html",
-                    cut_header: 1,
-                    server_ip: "test.usr.cn",
-                    server_port: 80,
-                    resp_timeout: 10,
-                    local_port: 0
-                }
-            },
-            {
-                enable: 0,
-                name: "SOCKB",
-                mode: 0,
-                tcpc: {
-                    server_ip: "192.168.0.201",
-                    dns_timeout: 30,
-                    reconn_interval: 5,
-                    server_port: 8234,
-                    local_port: 0,
-                    ssl_mode: 0,
-                    ssl_verify: 0,
-                    ssl_server_name: "null",
-                    ssl_client_name: "null",
-                    ssl_client_key: "null",
-                    regp_en: 0,
-                    regp_fmt: 0,
-                    regp_ctx: "",
-                    regp_tim: 0,
-                    hrtp_en: 0,
-                    hrtp_fmt: 0,
-                    hrtp_ctx: "",
-                    hrtp_tim: 60
-                },
-                tcps: {
-                    local_port: 20108,
-                    conn_max_num: 4,
-                    timeout_handling: 0,
-                    idle_handling: 0,
-                    idle_timeout: 3600
-                },
-                udpc: {
-                    server_ip: "192.168.20.21",
-                    dns_timeout: 30,
-                    server_port: 1593,
-                    local_port: 0,
-                    ip_port_verify: 0
-                },
-                httpc: {
-                    mode: 0,
-                    url: "/1.php?",
-                    header: "Accept:text/html",
-                    cut_header: 1,
-                    server_ip: "test.usr.cn",
-                    server_port: 80,
-                    resp_timeout: 10,
-                    local_port: 0
-                }
-            }
-        ],
-        MQTT: [
-            {
-                enable: 0,
-                name: "MQTT1",
-                mqtt_ver: 4,
-                server_ip: "192.168.0.201",
-                ssl_mode: 0,
-                ssl_verify: 0,
-                ssl_server_name: "null",
-                ssl_client_name: "null",
-                ssl_client_key: "null",
-                loacl_port: 0,
-                server_port: 1883,
-                keepalive: 60,
-                reconn_space: 5,
-                clean_session: 0,
-                client_id: "",
-                conn_verify: 0,
-                conn_user_name: "",
-                conn_user_password: "",
-                will_flag: 0,
-                will: {
-                    topic: "/will",
-                    msg: "offline",
-                    qos: 0,
-                    retention: 0
-                }
-            },
-            {
-                enable: 0,
-                name: "MQTT2",
-                mqtt_ver: 4,
-                server_ip: "192.168.0.201",
-                ssl_mode: 0,
-                ssl_verify: 0,
-                ssl_server_name: "null",
-                ssl_client_name: "null",
-                ssl_client_key: "null",
-                loacl_port: 0,
-                server_port: 1883,
-                keepalive: 60,
-                reconn_space: 5,
-                clean_session: 0,
-                client_id: "",
-                conn_verify: 0,
-                conn_user_name: "",
-                conn_user_password: "",
-                will_flag: 0,
-                will: {
-                    topic: "/will",
-                    msg: "offline",
-                    qos: 0,
-                    retention: 0
-                }
-            }
-        ],
-        UCLOUD: {
-            enable: 1,
-            name: "Cloud",
-            pvt_deploy_enable: 0,
-            server_ip: "192.168.0.201",
-            server_port: 1234
-        }
-    }
-}
-
-function getDefaultOfflineCacheData() {
-    return {
-        mgt: {
-            rpt_time: 200,
-            queue_type: 0
-        },
-        tunnel: [
-            { name: "SOCKA", enable: 0 },
-            { name: "SOCKB", enable: 0 },
-            { name: "MQTT1", enable: 0 },
-            { name: "MQTT2", enable: 0 },
-            { name: "Cloud", enable: 0 }
-        ]
-    }
-}
-
-// 默认网络配置数据（nv 版本）
-function getDefaultNetworkConfigData() {
-    return {
-        // 网络优先级选择
-        net_select: 0,  // 0: 以太网优先, 1: 蜂窝网络优先 2: 仅以太网, 
-        // 以太网配置
-        eth_enable: 1,
-        eth_ip_mode: 0,  // 0: 静态IP, 1: DHCP
-        eth_ip: "192.168.2.177",
-        eth_netmask: "255.255.255.0",
-        eth_gw: "192.168.2.1",
-        eth_dns: "223.5.5.5",
-        eth_sdns: "223.6.6.6",
-        // LTE/CAT1 配置
-        lte_enable: 1,
-        lte_apn: "",
-        lte_user: "",
-        lte_pwd: "",
-        lte_auth: "NONE",
-        lte_dns_mode: 0,  // 0: 自动获取, 1: 手动设置
-        lte_dns: "202.96.128.86",
-        lte_sdns: "202.96.134.133"
-    }
-}
-
-// 默认串口配置数据
-function getDefaultUartConfigData() {
-    return {
-        UART: [
-            {
-                enable: 1,
-                name: "Uart1",
-                work_mode: 2,
-                baud_rate: 115200,
-                data_bit: 8,
-                stop_bit: 1,
-                parity: 0,
-                pack_len: 1460,
-                pack_time: 0,
-                func: 1
-            },
-            {
-                enable: 1,
-                select: 0,
-                name: "Uart2",
-                work_mode: 2,
-                baud_rate: 9600,
-                data_bit: 8,
-                stop_bit: 1,
-                parity: 0,
-                pack_len: 1460,
-                pack_time: 0
-            }
-        ]
-    }
-}
-
-export const statusData = getDefaultStatusData()
-export const networkData = getDefaultNetworkData()
-export const miscData = getDefaultMiscData()
+export const statusData = null
+export const networkData = null
+export const miscData = null
 
 // 格式化运行时间（毫秒转换为 HH:mm:ss 格式）
 export function formatSeconds(milliseconds) {

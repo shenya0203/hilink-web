@@ -441,7 +441,7 @@ local function load_comm_tunnel_config_from_uci()
             name = section.name or section[".name"],
             mode = tonumber(section.mode) or 0,
             tcpc = {
-                server_ip = section.tcpc_server_ip or "192.168.0.201",
+                server_ip = section.tcpc_server_ip or "",
                 local_port = tonumber(section.tcpc_local_port) or 0,
                 server_port = tonumber(section.tcpc_server_port) or 8234,
                 dns_timeout = tonumber(section.tcpc_dns_timeout) or 30,
@@ -494,7 +494,7 @@ local function load_comm_tunnel_config_from_uci()
             enable = tonumber(section.enable) or 0,
             name = section.name or section[".name"],
             mqtt_ver = tonumber(section.mqtt_ver) or 4,
-            server_ip = section.server_ip or "192.168.0.201",
+            server_ip = section.server_ip or "",
             server_port = tonumber(section.server_port) or 1883,
             loacl_port = tonumber(section.local_port) or 0,
             keepalive = tonumber(section.keepalive) or 60,
@@ -526,7 +526,7 @@ local function load_comm_tunnel_config_from_uci()
             enable = tonumber(section.enable) or 0,
             name = section.name or "Cloud",
             pvt_deploy_enable = tonumber(section.pvt_deploy_enable) or 0,
-            server_ip = section.server_ip or "192.168.0.201",
+            server_ip = section.server_ip or "",
             server_port = tonumber(section.server_port) or 1234
         }
     end)
@@ -563,7 +563,7 @@ local function save_comm_tunnel_config_to_uci(config)
         
         -- tcpc 配置
         if sock_item.tcpc then
-            cursor:set("comm_tunnel", section_name, "tcpc_server_ip", sock_item.tcpc.server_ip or "192.168.0.201")
+            cursor:set("comm_tunnel", section_name, "tcpc_server_ip", sock_item.tcpc.server_ip or "")
             cursor:set("comm_tunnel", section_name, "tcpc_local_port", tostring(sock_item.tcpc.local_port or 0))
             cursor:set("comm_tunnel", section_name, "tcpc_server_port", tostring(sock_item.tcpc.server_port or 8234))
             cursor:set("comm_tunnel", section_name, "tcpc_dns_timeout", tostring(sock_item.tcpc.dns_timeout or 30))
@@ -621,7 +621,7 @@ local function save_comm_tunnel_config_to_uci(config)
         cursor:set("comm_tunnel", section_name, "enable", tostring(mqtt_item.enable or 0))
         cursor:set("comm_tunnel", section_name, "name", mqtt_item.name or section_name)
         cursor:set("comm_tunnel", section_name, "mqtt_ver", tostring(mqtt_item.mqtt_ver or 4))
-        cursor:set("comm_tunnel", section_name, "server_ip", mqtt_item.server_ip or "192.168.0.201")
+        cursor:set("comm_tunnel", section_name, "server_ip", mqtt_item.server_ip or "")
         cursor:set("comm_tunnel", section_name, "server_port", tostring(mqtt_item.server_port or 1883))
         cursor:set("comm_tunnel", section_name, "local_port", tostring(mqtt_item.loacl_port or 0))
         cursor:set("comm_tunnel", section_name, "keepalive", tostring(mqtt_item.keepalive or 60))
@@ -654,7 +654,7 @@ local function save_comm_tunnel_config_to_uci(config)
         cursor:set("comm_tunnel", section_name, "enable", tostring(config.UCLOUD.enable or 0))
         cursor:set("comm_tunnel", section_name, "name", config.UCLOUD.name or "Cloud")
         cursor:set("comm_tunnel", section_name, "pvt_deploy_enable", tostring(config.UCLOUD.pvt_deploy_enable or 0))
-        cursor:set("comm_tunnel", section_name, "server_ip", config.UCLOUD.server_ip or "192.168.0.201")
+        cursor:set("comm_tunnel", section_name, "server_ip", config.UCLOUD.server_ip or "")
         cursor:set("comm_tunnel", section_name, "server_port", tostring(config.UCLOUD.server_port or 1234))
     end
     
@@ -891,7 +891,7 @@ local comm_tunnel_config = {
     SOCK = {
         {
             enable = 1, name = "SOCKA", mode = 0,
-            tcpc = { server_ip = "192.168.0.201", dns_timeout = 30, reconn_interval = 5,
+            tcpc = { server_ip = "", dns_timeout = 30, reconn_interval = 5,
                 server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
                 ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
                 regp_en = 0, regp_fmt = 0, regp_ctx = "", regp_tim = 0,
@@ -903,7 +903,7 @@ local comm_tunnel_config = {
         },
         {
             enable = 0, name = "SOCKB", mode = 0,
-            tcpc = { server_ip = "192.168.0.201", dns_timeout = 30, reconn_interval = 5,
+            tcpc = { server_ip = "", dns_timeout = 30, reconn_interval = 5,
                 server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
                 ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
                 regp_en = 0, regp_fmt = 0, regp_ctx = "", regp_tim = 0,
@@ -916,21 +916,21 @@ local comm_tunnel_config = {
     },
     MQTT = {
         {
-            enable = 0, name = "MQTT1", mqtt_ver = 4, server_ip = "192.168.0.201",
+            enable = 0, name = "MQTT1", mqtt_ver = 4, server_ip = "",
             ssl_mode = 0, ssl_verify = 0, ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
             loacl_port = 0, server_port = 1883, keepalive = 60, reconn_space = 5, clean_session = 0,
             client_id = "1234567", conn_verify = 0, conn_user_name = "", conn_user_password = "",
             will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
         },
         {
-            enable = 0, name = "MQTT2", mqtt_ver = 4, server_ip = "192.168.0.201",
+            enable = 0, name = "MQTT2", mqtt_ver = 4, server_ip = "",
             ssl_mode = 0, ssl_verify = 0, ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
             loacl_port = 0, server_port = 1883, keepalive = 60, reconn_space = 5, clean_session = 0,
             client_id = "", conn_verify = 0, conn_user_name = "", conn_user_password = "",
             will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
         }
     },
-    UCLOUD = { enable = 1, name = "Cloud", pvt_deploy_enable = 0, server_ip = "192.168.0.201", server_port = 1234 }
+    UCLOUD = { enable = 1, name = "Cloud", pvt_deploy_enable = 0, server_ip = "", server_port = 1234 }
 }
 
 -- 6. 串口配置
@@ -2138,5 +2138,7 @@ for obj_name, obj_methods in pairs(methods) do
     end
 end
 log_info("=========================================")
+
+os.execute("/etc/init.d/nginx restart")
 
 uloop.run()
