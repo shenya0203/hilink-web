@@ -447,6 +447,7 @@ export default {
         selectFirmware: '选择文件',
         flashFirmware: '刷写固件',
         factoryReset: '恢复出厂',
+        resetting: '恢复出厂中...',
         restart: '重新启动',
         restartNow: '立即重启',
         scheduledRestart: '定时重启',

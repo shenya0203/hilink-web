@@ -666,7 +666,7 @@ end
 local status_data = {
     systime = os.time(),
     runtime = 0,
-    cloud_sta = 1,
+    cloud_sta = 0,
     socketa_sta = 0,
     socketb_sta = 0,
     mqtt1_sta = 0,
@@ -2070,7 +2070,7 @@ local methods = {
                 log_info("Factory reset requested...")
                 reply(req, {result = true})
                 -- 实际应该调用: os.execute("firstboot -y && reboot")
-                os.execute("sleep 1;/etc/init.d/network stop;umount /dev/mtdblock6;firstboot -y ; reboot")
+                os.execute("(sleep 2;/etc/init.d/network stop;umount /dev/mtdblock6;firstboot -y ; reboot) &")
             end,
             {}
         },
@@ -2139,6 +2139,6 @@ for obj_name, obj_methods in pairs(methods) do
 end
 log_info("=========================================")
 
-os.execute("/etc/init.d/nginx restart")
+os.execute("/etc/init.d/nginx_hlk restart")
 
 uloop.run()

@@ -47,8 +47,9 @@ local function get_uci(key)
     if f then
         local content = f:read("*a")
         f:close()
-        if content then
-            return string.gsub(content, "\n", "")
+        if content and content ~= "" then
+            local res = string.gsub(content, "\n", "")
+            if res ~= "" then return res end
         end
     end
     return nil

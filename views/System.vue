@@ -521,7 +521,7 @@ const exportParams = async () => {
     })
 
     // 将模板内容注入到 edge_report 配置中，以便直观查看
-    if (fullConfig.configs.edge_report && fullConfig.configs.edge_report.group && fullConfig.templates) {
+    if (fullConfig.configs.edge_report && Array.isArray(fullConfig.configs.edge_report.group) && fullConfig.templates) {
         fullConfig.configs.edge_report.group.forEach(g => {
             if (g.tmpl_file) {
                  const match = g.tmpl_file.match(/\/template\/(.+)\.json/)
