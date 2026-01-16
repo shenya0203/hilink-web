@@ -543,7 +543,7 @@ end
 
 local uri = ngx.var.uri
 local method = ngx.req.get_method()
-local args = ngx.req.get_uri_args() -- 获取 GET 参数
+local args = ngx.req.get_uri_args(0) -- 获取 GET 参数
 
 ngx.log(ngx.ERR, "[DEBUG] Incoming Request: ", method, " ", uri)
 if next(args) then

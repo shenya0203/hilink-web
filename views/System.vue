@@ -593,9 +593,15 @@ const flattenConfig = (moduleName, data) => {
              })
           } else {
             // 普通数组 (如 dns_ip): s_eth0.dns_ip[0]
+            // 同时也支持对象数组 (如 comm_tunnel.SOCK): s_SOCK[0].enable
             value.forEach((item, index) => {
-              const typePrefix = typeof item === 'number' ? 'n_' : 's_'
-              result[`${typePrefix}${newKey}[${index}]`] = item
+              if (item && typeof item === 'object') {
+                console.log("object array", item)
+                process(item, `${newKey}[${index}]`)
+              } else {
+                const typePrefix = typeof item === 'number' ? 'n_' : 's_'
+                result[`${typePrefix}${newKey}[${index}]`] = item
+              }
             })
           }
         } else if (typeof value === 'object') {
