@@ -16,14 +16,14 @@
     <div class="tabs">
       <button 
         class="tab-btn" 
-        :class="{ active: activeTab === 'ethernet' }"
+        :class="{ active: activeTab === 'ethernet', 'has-error': hasTabError('ethernet') }"
         @click="activeTab = 'ethernet'"
       >
         {{ t('network.tabPriority') }}
       </button>
       <button 
         class="tab-btn" 
-        :class="{ active: activeTab === 'lte' }"
+        :class="{ active: activeTab === 'lte', 'has-error': hasTabError('lte') }"
         @click="activeTab = 'lte'"
       >
         {{ t('network.tabEthernet') }}
@@ -31,7 +31,7 @@
       <button 
         v-if="config.net_select !== '2'"
         class="tab-btn" 
-        :class="{ active: activeTab === 'ltecat' }"
+        :class="{ active: activeTab === 'ltecat', 'has-error': hasTabError('ltecat') }"
         @click="activeTab = 'ltecat'"
       >
         {{ t('network.tabLte') }}
@@ -52,15 +52,45 @@
         </div>
         <div class="form-group">
           <label>{{ t('network.probePeriod') }}:</label>
-          <input v-model="config.probe_period" type="text" placeholder="-" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.probe_period" 
+              type="text" 
+              placeholder="-" 
+              :class="{ 'input-error': getFieldError('probe_period') }"
+            />
+            <span v-if="getFieldError('probe_period')" class="field-error-text">
+              {{ getFieldError('probe_period') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.probeServer1') }}:</label>
-          <input v-model="config.probe_server1" type="text" placeholder="-" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.probe_server1" 
+              type="text" 
+              placeholder="-" 
+              :class="{ 'input-error': getFieldError('probe_server1') }"
+            />
+            <span v-if="getFieldError('probe_server1')" class="field-error-text">
+              {{ getFieldError('probe_server1') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.probeServer2') }}:</label>
-          <input v-model="config.probe_server2" type="text" placeholder="-" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.probe_server2" 
+              type="text" 
+              placeholder="-" 
+              :class="{ 'input-error': getFieldError('probe_server2') }"
+            />
+            <span v-if="getFieldError('probe_server2')" class="field-error-text">
+              {{ getFieldError('probe_server2') }}
+            </span>
+          </div>
         </div>
       </div>
     </form>
@@ -85,23 +115,75 @@
         </div>
         <div v-if="config.eth_mode === '0'" class="form-group">
           <label>{{ t('network.lanIp') }}:</label>
-          <input v-model="config.eth_ip" type="text" placeholder="" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.eth_ip" 
+              type="text" 
+              placeholder="" 
+              :class="{ 'input-error': getFieldError('eth_ip') }"
+            />
+            <span v-if="getFieldError('eth_ip')" class="field-error-text">
+              {{ getFieldError('eth_ip') }}
+            </span>
+          </div>
         </div>
         <div v-if="config.eth_mode === '0'" class="form-group">
           <label>{{ t('network.subnetMask') }}:</label>
-          <input v-model="config.eth_netmask" type="text" placeholder="" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.eth_netmask" 
+              type="text" 
+              placeholder="" 
+              :class="{ 'input-error': getFieldError('eth_netmask') }"
+            />
+            <span v-if="getFieldError('eth_netmask')" class="field-error-text">
+              {{ getFieldError('eth_netmask') }}
+            </span>
+          </div>
         </div>
         <div v-if="config.eth_mode === '0'" class="form-group">
           <label>{{ t('network.gatewayAddress') }}:</label>
-          <input v-model="config.eth_gw" type="text" placeholder="" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.eth_gw" 
+              type="text" 
+              placeholder="" 
+              :class="{ 'input-error': getFieldError('eth_gw') }"
+            />
+            <span v-if="getFieldError('eth_gw')" class="field-error-text">
+              {{ getFieldError('eth_gw') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.primaryDns') }}:</label>
-          <input v-model="config.eth_dns" type="text" placeholder="" :disabled="config.eth_dns_mode === '1'" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.eth_dns" 
+              type="text" 
+              placeholder="" 
+              :disabled="config.eth_dns_mode === '1'" 
+              :class="{ 'input-error': getFieldError('eth_dns') }"
+            />
+            <span v-if="getFieldError('eth_dns')" class="field-error-text">
+              {{ getFieldError('eth_dns') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.backupDns') }}:</label>
-          <input v-model="config.eth_sdns" type="text" placeholder="" :disabled="config.eth_dns_mode === '1'" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.eth_sdns" 
+              type="text" 
+              placeholder="" 
+              :disabled="config.eth_dns_mode === '1'" 
+              :class="{ 'input-error': getFieldError('eth_sdns') }"
+            />
+            <span v-if="getFieldError('eth_sdns')" class="field-error-text">
+              {{ getFieldError('eth_sdns') }}
+            </span>
+          </div>
         </div>
       </div>
     </form>
@@ -121,15 +203,45 @@
         </div>
         <div class="form-group">
           <label>{{ t('network.apnName') }}:</label>
-          <input v-model="config.lte_apn" type="text" placeholder="" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.lte_apn" 
+              type="text" 
+              placeholder="" 
+              :class="{ 'input-error': getFieldError('lte_apn') }"
+            />
+            <span v-if="getFieldError('lte_apn')" class="field-error-text">
+              {{ getFieldError('lte_apn') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.username') }}:</label>
-          <input v-model="config.lte_user" type="text" placeholder="" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.lte_user" 
+              type="text" 
+              placeholder="" 
+              :class="{ 'input-error': getFieldError('lte_user') }"
+            />
+            <span v-if="getFieldError('lte_user')" class="field-error-text">
+              {{ getFieldError('lte_user') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.password') }}:</label>
-          <input v-model="config.lte_pwd" type="password" placeholder="" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.lte_pwd" 
+              type="password" 
+              placeholder="" 
+              :class="{ 'input-error': getFieldError('lte_pwd') }"
+            />
+            <span v-if="getFieldError('lte_pwd')" class="field-error-text">
+              {{ getFieldError('lte_pwd') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.authMethod') }}:</label>
@@ -148,18 +260,40 @@
         </div>
         <div class="form-group">
           <label>{{ t('network.primaryDns') }}:</label>
-          <input v-model="config.lte_dns" type="text" placeholder="" :disabled="config.lte_dns_mode === '1'" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.lte_dns" 
+              type="text" 
+              placeholder="" 
+              :disabled="config.lte_dns_mode === '1'" 
+              :class="{ 'input-error': getFieldError('lte_dns') }"
+            />
+            <span v-if="getFieldError('lte_dns')" class="field-error-text">
+              {{ getFieldError('lte_dns') }}
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>{{ t('network.backupDns') }}:</label>
-          <input v-model="config.lte_sdns" type="text" placeholder="" :disabled="config.lte_dns_mode === '1'" />
+          <div class="input-wrapper">
+            <input 
+              v-model="config.lte_sdns" 
+              type="text" 
+              placeholder="" 
+              :disabled="config.lte_dns_mode === '1'" 
+              :class="{ 'input-error': getFieldError('lte_sdns') }"
+            />
+            <span v-if="getFieldError('lte_sdns')" class="field-error-text">
+              {{ getFieldError('lte_sdns') }}
+            </span>
+          </div>
         </div>
       </div>
     </form>
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
+      <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
@@ -181,10 +315,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { fetchNetworkConfigData, fetchNetworkData, fetchStatusData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
+import { 
+  isValidIP, 
+  isValidSubnetMask, 
+  isIpInSubnet, 
+  isValidStringSafe, 
+  isValidProbePeriod, 
+  isValidServerAddress 
+} from '../utils/validation.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -220,6 +362,95 @@ const config = ref({
   lte_dns: '',
   lte_sdns: ''
 })
+
+// 验证逻辑
+const networkErrors = computed(() => {
+  const errors = {}
+  
+  // 1. 网络优先级验证
+  if (!isValidProbePeriod(config.value.probe_period)) {
+    errors['probe_period'] = t('network.invalidProbePeriod') || 'Invalid Probe Period (5-600s)'
+  }
+  if (!isValidServerAddress(config.value.probe_server1)) {
+    errors['probe_server1'] = t('network.invalidServerAddress') || 'Invalid Server Address'
+  }
+  if (config.value.probe_server2 && !isValidServerAddress(config.value.probe_server2)) {
+    errors['probe_server2'] = t('network.invalidServerAddress') || 'Invalid Server Address'
+  }
+
+  // 2. 以太网验证
+  if (config.value.eth_mode === '0') { // 静态IP模式
+    if (!isValidIP(config.value.eth_ip)) {
+      errors['eth_ip'] = t('network.invalidIP') || 'Invalid IP'
+    }
+    if (!isValidSubnetMask(config.value.eth_netmask)) {
+      errors['eth_netmask'] = t('network.invalidSubnetMask') || 'Invalid Subnet Mask'
+    }
+    if (!isValidIP(config.value.eth_gw)) {
+      errors['eth_gw'] = t('network.invalidGateway') || 'Invalid Gateway'
+    }
+    
+    // 关联验证：IP和网关是否在同一子网
+    if (isValidIP(config.value.eth_ip) && isValidSubnetMask(config.value.eth_netmask) && isValidIP(config.value.eth_gw)) {
+      if (!isIpInSubnet(config.value.eth_gw, config.value.eth_ip, config.value.eth_netmask)) {
+        errors['eth_gw'] = t('network.gatewayNotInSubnet') || 'Gateway not in subnet'
+      }
+    }
+  }
+
+  if (config.value.eth_dns_mode === '0') { // 手动DNS
+    if (config.value.eth_dns && !isValidIP(config.value.eth_dns)) {
+      errors['eth_dns'] = t('network.invalidIP') || 'Invalid DNS IP'
+    }
+    if (config.value.eth_sdns && !isValidIP(config.value.eth_sdns)) {
+      errors['eth_sdns'] = t('network.invalidIP') || 'Invalid DNS IP'
+    }
+  }
+
+  // 3. LTE/CAT1 验证
+  if (config.value.lte_apn && !isValidStringSafe(config.value.lte_apn, 4, 16)) {
+    errors['lte_apn'] = t('network.invalidStringSafe') || 'Invalid APN (4-16 chars, no special chars)'
+  }
+  if (config.value.lte_user && !isValidStringSafe(config.value.lte_user, 0, 32)) {
+    errors['lte_user'] = t('network.invalidStringSafe') || 'Invalid Username (0-32 chars, no special chars)'
+  }
+  if (config.value.lte_pwd && !isValidStringSafe(config.value.lte_pwd, 0, 32)) {
+    errors['lte_pwd'] = t('network.invalidStringSafe') || 'Invalid Password (0-32 chars, no special chars)'
+  }
+
+  if (config.value.lte_dns_mode === '0') { // 手动DNS
+    if (config.value.lte_dns && !isValidIP(config.value.lte_dns)) {
+      errors['lte_dns'] = t('network.invalidIP') || 'Invalid DNS IP'
+    }
+    if (config.value.lte_sdns && !isValidIP(config.value.lte_sdns)) {
+      errors['lte_sdns'] = t('network.invalidIP') || 'Invalid DNS IP'
+    }
+  }
+
+  return errors
+})
+
+const isConfigValid = computed(() => {
+  return Object.keys(networkErrors.value).length === 0
+})
+
+const getFieldError = (field) => {
+  return networkErrors.value[field]
+}
+
+const hasTabError = (tabName) => {
+  const errors = networkErrors.value
+  if (tabName === 'ethernet') {
+    return errors.probe_period || errors.probe_server1 || errors.probe_server2
+  }
+  if (tabName === 'lte') {
+    return errors.eth_ip || errors.eth_netmask || errors.eth_gw || errors.eth_dns || errors.eth_sdns
+  }
+  if (tabName === 'ltecat') {
+    return errors.lte_apn || errors.lte_user || errors.lte_pwd || errors.lte_dns || errors.lte_sdns
+  }
+  return false
+}
 
 // 加载所有数据
 const loadData = async () => {
@@ -258,26 +489,6 @@ const loadData = async () => {
         lte_sdns: netConfig.cell.dns_ip[1]
       })
     }
-    
-    /*
-    if (networkFlex) {
-      if (networkFlex.eth) {
-        Object.assign(config.value, {
-          eth_ip: networkFlex.eth.ip || config.value.eth_ip,
-          eth_netmask: networkFlex.eth.netmask || config.value.eth_netmask,
-          eth_dns: networkFlex.eth.dns || config.value.eth_dns,
-          eth_sdns: networkFlex.eth.sdns || config.value.eth_sdns
-        })
-      }
-      
-      if (networkFlex.lte) {
-        Object.assign(config.value, {
-          lte_dns: networkFlex.lte.lte_dns || config.value.lte_dns,
-          lte_sdns: networkFlex.lte.lte_sdns || config.value.lte_sdns
-        })
-      }
-    }
-    */
     
     console.log('最终配置对象:', config.value)
     
@@ -397,6 +608,14 @@ onUnmounted(() => {
   background-color: #0066cc;
 }
 
+.tab-btn.has-error {
+  background-color: #d32f2f;
+}
+
+.tab-btn.active.has-error {
+  background-color: #c62828;
+}
+
 .form-section {
   padding: 20px 15px;
   background-color: white;
@@ -404,7 +623,7 @@ onUnmounted(() => {
 
 .form-group {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 15px;
   gap: 20px;
 }
@@ -414,11 +633,12 @@ onUnmounted(() => {
   width: 150px;
   text-align: right;
   flex-shrink: 0;
+  margin-top: 8px;
 }
 
 .form-group input,
 .form-group select {
-  flex: 1;
+  width: 100%;
   max-width: 300px;
   padding: 8px 12px;
   border: 1px solid #ddd;
@@ -438,6 +658,24 @@ onUnmounted(() => {
   background-color: #f5f5f5;
   color: #999;
   cursor: not-allowed;
+}
+
+.input-wrapper {
+  flex: 1;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-error {
+  border-color: #d32f2f !important;
+  background-color: #ffebee;
+}
+
+.field-error-text {
+  color: #d32f2f;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .button-group {
@@ -461,6 +699,11 @@ onUnmounted(() => {
 
 .btn-save:hover {
   background-color: #0052a3;
+}
+
+.btn-disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
 }
 
 .loading {

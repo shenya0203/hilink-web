@@ -416,7 +416,20 @@ export default {
         confirm: '确认',
         add: '添加',
         nameExists: '名称已存在',
-        addressExists: '该地址已存在，请修改'
+        addressExists: '该地址已存在，请修改',
+
+        // 验证错误消息
+        invalidDetailInfo: '详细信息长度须0-16字节，禁止空格和括号',
+        invalidServerAddress: '服务器地址格式错误 (需合法IPv4)',
+        invalidModbusPort: '端口号必须在 1-65534 之间',
+        invalidPollInterval: '轮询间隔必须在 200-5000 ms 之间',
+        invalidSlaveAddress: '从机地址必须在 1-247 之间',
+        invalidRegisterAddress: '寄存器地址必须在 1-65535 之间',
+        invalidChangeRange: '变化范围必须为正整数',
+        invalidReportPeriod: '上报周期必须在 5-86400 秒之间',
+        invalidTopic: '主题长度须1-32字节，禁止空格和括号',
+        invalidSubTopic: '订阅主题长度须1-32字节，禁止空格和括号',
+        invalidPubTopic: '发布主题长度须1-32字节，禁止空格和括号'
     },
 
     // 系统设置页面
@@ -547,7 +560,14 @@ export default {
         authMethod: '鉴权方式',
         // 弹窗
         restartRequired: '网络配置需要重启设备才能生效。',
-        continueConfig: '继续配置'
+        continueConfig: '继续配置',
+        invalidProbePeriod: '探测周期必须在 5-600 秒之间',
+        invalidServerAddress: '服务器地址格式错误 (IP或域名)',
+        invalidIP: 'IP地址格式错误',
+        invalidSubnetMask: '子网掩码格式错误',
+        invalidGateway: '网关地址格式错误',
+        gatewayNotInSubnet: '网关不在子网范围内',
+        invalidStringSafe: '输入包含非法字符 (空格, 括号等) 或长度不符'
     },
 
     // 页脚

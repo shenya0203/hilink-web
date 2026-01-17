@@ -261,9 +261,16 @@
           </div>
 
           <template v-if="protocolConversionConfig.channel.startsWith('MQTT')">
-            <div class="form-group">
-              <label>{{ t('edge.subTopic') }}:</label>
-              <input v-model="protocolConversionConfig.subTopic" type="text" />
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.subTopic') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model="protocolConversionConfig.subTopic" 
+                  type="text" 
+                  :style="{ color: protocolSubTopicError ? 'red' : '', borderColor: protocolSubTopicError ? 'red' : '' }"
+                />
+                <span v-if="protocolSubTopicError" style="color: red; font-size: 12px; margin-top: 4px;">{{ protocolSubTopicError }}</span>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ t('edge.subQos') }}:</label>
@@ -273,9 +280,16 @@
                 <option value="QOS2">QOS2</option>
               </select>
             </div>
-            <div class="form-group">
-              <label>{{ t('edge.pubTopic') }}:</label>
-              <input v-model="protocolConversionConfig.pubTopic" type="text" />
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.pubTopic') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model="protocolConversionConfig.pubTopic" 
+                  type="text" 
+                  :style="{ color: protocolPubTopicError ? 'red' : '', borderColor: protocolPubTopicError ? 'red' : '' }"
+                />
+                <span v-if="protocolPubTopicError" style="color: red; font-size: 12px; margin-top: 4px;">{{ protocolPubTopicError }}</span>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ t('edge.pubQos') }}:</label>
@@ -331,7 +345,14 @@
 
       <div class="button-group">
         <button v-if="protocolConversionConfig.enable === 1 && protocolConversionConfig.protocol === 1" class="btn-action" @click="showAddMappingModal">{{ t('edge.addMappingPoint') }}</button>
-        <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
+        <button 
+          class="btn-save" 
+          @click="saveCurrentPage"
+          :disabled="hasProtocolConversionErrors"
+          :style="{ backgroundColor: hasProtocolConversionErrors ? '#ccc' : '', cursor: hasProtocolConversionErrors ? 'not-allowed' : 'pointer', opacity: hasProtocolConversionErrors ? 0.6 : 1 }"
+        >
+          {{ t('edge.saveCurrentPage') }}
+        </button>
       </div>
     </div>
 
@@ -360,9 +381,16 @@
             </select>
           </div>
           <template v-if="['MQTT1', 'MQTT2'].includes(reportGroupForm.channel)">
-            <div class="form-group">
-              <label>{{ t('edge.reportTopic') }}:</label>
-              <input v-model="reportGroupForm.topic" type="text" />
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.reportTopic') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model="reportGroupForm.topic" 
+                  type="text" 
+                  :style="{ color: reportTopicError ? 'red' : '', borderColor: reportTopicError ? 'red' : '' }"
+                />
+                <span v-if="reportTopicError" style="color: red; font-size: 12px; margin-top: 4px;">{{ reportTopicError }}</span>
+              </div>
             </div>
             <div class="form-group">
               <label>QOS:</label>
@@ -383,11 +411,18 @@
             <label>{{ t('edge.periodicReport') }}:</label>
             <input type="checkbox" v-model="reportGroupForm.periodic" />
           </div>
-          <div class="form-group" v-if="reportGroupForm.periodic">
-            <label>{{ t('edge.reportPeriod') }}:</label>
-            <div class="input-with-unit">
-              <input v-model.number="reportGroupForm.periodicInterval" type="number" />
-              <span class="unit">s</span>
+          <div class="form-group" v-if="reportGroupForm.periodic" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.reportPeriod') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <div class="input-with-unit">
+                <input 
+                  v-model.number="reportGroupForm.periodicInterval" 
+                  type="number"
+                  :style="{ color: reportPeriodError ? 'red' : '', borderColor: reportPeriodError ? 'red' : '' }"
+                />
+                <span class="unit">s</span>
+              </div>
+              <span v-if="reportPeriodError" style="color: red; font-size: 12px; margin-top: 4px;">{{ reportPeriodError }}</span>
             </div>
           </div>
           <div class="form-group">
@@ -470,8 +505,8 @@
           <button 
             class="btn-save" 
             @click="saveReportGroup"
-            :disabled="!!reportGroupNameError"
-            :style="{ backgroundColor: reportGroupNameError ? '#ccc' : '', cursor: reportGroupNameError ? 'not-allowed' : 'pointer', opacity: reportGroupNameError ? 0.6 : 1 }"
+            :disabled="hasReportGroupFormErrors"
+            :style="{ backgroundColor: hasReportGroupFormErrors ? '#ccc' : '', cursor: hasReportGroupFormErrors ? 'not-allowed' : 'pointer', opacity: hasReportGroupFormErrors ? 0.6 : 1 }"
           >
             {{ t('edge.save') }}
           </button>
@@ -564,9 +599,16 @@
               <span v-if="slaveNameError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveNameError }}</span>
             </div>
           </div>
-          <div class="form-group">
-            <label>{{ t('edge.detail') }}:</label>
-            <input v-model="slaveForm.detail" type="text" />
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.detail') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="slaveForm.detail" 
+                type="text" 
+                :style="{ color: slaveDetailError ? 'red' : '', borderColor: slaveDetailError ? 'red' : '' }"
+              />
+              <span v-if="slaveDetailError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveDetailError }}</span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('edge.protocolType') }}:</label>
@@ -578,13 +620,29 @@
           
           <!-- Modbus TCP 选项 -->
           <template v-if="slaveForm.protocol === 1">
-            <div class="form-group">
-              <label>{{ t('edge.remoteAddress') }}:</label>
-              <input v-model="slaveForm.remoteAddress" type="text" placeholder="192.168.0.21" />
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.remoteAddress') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model="slaveForm.remoteAddress" 
+                  type="text" 
+                  placeholder="192.168.0.21" 
+                  :style="{ color: slaveRemoteAddressError ? 'red' : '', borderColor: slaveRemoteAddressError ? 'red' : '' }"
+                />
+                <span v-if="slaveRemoteAddressError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveRemoteAddressError }}</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label>{{ t('edge.remotePort') }}:</label>
-              <input v-model.number="slaveForm.remotePort" type="number" placeholder="2100" />
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.remotePort') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model.number="slaveForm.remotePort" 
+                  type="number" 
+                  placeholder="2100" 
+                  :style="{ color: slaveRemotePortError ? 'red' : '', borderColor: slaveRemotePortError ? 'red' : '' }"
+                />
+                <span v-if="slaveRemotePortError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveRemotePortError }}</span>
+              </div>
             </div>
           </template>
           
@@ -599,15 +657,31 @@
             </div>
           </template>
           
-          <div class="form-group">
-            <label>{{ t('edge.slaveAddress') }}:</label>
-            <input v-model.number="slaveForm.slaveAddress" type="number" placeholder="1" />
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.slaveAddress') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model.number="slaveForm.slaveAddress" 
+                type="number" 
+                placeholder="1" 
+                :style="{ color: slaveAddressError ? 'red' : '', borderColor: slaveAddressError ? 'red' : '' }"
+              />
+              <span v-if="slaveAddressError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveAddressError }}</span>
+            </div>
           </div>
-          <div class="form-group">
-            <label>{{ t('edge.pollInterval') }}:</label>
-            <div class="input-with-unit">
-              <input v-model.number="slaveForm.pollInterval" type="number" placeholder="100" />
-              <span class="unit">ms</span>
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.pollInterval') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <div class="input-with-unit">
+                <input 
+                  v-model.number="slaveForm.pollInterval" 
+                  type="number" 
+                  placeholder="100" 
+                  :style="{ color: slavePollIntervalError ? 'red' : '', borderColor: slavePollIntervalError ? 'red' : '' }"
+                />
+                <span class="unit">ms</span>
+              </div>
+              <span v-if="slavePollIntervalError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slavePollIntervalError }}</span>
             </div>
           </div>
           <div class="form-group">
@@ -619,8 +693,8 @@
           <button 
             class="btn-save" 
             @click="saveSlave"
-            :disabled="!!slaveNameError"
-            :style="{ backgroundColor: slaveNameError ? '#ccc' : '', cursor: slaveNameError ? 'not-allowed' : 'pointer', opacity: slaveNameError ? 0.6 : 1 }"
+            :disabled="hasSlaveFormErrors"
+            :style="{ backgroundColor: hasSlaveFormErrors ? '#ccc' : '', cursor: hasSlaveFormErrors ? 'not-allowed' : 'pointer', opacity: hasSlaveFormErrors ? 0.6 : 1 }"
           >
             {{ t('edge.save') }}
           </button>
@@ -647,9 +721,16 @@
               <span v-if="pointNameError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointNameError }}</span>
             </div>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault">
-            <label>{{ t('edge.detail') }}:</label>
-            <input v-model="pointForm.detail" type="text" />
+          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.detail') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="pointForm.detail" 
+                type="text" 
+                :style="{ color: pointDetailError ? 'red' : '', borderColor: pointDetailError ? 'red' : '' }"
+              />
+              <span v-if="pointDetailError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointDetailError }}</span>
+            </div>
           </div>
           <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
             <label style="margin-top: 5px;">{{ t('edge.registerType') }}:</label>
@@ -666,7 +747,7 @@
                     v-model.number="pointForm.registerAddress" 
                     type="number" 
                     placeholder="1" 
-                    :style="{ color: pointRegisterError ? 'red' : '', borderColor: pointRegisterError ? 'red' : '' }"
+                    :style="{ color: (pointRegisterError || pointRegisterAddressError) ? 'red' : '', borderColor: (pointRegisterError || pointRegisterAddressError) ? 'red' : '' }"
                   />
                   <input 
                     v-if="pointForm.registerType === 4 && pointForm.dataType === 'Bit'"
@@ -681,6 +762,7 @@
                 <span class="register-display">{{ computedRegisterAddress }}</span>
               </div>
               <span v-if="pointRegisterError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointRegisterError }}</span>
+              <span v-if="pointRegisterAddressError && !pointRegisterError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointRegisterAddressError }}</span>
             </div>
           </div>
           <div class="form-group">
@@ -714,17 +796,25 @@
             <label>{{ t('edge.reportOnChange') }}:</label>
             <input type="checkbox" v-model="pointForm.reportOnChange" />
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault && pointForm.reportOnChange">
-            <label>{{ t('edge.changeRange') }}:</label>
-            <input v-model.number="pointForm.changeRange" type="number" placeholder="2" />
+          <div class="form-group" v-if="!pointForm.isDefault && pointForm.reportOnChange" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.changeRange') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model.number="pointForm.changeRange" 
+                type="number" 
+                placeholder="2" 
+                :style="{ color: pointChangeRangeError ? 'red' : '', borderColor: pointChangeRangeError ? 'red' : '' }"
+              />
+              <span v-if="pointChangeRangeError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointChangeRangeError }}</span>
+            </div>
           </div>
         </div>
         <div class="modal-buttons">
           <button 
             class="btn-save" 
             @click="savePoint"
-            :disabled="!!pointNameError || !!pointRegisterError"
-            :style="{ backgroundColor: (pointNameError || pointRegisterError) ? '#ccc' : '', cursor: (pointNameError || pointRegisterError) ? 'not-allowed' : 'pointer', opacity: (pointNameError || pointRegisterError) ? 0.6 : 1 }"
+            :disabled="hasPointFormErrors"
+            :style="{ backgroundColor: hasPointFormErrors ? '#ccc' : '', cursor: hasPointFormErrors ? 'not-allowed' : 'pointer', opacity: hasPointFormErrors ? 0.6 : 1 }"
           >
             {{ t('edge.save') }}
           </button>
@@ -896,6 +986,17 @@
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
+import { 
+  isValidIP, 
+  isValidDetailInfo, 
+  isValidModbusPort, 
+  isValidPollInterval, 
+  isValidSlaveAddress, 
+  isValidRegisterAddress, 
+  isValidChangeRange, 
+  isValidReportPeriod, 
+  isValidTopic 
+} from '../utils/validation.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -940,6 +1041,69 @@ const protocolConversionConfig = ref({
   stationAddress: 1,
   intByteOrder: 'ABCD',
   floatByteOrder: 'ABCD'
+})
+
+// 协议转换验证错误状态
+const protocolSubTopicError = ref('')
+const protocolPubTopicError = ref('')
+
+// 协议转换验证状态计算属性
+const hasProtocolConversionErrors = computed(() => {
+  if (protocolConversionConfig.value.enable !== 1) return false
+  if (!protocolConversionConfig.value.channel.startsWith('MQTT')) return false
+  return !!protocolSubTopicError.value || !!protocolPubTopicError.value
+})
+
+// 验证协议转换主题
+const validateProtocolTopics = () => {
+  if (protocolConversionConfig.value.enable === 1 && 
+      protocolConversionConfig.value.channel.startsWith('MQTT')) {
+    if (!isValidTopic(protocolConversionConfig.value.subTopic)) {
+      protocolSubTopicError.value = t('edge.invalidSubTopic')
+    } else {
+      protocolSubTopicError.value = ''
+    }
+    
+    if (!isValidTopic(protocolConversionConfig.value.pubTopic)) {
+      protocolPubTopicError.value = t('edge.invalidPubTopic')
+    } else {
+      protocolPubTopicError.value = ''
+    }
+  } else {
+    protocolSubTopicError.value = ''
+    protocolPubTopicError.value = ''
+  }
+}
+
+// 监听协议转换配置变化
+watch(() => protocolConversionConfig.value.subTopic, () => {
+  if (protocolConversionConfig.value.enable === 1 && 
+      protocolConversionConfig.value.channel.startsWith('MQTT')) {
+    if (!isValidTopic(protocolConversionConfig.value.subTopic)) {
+      protocolSubTopicError.value = t('edge.invalidSubTopic')
+    } else {
+      protocolSubTopicError.value = ''
+    }
+  }
+})
+
+watch(() => protocolConversionConfig.value.pubTopic, () => {
+  if (protocolConversionConfig.value.enable === 1 && 
+      protocolConversionConfig.value.channel.startsWith('MQTT')) {
+    if (!isValidTopic(protocolConversionConfig.value.pubTopic)) {
+      protocolPubTopicError.value = t('edge.invalidPubTopic')
+    } else {
+      protocolPubTopicError.value = ''
+    }
+  }
+})
+
+watch(() => protocolConversionConfig.value.enable, () => {
+  validateProtocolTopics()
+})
+
+watch(() => protocolConversionConfig.value.channel, () => {
+  validateProtocolTopics()
 })
 
 const mappingPoints = ref([])
@@ -1297,7 +1461,8 @@ const pointForm = ref({
   timeout: 200,
   collectFormula: '',
   controlFormula: '',
-  reportOnChange: false
+  reportOnChange: false,
+  changeRange: 2
 })
 
 // 计算属性：可见的标签页（网关使能关闭时只显示网关使能标签）
@@ -1394,6 +1559,65 @@ watch(() => pointForm.value.name, () => {
   }
 })
 
+// 数据点表单其他字段验证错误状态
+const pointDetailError = ref('')
+const pointRegisterAddressError = ref('')
+const pointChangeRangeError = ref('')
+
+// 数据点表单验证状态计算属性
+const hasPointFormErrors = computed(() => {
+  return !!pointNameError.value || 
+    !!pointRegisterError.value ||
+    !!pointDetailError.value || 
+    !!pointRegisterAddressError.value || 
+    !!pointChangeRangeError.value
+})
+
+// 监听数据点表单字段变化
+watch(() => pointForm.value.detail, () => {
+  if (showPointModal.value) {
+    if (!isValidDetailInfo(pointForm.value.detail)) {
+      pointDetailError.value = t('edge.invalidDetailInfo')
+    } else {
+      pointDetailError.value = ''
+    }
+  }
+})
+
+watch(() => pointForm.value.registerAddress, () => {
+  if (showPointModal.value) {
+    if (!isValidRegisterAddress(pointForm.value.registerAddress)) {
+      pointRegisterAddressError.value = t('edge.invalidRegisterAddress')
+    } else {
+      pointRegisterAddressError.value = ''
+    }
+  }
+})
+
+watch(() => pointForm.value.changeRange, () => {
+  if (showPointModal.value && pointForm.value.reportOnChange) {
+    if (!isValidChangeRange(pointForm.value.changeRange)) {
+      pointChangeRangeError.value = t('edge.invalidChangeRange')
+    } else {
+      pointChangeRangeError.value = ''
+    }
+  }
+})
+
+watch(() => pointForm.value.reportOnChange, () => {
+  if (showPointModal.value) {
+    if (pointForm.value.reportOnChange) {
+      if (!isValidChangeRange(pointForm.value.changeRange)) {
+        pointChangeRangeError.value = t('edge.invalidChangeRange')
+      } else {
+        pointChangeRangeError.value = ''
+      }
+    } else {
+      pointChangeRangeError.value = ''
+    }
+  }
+})
+
 // 获取下一个可用寄存器地址
 const getNextRegisterAddress = (type) => {
   if (!currentSlave.value) return 1
@@ -1460,6 +1684,138 @@ const validateSlaveName = () => {
 watch(() => slaveForm.value.name, () => {
   if (showSlaveModal.value) {
     validateSlaveName()
+  }
+})
+
+// 从机表单其他字段验证错误状态
+const slaveDetailError = ref('')
+const slaveRemoteAddressError = ref('')
+const slaveRemotePortError = ref('')
+const slavePollIntervalError = ref('')
+const slaveAddressError = ref('')
+
+// 从机表单验证函数
+const validateSlaveForm = () => {
+  // 验证详细信息
+  if (!isValidDetailInfo(slaveForm.value.detail)) {
+    slaveDetailError.value = t('edge.invalidDetailInfo')
+  } else {
+    slaveDetailError.value = ''
+  }
+  
+  // 验证服务器地址 (仅 Modbus TCP)
+  if (slaveForm.value.protocol === 1) {
+    if (!isValidIP(slaveForm.value.remoteAddress)) {
+      slaveRemoteAddressError.value = t('edge.invalidServerAddress')
+    } else {
+      slaveRemoteAddressError.value = ''
+    }
+    
+    // 验证端口
+    if (!isValidModbusPort(slaveForm.value.remotePort)) {
+      slaveRemotePortError.value = t('edge.invalidModbusPort')
+    } else {
+      slaveRemotePortError.value = ''
+    }
+  } else {
+    slaveRemoteAddressError.value = ''
+    slaveRemotePortError.value = ''
+  }
+  
+  // 验证轮询间隔
+  if (!isValidPollInterval(slaveForm.value.pollInterval)) {
+    slavePollIntervalError.value = t('edge.invalidPollInterval')
+  } else {
+    slavePollIntervalError.value = ''
+  }
+  
+  // 验证从机地址
+  if (!isValidSlaveAddress(slaveForm.value.slaveAddress)) {
+    slaveAddressError.value = t('edge.invalidSlaveAddress')
+  } else {
+    slaveAddressError.value = ''
+  }
+}
+
+// 从机表单验证状态计算属性
+const hasSlaveFormErrors = computed(() => {
+  return !!slaveNameError.value || 
+    !!slaveDetailError.value || 
+    !!slaveRemoteAddressError.value || 
+    !!slaveRemotePortError.value || 
+    !!slavePollIntervalError.value || 
+    !!slaveAddressError.value
+})
+
+// 监听从机表单字段变化
+watch(() => slaveForm.value.detail, () => {
+  if (showSlaveModal.value) {
+    if (!isValidDetailInfo(slaveForm.value.detail)) {
+      slaveDetailError.value = t('edge.invalidDetailInfo')
+    } else {
+      slaveDetailError.value = ''
+    }
+  }
+})
+
+watch(() => slaveForm.value.remoteAddress, () => {
+  if (showSlaveModal.value && slaveForm.value.protocol === 1) {
+    if (!isValidIP(slaveForm.value.remoteAddress)) {
+      slaveRemoteAddressError.value = t('edge.invalidServerAddress')
+    } else {
+      slaveRemoteAddressError.value = ''
+    }
+  }
+})
+
+watch(() => slaveForm.value.remotePort, () => {
+  if (showSlaveModal.value && slaveForm.value.protocol === 1) {
+    if (!isValidModbusPort(slaveForm.value.remotePort)) {
+      slaveRemotePortError.value = t('edge.invalidModbusPort')
+    } else {
+      slaveRemotePortError.value = ''
+    }
+  }
+})
+
+watch(() => slaveForm.value.pollInterval, () => {
+  if (showSlaveModal.value) {
+    if (!isValidPollInterval(slaveForm.value.pollInterval)) {
+      slavePollIntervalError.value = t('edge.invalidPollInterval')
+    } else {
+      slavePollIntervalError.value = ''
+    }
+  }
+})
+
+watch(() => slaveForm.value.slaveAddress, () => {
+  if (showSlaveModal.value) {
+    if (!isValidSlaveAddress(slaveForm.value.slaveAddress)) {
+      slaveAddressError.value = t('edge.invalidSlaveAddress')
+    } else {
+      slaveAddressError.value = ''
+    }
+  }
+})
+
+watch(() => slaveForm.value.protocol, () => {
+  if (showSlaveModal.value) {
+    // 重新验证协议相关字段
+    if (slaveForm.value.protocol === 1) {
+      if (!isValidIP(slaveForm.value.remoteAddress)) {
+        slaveRemoteAddressError.value = t('edge.invalidServerAddress')
+      } else {
+        slaveRemoteAddressError.value = ''
+      }
+      if (!isValidModbusPort(slaveForm.value.remotePort)) {
+        slaveRemotePortError.value = t('edge.invalidModbusPort')
+      } else {
+        slaveRemotePortError.value = ''
+      }
+    } else {
+      slaveRemoteAddressError.value = ''
+      slaveRemotePortError.value = ''
+    }
   }
 })
 
@@ -1614,6 +1970,67 @@ const validateReportGroupName = () => {
 watch(() => reportGroupForm.value.name, () => {
   if (showReportGroupModal.value) {
     validateReportGroupName()
+  }
+})
+
+// 上报分组表单其他字段验证错误状态
+const reportPeriodError = ref('')
+const reportTopicError = ref('')
+
+// 上报分组表单验证状态计算属性
+const hasReportGroupFormErrors = computed(() => {
+  return !!reportGroupNameError.value || 
+    !!reportPeriodError.value || 
+    !!reportTopicError.value ||
+    isJsonError.value
+})
+
+// 监听上报分组表单字段变化
+watch(() => reportGroupForm.value.periodicInterval, () => {
+  if (showReportGroupModal.value && reportGroupForm.value.periodic) {
+    if (!isValidReportPeriod(reportGroupForm.value.periodicInterval)) {
+      reportPeriodError.value = t('edge.invalidReportPeriod')
+    } else {
+      reportPeriodError.value = ''
+    }
+  }
+})
+
+watch(() => reportGroupForm.value.periodic, () => {
+  if (showReportGroupModal.value) {
+    if (reportGroupForm.value.periodic) {
+      if (!isValidReportPeriod(reportGroupForm.value.periodicInterval)) {
+        reportPeriodError.value = t('edge.invalidReportPeriod')
+      } else {
+        reportPeriodError.value = ''
+      }
+    } else {
+      reportPeriodError.value = ''
+    }
+  }
+})
+
+watch(() => reportGroupForm.value.topic, () => {
+  if (showReportGroupModal.value && ['MQTT1', 'MQTT2'].includes(reportGroupForm.value.channel)) {
+    if (!isValidTopic(reportGroupForm.value.topic)) {
+      reportTopicError.value = t('edge.invalidTopic')
+    } else {
+      reportTopicError.value = ''
+    }
+  }
+})
+
+watch(() => reportGroupForm.value.channel, () => {
+  if (showReportGroupModal.value) {
+    if (['MQTT1', 'MQTT2'].includes(reportGroupForm.value.channel)) {
+      if (!isValidTopic(reportGroupForm.value.topic)) {
+        reportTopicError.value = t('edge.invalidTopic')
+      } else {
+        reportTopicError.value = ''
+      }
+    } else {
+      reportTopicError.value = ''
+    }
   }
 })
 

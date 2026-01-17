@@ -395,7 +395,21 @@ export default {
         confirm: 'Confirm',
         add: 'Add',
         nameExists: 'Name already exists',
-        addressExists: 'Address already exists, please modify'
+        addressExists: 'Address already exists, please modify',
+
+        // Validation error messages
+        invalidDetailInfo: 'Detail must be 0-16 bytes, no spaces or brackets',
+        invalidServerAddress: 'Invalid server address (valid IPv4 required)',
+        invalidModbusPort: 'Port must be between 1-65534',
+        invalidPollInterval: 'Poll interval must be between 200-5000 ms',
+        invalidSlaveAddress: 'Slave address must be between 1-247',
+        invalidRegisterAddress: 'Register address must be between 1-65535',
+        invalidChangeRange: 'Change range must be a positive integer',
+        invalidReportPeriod: 'Report period must be between 5-86400 seconds',
+        invalidTopic: 'Topic must be 1-32 bytes, no spaces or brackets',
+        invalidSubTopic: 'Subscribe topic must be 1-32 bytes, no spaces or brackets',
+        invalidPubTopic: 'Publish topic must be 1-32 bytes, no spaces or brackets',
+        changeRange: 'Change Range'
     },
 
     // System Settings Page
@@ -526,7 +540,14 @@ export default {
         authMethod: 'Auth Method',
         // Modal
         restartRequired: 'Network configuration requires a device restart to take effect.',
-        continueConfig: 'Continue Configuration'
+        continueConfig: 'Continue Configuration',
+        invalidProbePeriod: 'Probe period must be between 5 and 600 seconds.',
+        invalidServerAddress: 'Invalid server address format (IP or domain).',
+        invalidIP: 'Invalid IP address format.',
+        invalidSubnetMask: 'Invalid subnet mask format.',
+        invalidGateway: 'Invalid gateway address format.',
+        gatewayNotInSubnet: 'Gateway is not within the subnet range.',
+        invalidStringSafe: 'Input contains invalid characters (spaces, parentheses, etc.) or has an invalid length.'
     },
 
     // Footer
