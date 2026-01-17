@@ -890,7 +890,7 @@ local misc_config = {
 local comm_tunnel_config = {
     SOCK = {
         {
-            enable = 1, name = "SOCKA", mode = 0,
+            enable = 0, name = "SOCKA", mode = 0,
             tcpc = { server_ip = "", dns_timeout = 30, reconn_interval = 5,
                 server_port = 8234, local_port = 0, ssl_mode = 0, ssl_verify = 0,
                 ssl_server_name = "null", ssl_client_name = "null", ssl_client_key = "null",
@@ -930,7 +930,7 @@ local comm_tunnel_config = {
             will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
         }
     },
-    UCLOUD = { enable = 1, name = "Cloud", pvt_deploy_enable = 0, server_ip = "", server_port = 1234 }
+    UCLOUD = { enable = 0, name = "Cloud", pvt_deploy_enable = 0, server_ip = "", server_port = 1234 }
 }
 
 -- 6. 串口配置
@@ -1036,6 +1036,32 @@ local edge_points_csv = "V,V1.0,N7X0,;\nSC,Device1,1,2,1,100,0,0,192.168.0.21:21
 -- 14. 协议转换点位数据 (CSV格式)
 local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 
+local function get_communication_enable(tunnel)
+    -- log_info("查找目标: " .. tunnel)
+    
+    -- 遍历第一层 (SOCK, MQTT, UCLOUD)
+    for key, data in pairs(comm_tunnel_config) do
+        
+        -- 情况1: data 是一个列表/数组 (例如 SOCK, MQTT)
+        -- 我们通过判断是否存在索引 [1] 来确定它是不是列表
+        if type(data) == "table" and data[1] ~= nil then
+            for _, item in ipairs(data) do
+                if item.name == tunnel then
+                    -- log_info("在列表 " .. key .. " 中找到: " .. item.name)
+                    return item.enable
+                end
+            end
+            
+        -- 情况2: data 是单个对象 (例如 UCLOUD)
+        elseif type(data) == "table" and data.name == tunnel then
+            -- log_info("找到单项配置: " .. data.name)
+            return data.enable
+        end
+    end
+
+    -- 未找到
+    return 0
+end
 -- ==========================================================
 -- 辅助函数
 -- ==========================================================
@@ -1266,10 +1292,19 @@ end
 -- 2. 辅助函数：启动时同步 Nginx 真实配置 (可选，但推荐)
 -- ==========================================================
 local function sync_nginx_settings()
+    log_info("sync setting")
     -- Load initial config from UCI to memory
     local sys_conf = load_system_config_from_uci()
     local nginx_conf = load_nginx_config_from_uci()
     local timing_reset_conf = load_timing_reset_config_from_uci()
+    local loaded_config = load_comm_tunnel_config_from_uci()
+    log_info("loaded comm tunnel config: "..cjson.encode(loaded_config))
+    if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.UCLOUD) then
+        comm_tunnel_config = loaded_config
+        log_info("loaded comm tunnel config: "..comm_tunnel_config.SOCK[1].enable)
+        comm_tunnel_config_loaded = true
+    end
+    
 
     if not misc_config then misc_config = {} end
     
@@ -1725,10 +1760,15 @@ local methods = {
                 data.runtime = get_runtime()*1000
                 data.mac = get_system_mac()
                 data.socketa_sta = get_communication_status("SOCKA")
+                data.socketa_enable = get_communication_enable("SOCKA")
                 data.socketb_sta = get_communication_status("SOCKB")
+                data.socketb_enable = get_communication_enable("SOCKB")
                 data.mqtt1_sta = get_communication_status("MQTT1")
+                data.mqtt1_enable = get_communication_enable("MQTT1")
                 data.mqtt2_sta = get_communication_status("MQTT2")
+                data.mqtt2_enable = get_communication_enable("MQTT2")
                 data.cloud_sta = get_communication_status("CLOUD")
+                data.cloud_enable = get_communication_enable("CLOUD")
                 reply(req, data)
             end,
             {}

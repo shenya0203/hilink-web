@@ -132,7 +132,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.socket1Flag') }}:</td>
-            <td>{{ statusInfo.socketa_sta === 0 ? t('common.off') : t('common.on') }}</td>
+            <td>{{ statusInfo.socketa_enable === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.socket2Status') }}:</td>
@@ -140,7 +140,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.socket2Flag') }}:</td>
-            <td>{{ statusInfo.socketb_sta === 0 ? t('common.off') : t('common.on') }}</td>
+            <td>{{ statusInfo.socketb_enable === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
         </tbody>
       </table>
@@ -157,7 +157,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.mqtt1Flag') }}:</td>
-            <td>{{ statusInfo.mqtt1_sta === 0 ? t('common.off') : t('common.on') }}</td>
+            <td>{{ statusInfo.mqtt1_enable === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.mqtt2Status') }}:</td>
@@ -165,7 +165,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.mqtt2Flag') }}:</td>
-            <td>{{ statusInfo.mqtt2_sta === 0 ? t('common.off') : t('common.on') }}</td>
+            <td>{{ statusInfo.mqtt2_enable === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
         </tbody>
       </table>
@@ -182,7 +182,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.cloudConnectionFlag') }}:</td>
-            <td>{{ statusInfo.cloud_sta === 0 ? t('common.off') : t('common.on') }}</td>
+            <td>{{ statusInfo.cloud_enable === 0 ? t('common.off') : t('common.on') }}</td>
           </tr>
         </tbody>
       </table>
