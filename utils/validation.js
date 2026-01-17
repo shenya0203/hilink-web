@@ -266,3 +266,27 @@ export const isValidTopic = (topic) => {
     const forbidden = /[\s\(\)\[\]\{\}]/;
     return !forbidden.test(topic);
 };
+
+/**
+ * 检查两个IP是否在同一个网段内
+ * @param {string} ip1 第一个IP地址
+ * @param {string} ip2 第二个IP地址
+ * @param {string} mask 子网掩码
+ * @returns {boolean} 如果在同一网段返回true，否则返回false
+ */
+export const isSameSubnet = (ip1, ip2, mask) => {
+    if (!isValidIPv4Format(ip1) || !isValidIPv4Format(ip2) || !isValidSubnetMask(mask)) {
+        return false;
+    }
+
+    const ip1Parts = ip1.split('.').map(Number);
+    const ip2Parts = ip2.split('.').map(Number);
+    const maskParts = mask.split('.').map(Number);
+
+    for (let i = 0; i < 4; i++) {
+        if ((ip1Parts[i] & maskParts[i]) !== (ip2Parts[i] & maskParts[i])) {
+            return false;
+        }
+    }
+    return true;
+};
