@@ -17,7 +17,7 @@
         v-for="(item, index) in mqttList"
         :key="index"
         class="tab-btn" 
-        :class="{ active: activeTab === index }"
+        :class="{ active: activeTab === index, 'has-error': hasTabError(index) }"
         @click="activeTab = index"
       >
         {{ item.name }}
@@ -48,17 +48,44 @@
 
           <div class="form-group">
             <label>{{ t('mqtt.clientId') }}:</label>
-            <input v-model="mqttList[activeTab].client_id" type="text" />
+            <div class="input-wrapper">
+              <input 
+                v-model="mqttList[activeTab].client_id" 
+                type="text" 
+                :class="{ 'input-error': getFieldError(activeTab, 'client_id') }"
+              />
+              <span v-if="getFieldError(activeTab, 'client_id')" class="field-error-text">
+                {{ getFieldError(activeTab, 'client_id') }}
+              </span>
+            </div>
           </div>
 
           <div class="form-group">
             <label>{{ t('mqtt.serverAddress') }}:</label>
-            <input v-model="mqttList[activeTab].server_ip" type="text" />
+            <div class="input-wrapper">
+              <input 
+                v-model="mqttList[activeTab].server_ip" 
+                type="text" 
+                :class="{ 'input-error': getFieldError(activeTab, 'server_ip') }"
+              />
+              <span v-if="getFieldError(activeTab, 'server_ip')" class="field-error-text">
+                {{ getFieldError(activeTab, 'server_ip') }}
+              </span>
+            </div>
           </div>
 
           <div class="form-group">
             <label>{{ t('mqtt.remotePort') }}:</label>
-            <input v-model.number="mqttList[activeTab].server_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="mqttList[activeTab].server_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'server_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'server_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'server_port') }}
+              </span>
+            </div>
           </div>
 
           <div class="form-group">
@@ -68,7 +95,16 @@
 
           <div class="form-group">
             <label>{{ t('mqtt.reconnectInterval') }}:</label>
-            <input v-model.number="mqttList[activeTab].reconn_space" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="mqttList[activeTab].reconn_space" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'reconn_space') }"
+              />
+              <span v-if="getFieldError(activeTab, 'reconn_space')" class="field-error-text">
+                {{ getFieldError(activeTab, 'reconn_space') }}
+              </span>
+            </div>
           </div>
 
           <div class="form-group">
@@ -195,7 +231,7 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
+      <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
@@ -215,10 +251,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { getCommTunnel, getOfflineCache, updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
+import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidClientId } from '../utils/validation.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -240,6 +277,49 @@ const clientKeyInput = ref(null)
 const serverCertFile = ref(null)
 const clientCertFile = ref(null)
 const clientKeyFile = ref(null)
+
+// 验证逻辑
+const mqttErrors = computed(() => {
+  const errors = {}
+  
+  mqttList.value.forEach((mqtt, index) => {
+    if (mqtt.enable !== 1) return
+    
+    // Client ID
+    if (!isValidClientId(mqtt.client_id)) {
+       errors[`${index}_client_id`] = t('mqtt.invalidClientId') || 'Invalid Client ID (Max 16 chars, Alphanumeric, _, -)'
+    }
+    
+    // Server Address
+    if (!isValidServerAddress(mqtt.server_ip)) {
+      errors[`${index}_server_ip`] = t('mqtt.invalidServerAddress') || 'Invalid Server Address'
+    }
+    
+    // Server Port
+    if (!isValidPort(mqtt.server_port)) {
+      errors[`${index}_server_port`] = t('mqtt.invalidPort') || 'Invalid Port (1024-65534)'
+    }
+    
+    // Reconnect Interval
+    if (!isValidReconnectInterval(mqtt.reconn_space)) {
+      errors[`${index}_reconn_space`] = t('mqtt.invalidReconnectInterval') || 'Invalid Interval (5-60s)'
+    }
+  })
+  
+  return errors
+})
+
+const isConfigValid = computed(() => {
+  return Object.keys(mqttErrors.value).length === 0
+})
+
+const getFieldError = (index, field) => {
+  return mqttErrors.value[`${index}_${field}`]
+}
+
+const hasTabError = (index) => {
+  return Object.keys(mqttErrors.value).some(key => key.startsWith(`${index}_`))
+}
 
 // 触发文件选择点击
 const triggerFileSelect = (type) => {
@@ -625,6 +705,14 @@ onMounted(() => {
   background-color: #0066cc; /* Blue when active */
 }
 
+.tab-btn.has-error {
+  background-color: #d32f2f;
+}
+
+.tab-btn.active.has-error {
+  background-color: #c62828;
+}
+
 /* 表单区域样式 */
 .form-section {
   padding: 20px 15px;
@@ -633,7 +721,7 @@ onMounted(() => {
 
 .form-group {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 15px;
   gap: 20px;
 }
@@ -648,13 +736,14 @@ onMounted(() => {
   text-align: right;
   flex-shrink: 0;
   font-size: 13px;
+  margin-top: 6px;
 }
 
 .form-group input[type="text"],
 .form-group input[type="number"],
 .form-group input[type="password"],
 .form-group select {
-  flex: 1;
+  width: 100%;
   max-width: 300px;
   padding: 6px 10px;
   border: 1px solid #ddd;
@@ -665,12 +754,31 @@ onMounted(() => {
 .form-group input[type="checkbox"] {
     width: 16px;
     height: 16px;
+    margin-top: 6px;
 }
 
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
   border-color: #0066cc;
+}
+
+.input-wrapper {
+  flex: 1;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-error {
+  border-color: #d32f2f !important;
+  background-color: #ffebee;
+}
+
+.field-error-text {
+  color: #d32f2f;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 /* 按钮组样式 */
@@ -695,6 +803,11 @@ onMounted(() => {
 
 .btn-save:hover {
   background-color: #0052a3;
+}
+
+.btn-disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
 }
 
 .btn-upload {

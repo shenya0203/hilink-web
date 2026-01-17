@@ -14,8 +14,8 @@
 
     <!-- 标签页选择 -->
     <div class="tabs">
-      <button class="tab-btn" :class="{ active: activeTab === 0 }" @click="activeTab = 0">SOCKA</button>
-      <button v-if="socketList.length > 1" class="tab-btn" :class="{ active: activeTab === 1 }" @click="activeTab = 1">SOCKB</button>
+      <button class="tab-btn" :class="{ active: activeTab === 0, 'has-error': hasTabError(0) }" @click="activeTab = 0">SOCKA</button>
+      <button v-if="socketList.length > 1" class="tab-btn" :class="{ active: activeTab === 1, 'has-error': hasTabError(1) }" @click="activeTab = 1">SOCKB</button>
     </div>
 
     <!-- Socket配置表单 -->
@@ -47,19 +47,55 @@
         <div v-if="socketList[activeTab].mode === 0" class="form-section">
           <div class="form-group">
             <label>{{ t('socket.serverAddress') }}:</label>
-            <input v-model="socketList[activeTab].tcpc.server_ip" type="text" />
+            <div class="input-wrapper">
+              <input 
+                v-model="socketList[activeTab].tcpc.server_ip" 
+                type="text" 
+                :class="{ 'input-error': getFieldError(activeTab, 'tcpc_server_ip') }"
+              />
+              <span v-if="getFieldError(activeTab, 'tcpc_server_ip')" class="field-error-text">
+                {{ getFieldError(activeTab, 'tcpc_server_ip') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.localPort') }}:</label>
-            <input v-model.number="socketList[activeTab].tcpc.local_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].tcpc.local_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'tcpc_local_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'tcpc_local_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'tcpc_local_port') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.remotePort') }}:</label>
-            <input v-model.number="socketList[activeTab].tcpc.server_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].tcpc.server_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'tcpc_server_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'tcpc_server_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'tcpc_server_port') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.reconnectInterval') }}:</label>
-            <input v-model.number="socketList[activeTab].tcpc.reconn_interval" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].tcpc.reconn_interval" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'tcpc_reconn_interval') }"
+              />
+              <span v-if="getFieldError(activeTab, 'tcpc_reconn_interval')" class="field-error-text">
+                {{ getFieldError(activeTab, 'tcpc_reconn_interval') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.sslEncrypt') }}:</label>
@@ -195,7 +231,16 @@
         <div v-if="socketList[activeTab].mode === 1" class="form-section">
           <div class="form-group">
             <label>{{ t('socket.localPort') }}:</label>
-            <input v-model.number="socketList[activeTab].tcps.local_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].tcps.local_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'tcps_local_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'tcps_local_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'tcps_local_port') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.maxConnections') }}:</label>
@@ -222,15 +267,42 @@
           <div class="section-title">{{ t('socket.udpClient') }} {{ t('socket.config') }}</div>
           <div class="form-group">
             <label>{{ t('socket.serverAddress') }}:</label>
-            <input v-model="socketList[activeTab].udpc.server_ip" type="text" />
+            <div class="input-wrapper">
+              <input 
+                v-model="socketList[activeTab].udpc.server_ip" 
+                type="text" 
+                :class="{ 'input-error': getFieldError(activeTab, 'udpc_server_ip') }"
+              />
+              <span v-if="getFieldError(activeTab, 'udpc_server_ip')" class="field-error-text">
+                {{ getFieldError(activeTab, 'udpc_server_ip') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.localPort') }}:</label>
-            <input v-model.number="socketList[activeTab].udpc.local_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].udpc.local_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'udpc_local_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'udpc_local_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'udpc_local_port') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.remotePort') }}:</label>
-            <input v-model.number="socketList[activeTab].udpc.server_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].udpc.server_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'udpc_server_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'udpc_server_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'udpc_server_port') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.offlineCache') }}:</label>
@@ -253,11 +325,29 @@
           </div>
           <div class="form-group">
             <label>{{ t('socket.serverAddress') }}:</label>
-            <input v-model="socketList[activeTab].httpc.server_ip" type="text" />
+            <div class="input-wrapper">
+              <input 
+                v-model="socketList[activeTab].httpc.server_ip" 
+                type="text" 
+                :class="{ 'input-error': getFieldError(activeTab, 'httpc_server_ip') }"
+              />
+              <span v-if="getFieldError(activeTab, 'httpc_server_ip')" class="field-error-text">
+                {{ getFieldError(activeTab, 'httpc_server_ip') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.serverPort') }}:</label>
-            <input v-model.number="socketList[activeTab].httpc.server_port" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].httpc.server_port" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'httpc_server_port') }"
+              />
+              <span v-if="getFieldError(activeTab, 'httpc_server_port')" class="field-error-text">
+                {{ getFieldError(activeTab, 'httpc_server_port') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>URL {{ t('socket.path') }}:</label>
@@ -276,7 +366,7 @@
 
     <!-- 应用保存按钮 -->
     <div class="button-group">
-      <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
+      <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
@@ -296,11 +386,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { fetchSocketConfigData, fetchOfflineCacheData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
+import { isValidServerAddress, isValidPort, isValidReconnectInterval } from '../utils/validation.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -319,6 +410,87 @@ const clientKeyInput = ref(null)
 const serverCertFile = ref(null)
 const clientCertFile = ref(null)
 const clientKeyFile = ref(null)
+
+// 验证逻辑
+const socketErrors = computed(() => {
+  const errors = {}
+  
+  socketList.value.forEach((sock, index) => {
+    if (sock.enable !== 1) return
+    
+    // TCP Client
+    if (sock.mode === 0) {
+      if (!isValidServerAddress(sock.tcpc.server_ip)) {
+        errors[`${index}_tcpc_server_ip`] = t('socket.invalidServerAddress') || 'Invalid Server Address'
+      }
+      // TCP Client 本地端口允许为 0 (系统自动分配)
+      if (!isValidPort(sock.tcpc.local_port, true)) {
+        errors[`${index}_tcpc_local_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+      if (!isValidPort(sock.tcpc.server_port)) {
+        errors[`${index}_tcpc_server_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+      if (!isValidReconnectInterval(sock.tcpc.reconn_interval)) {
+        errors[`${index}_tcpc_reconn_interval`] = t('socket.invalidReconnectInterval') || 'Invalid Interval (5-60s)'
+      }
+    }
+    // TCP Server
+    else if (sock.mode === 1) {
+      if (!isValidPort(sock.tcps.local_port)) {
+        errors[`${index}_tcps_local_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+    }
+    // UDP Client
+    else if (sock.mode === 2) {
+      if (!isValidServerAddress(sock.udpc.server_ip)) {
+        errors[`${index}_udpc_server_ip`] = t('socket.invalidServerAddress') || 'Invalid Server Address'
+      }
+      if (!isValidPort(sock.udpc.local_port)) {
+        errors[`${index}_udpc_local_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+      if (!isValidPort(sock.udpc.server_port)) {
+        errors[`${index}_udpc_server_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+    }
+    // HTTP Client
+    else if (sock.mode === 3) {
+      if (!isValidServerAddress(sock.httpc.server_ip)) {
+        errors[`${index}_httpc_server_ip`] = t('socket.invalidServerAddress') || 'Invalid Server Address'
+      }
+      if (!isValidPort(sock.httpc.server_port)) {
+        errors[`${index}_httpc_server_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+    }
+  })
+
+  // TCP Server 端口冲突检测
+  if (socketList.value.length >= 2) {
+    const s0 = socketList.value[0]
+    const s1 = socketList.value[1]
+    
+    if (s0.enable === 1 && s0.mode === 1 && s1.enable === 1 && s1.mode === 1) {
+      if (Number(s0.tcps.local_port) === Number(s1.tcps.local_port)) {
+        const msg = t('socket.portConflict') || 'Port already in use'
+        errors[`0_tcps_local_port`] = msg
+        errors[`1_tcps_local_port`] = msg
+      }
+    }
+  }
+
+  return errors
+})
+
+const isConfigValid = computed(() => {
+  return Object.keys(socketErrors.value).length === 0
+})
+
+const getFieldError = (index, field) => {
+  return socketErrors.value[`${index}_${field}`]
+}
+
+const hasTabError = (index) => {
+  return Object.keys(socketErrors.value).some(key => key.startsWith(`${index}_`))
+}
 
 const triggerFileSelect = (type) => {
   if (type === 'server' && serverCertInput.value) serverCertInput.value.click()
@@ -493,20 +665,30 @@ onMounted(() => { loadData() })
 .tab-btn { padding: 8px 20px; background-color: #494641; color: white; border: none; cursor: pointer; border-radius: 4px 4px 0 0; font-size: 13px; font-weight: 600; transition: background-color 0.2s; }
 .tab-btn:hover { background-color: #ff8800; }
 .tab-btn.active { background-color: #0066cc; }
+.tab-btn.has-error { background-color: #d32f2f; }
+.tab-btn.active.has-error { background-color: #c62828; }
+
 .form-section { padding: 20px 15px; background-color: white; border-bottom: 1px solid #e8e8e8; }
 .section-title { font-weight: 600; font-size: 13px; color: #333; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e8e8e8; }
-.form-group { display: flex; align-items: center; margin-bottom: 15px; gap: 20px; }
+.form-group { display: flex; align-items: flex-start; margin-bottom: 15px; gap: 20px; }
 .form-group:last-child { margin-bottom: 0; }
-.form-group label { font-weight: 600; width: 150px; text-align: right; flex-shrink: 0; }
-.form-group input, .form-group select { flex: 1; max-width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.form-group label { font-weight: 600; width: 150px; text-align: right; flex-shrink: 0; margin-top: 8px; }
+.form-group input, .form-group select { width: 100%; max-width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
 .form-group input:focus, .form-group select:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1); }
-.btn-upload { padding: 6px 16px; background-color: #666; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; margin-right: 10px; }
+
+.input-wrapper { flex: 1; max-width: 300px; display: flex; flex-direction: column; }
+.input-error { border-color: #d32f2f !important; background-color: #ffebee; }
+.field-error-text { color: #d32f2f; font-size: 12px; margin-top: 4px; }
+
+.btn-upload { padding: 6px 16px; background-color: #666; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; margin-right: 10px; margin-top: 2px; }
 .btn-upload:hover { background-color: #555; }
 .btn-upload:disabled { background-color: #ccc; cursor: not-allowed; }
-.file-name { color: #0a0; font-size: 12px; margin-left: 10px; }
+.file-name { color: #0a0; font-size: 12px; margin-left: 10px; margin-top: 8px; }
 .button-group { display: flex; justify-content: center; padding: 20px; gap: 10px; background-color: #f9f9f9; }
 .btn-save { padding: 10px 40px; background-color: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background-color 0.2s; }
 .btn-save:hover { background-color: #0052a3; }
+.btn-disabled { background-color: #ccc !important; cursor: not-allowed; }
+
 .loading { text-align: center; padding: 40px 20px; color: #666; }
 .error { background-color: #ffebee; border: 1px solid #ffcdd2; color: #c62828; padding: 12px 15px; border-radius: 4px; margin-bottom: 20px; }
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }

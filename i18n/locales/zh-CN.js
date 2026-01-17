@@ -193,7 +193,11 @@ export default {
         continueConfig: '继续配置',
         customContentHint: '(1-128字节 支持\'a\'-\'z\'/\'A\'-\'Z\'/\'0\'-\'9\'和\'-\'.\'@\')',
         registerCustomContentRequired: '注册包自定义内容不能为空',
-        heartbeatCustomContentRequired: '心跳包自定义内容不能为空'
+        heartbeatCustomContentRequired: '心跳包自定义内容不能为空',
+        invalidServerAddress: '服务器地址格式错误 (IP或域名)',
+        invalidPort: '端口号必须在 1024-65534 之间',
+        invalidReconnectInterval: '重连间隔必须在 5-60 秒之间',
+        portConflict: '端口已被占用'
     },
 
     // MQTT配置页面
@@ -227,7 +231,11 @@ export default {
         clientCert: '客户端证书上传',
         clientKey: '客户端私钥上传',
         restartRequired: 'MQTT配置需要重启设备才能生效。',
-        continueConfig: '继续配置'
+        continueConfig: '继续配置',
+        invalidClientId: 'Client ID 格式错误 (最大16字符, 字母/数字/_/-)',
+        invalidServerAddress: '服务器地址格式错误 (IP或域名)',
+        invalidPort: '端口号必须在 1024-65534 之间',
+        invalidReconnectInterval: '重连间隔必须在 5-60 秒之间'
     },
 
     // 云平台配置页面
