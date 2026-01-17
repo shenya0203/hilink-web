@@ -37,12 +37,25 @@
     <div class="button-group">
       <button class="btn-save" @click="saveConfig">{{ t('common.save') }}</button>
     </div>
+    <!-- 重启确认弹窗 -->
+    <div v-if="showRestartModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('common.saveSuccess') }}</h3></div>
+        <div class="modal-body">
+          <p>{{ t('socket.restartRequired') }}</p>
+          <div class="modal-actions">
+            <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
+            <button class="btn-continue" @click="handleContinue">{{ t('socket.continueConfig') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getCommTunnel, getOfflineCache } from '../api/services'
+import { getCommTunnel, getOfflineCache, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 
@@ -55,6 +68,7 @@ const error = ref(null)
 const cloudConfig = ref(null)
 const offlineCacheEnable = ref(0)
 const offlineCacheData = ref(null)
+const showRestartModal = ref(false)
 
 // 加载配置
 const loadData = async () => {
@@ -135,11 +149,26 @@ const saveConfig = async () => {
       offlineCacheEnable: offlineCacheEnable.value
     })
     
-    alert(t('common.saveSuccess'))
+    showRestartModal.value = true
+    //alert(t('common.saveSuccess'))
   } catch (err) {
     console.error('保存配置失败:', err)
     alert(t('common.saveFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
+}
+
+const handleRestart = async () => {
+  try {
+    await restartDevice()
+    alert(t('system.restartSuccess'))
+    showRestartModal.value = false
+  } catch (err) {
+    alert(t('system.restartFailed') + ': ' + err.message)
+  }
+}
+
+const handleContinue = () => {
+  showRestartModal.value = false
 }
 
 // 组件挂载时加载数据
@@ -248,5 +277,78 @@ onMounted(() => {
   border-radius: 4px;
   margin-bottom: 20px;
   font-size: 13px;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 8px;
+  width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  background-color: #f8f9fa;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  text-align: center;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.btn-restart {
+  padding: 8px 20px;
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-continue {
+  padding: 8px 20px;
+  background-color: white;
+  color: #666;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-restart:hover {
+  background-color: #0052a3;
+}
+
+.btn-continue:hover {
+  background-color: #f5f5f5;
 }
 </style>
