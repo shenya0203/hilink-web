@@ -527,6 +527,17 @@
       </div>
     </div>
 
+    <!-- 服务重启等待弹窗 -->
+    <div v-if="isServiceRestarting" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.restart') }}</h3></div>
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('system.serviceRestarting') }}</p>
+        </div>
+      </div>
+    </div>
+
     <!-- 解析结果对话框 -->
     <div v-if="showParseResultModal" class="modal-overlay" @click.self="closeParseResultModal">
       <div class="modal" style="min-width: 300px; text-align: center;">
@@ -979,6 +990,17 @@
         </div>
       </div>
     </div>
+    
+    <!-- 服务重启等待弹窗 -->
+    <div v-if="isServiceRestarting" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.restart') }}</h3></div>
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('system.serviceRestarting') }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -997,9 +1019,11 @@ import {
   isValidReportPeriod, 
   isValidTopic 
 } from '../utils/validation.js'
+import { useServiceControl } from '../composables/useServiceControl.js'
 
 // 使用 i18n
 const { t } = useI18n()
+const { isServiceRestarting, restartService } = useServiceControl()
 
 // 响应式数据
 const loading = ref(true)
@@ -2148,14 +2172,8 @@ const saveReportData = async () => {
 }
 
 const handleRestart = async () => {
-  try {
-    await apiClient.get('/action_restart.cgi')
-    alert(t('system.restartSuccess'))
-  } catch (err) {
-    console.error(err)
-    alert(t('system.restartFailed'))
-  }
   showSuccessModal.value = false
+  await restartService()
 }
 
 const handleContinue = () => {

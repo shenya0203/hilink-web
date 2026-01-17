@@ -382,6 +382,17 @@
         </div>
       </div>
     </div>
+
+    <!-- 服务重启等待弹窗 -->
+    <div v-if="isServiceRestarting" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.restart') }}</h3></div>
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('system.serviceRestarting') }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -392,9 +403,11 @@ import { updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { isValidServerAddress, isValidPort, isValidReconnectInterval } from '../utils/validation.js'
+import { useServiceControl } from '../composables/useServiceControl.js'
 
 // 使用 i18n
 const { t } = useI18n()
+const { isServiceRestarting, restartService } = useServiceControl()
 
 const loading = ref(true)
 const error = ref(null)
@@ -652,7 +665,8 @@ const saveConfig = async () => {
 }
 
 const handleRestart = async () => {
-  try { await restartDevice(); alert(t('system.restartSuccess')); showRestartModal.value = false } catch (err) { alert(t('system.restartFailed') + ': ' + err.message) }
+  showRestartModal.value = false
+  await restartService()
 }
 const handleContinue = () => { showRestartModal.value = false }
 

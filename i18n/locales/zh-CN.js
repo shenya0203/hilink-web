@@ -471,6 +471,8 @@ export default {
         resetting: '恢复出厂中...',
         restart: '重新启动',
         restartNow: '立即重启',
+        serviceRestarting: '服务重启中，请稍候...',
+        restartService: '重启服务',
         scheduledRestart: '定时重启',
         timeSelect: '时间选择',
 

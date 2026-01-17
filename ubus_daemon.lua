@@ -2144,6 +2144,26 @@ local methods = {
             { reset_factory = ubus.INT32 }
         },
 
+        -- 重启服务
+        restart_service = {
+            function(req, msg)
+                log_info("Service restart requested...")
+                -- TODO: User to fill in specific service restart command here
+                -- Example: os.execute("/etc/init.d/your_service restart")
+                -- 这里可能需要重启网络
+                os.execute("/etc/init.d/network restart")
+                os.execute("/etc/init.d/edge restart")
+                os.execute("/etc/init.d/mqtt_app restart")
+                os.execute("/etc/init.d/socket restart")
+                os.execute("/etc/init.d/hlk_cloud restart")
+                os.execute("/etc/init.d/cron restart")
+                
+                
+                reply(req, {result = true})
+            end,
+            {}
+        },
+
         -- 获取边缘计算实时数据 (从共享内存读取)
         get_edge_values = {
             function(req, msg)

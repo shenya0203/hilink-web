@@ -282,6 +282,18 @@
       </div>
     </div>
 
+
+    <!-- 服务重启等待弹窗 -->
+    <div v-if="isServiceRestarting" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header"><h3>{{ t('system.restart') }}</h3></div>
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('system.serviceRestarting') }}</p>
+        </div>
+      </div>
+    </div>
+
     <!-- 恢复出厂确认弹窗 -->
     <div v-if="showFactoryResetConfirmModal" class="modal-overlay">
       <div class="modal">
@@ -302,9 +314,11 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
+import { useServiceControl } from '../composables/useServiceControl.js'
 
 // 使用 i18n
 const { t } = useI18n()
+const { isServiceRestarting, restartService } = useServiceControl()
 
 // 响应式数据
 const loading = ref(true)
@@ -315,6 +329,15 @@ const showUpgradeConfirmModal = ref(false)
 const showFactoryResetConfirmModal = ref(false)
 const upgradeResetFactory = ref(false)
 const isResetting = ref(false)
+// const isServiceRestarting = ref(false) // Removed, using composable
+
+// ... existing code ...
+
+// 处理重启 (改为重启服务)
+const handleRestart = async () => {
+  showRestartModal.value = false
+  await restartService()
+}
 
 // misc 配置数据
 const miscConfig = ref({
@@ -974,6 +997,8 @@ const restartDevice = async () => {
   }
 }
 
+
+
 // 格式化TF卡
 const formatTfCard = async () => {
   if (!confirm(t('system.confirmFormat'))) {
@@ -1145,17 +1170,7 @@ const loadData = async () => {
   }
 }
 
-// 处理重启
-const handleRestart = async () => {
-  try {
-    await apiClient.get('/action_restart.cgi')
-    alert(t('system.restartSuccess'))
-    showRestartModal.value = false
-  } catch (err) {
-    console.error('重启设备失败:', err)
-    alert(t('system.restartFailed') + ': ' + err.message)
-  }
-}
+
 
 // 继续配置
 const handleContinue = () => {

@@ -451,6 +451,7 @@ export default {
         resetting: 'Resetting factory settings...',
         restart: 'Restart',
         restartNow: 'Restart Now',
+        serviceRestarting: 'Service is restarting, please wait...',
         scheduledRestart: 'Scheduled Restart',
         timeSelect: 'Time Selection',
 
@@ -483,6 +484,7 @@ export default {
         factoryResetSuccess: 'Factory reset successful. Device will restart...',
         factoryResetFailed: 'Factory reset failed',
         restartSuccess: 'Device is restarting...',
+        restartService: "Restarting service...",
         restartFailed: 'Failed to restart device',
         formatSuccess: 'TF card formatted successfully',
         formatFailed: 'Failed to format TF card',

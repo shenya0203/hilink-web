@@ -454,6 +454,17 @@ local function handle_restart()
     ngx.exit(ngx.HTTP_OK)
 end
 
+-- 处理 /action_restart_service.cgi
+local function handle_restart_service()
+    ngx.log(ngx.ERR, "[DEBUG] handle_restart_service triggered")
+    local success, msg = ubus_adapter.restart_service()
+    if success then
+        send_success()
+    else
+        send_error(msg or "Failed to restart service")
+    end
+end
+
 -- 处理 /action_tf.cgi (TF卡操作)
 local function handle_tf_action(args)
     ngx.log(ngx.ERR, "[DEBUG] handle_tf_action args: ", cjson.encode(args))
@@ -568,6 +579,9 @@ elseif uri == "/download_multi_file.cgi" then
 
 elseif uri == "/action_restart.cgi" then
     handle_restart()
+
+elseif uri == "/action_restart_service.cgi" then
+    handle_restart_service()
 
 elseif uri == "/action_tf.cgi" then
     handle_tf_action(args)
