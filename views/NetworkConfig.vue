@@ -384,7 +384,7 @@
     <!-- WiFi扫描弹窗 -->
     <div v-if="wifiScanModal.show" class="modal" @click="closeWifiScanModal">
       <div class="modal-content wifi-scan-modal" @click.stop>
-        <div class="modal-header">
+        <div class="modal-header wifi-scan-header">
           <h3>WiFi扫描</h3>
           <button type="button" class="close-btn" @click="closeWifiScanModal">&times;</button>
         </div>
@@ -1301,8 +1301,37 @@ onUnmounted(() => {
 }
 
 .wifi-scan-modal {
-  max-width: 600px;
+  max-width: 800px;
   width: 90%;
+  min-width: 600px;
+}
+
+/* WiFi 扫描弹窗专用样式覆盖 */
+.modal:has(.wifi-scan-modal) {
+  width: auto !important;
+  max-width: 800px;
+  min-width: 600px;
+}
+
+/* WiFi 扫描弹窗头部样式 */
+.wifi-scan-header {
+  background-color: #0066cc !important;
+  color: white !important;
+  border-bottom: 1px solid #0052a3;
+}
+
+.wifi-scan-header h3 {
+  color: white !important;
+}
+
+.wifi-scan-header .close-btn {
+  color: white !important;
+  opacity: 0.8;
+}
+
+.wifi-scan-header .close-btn:hover {
+  opacity: 1;
+  color: white !important;
 }
 
 .scan-loading {
@@ -1334,13 +1363,15 @@ onUnmounted(() => {
   width: 100%;
   border-collapse: collapse;
   margin-top: 10px;
+  font-size: 14px;
 }
 
 .wifi-table th,
 .wifi-table td {
-  padding: 8px 12px;
+  padding: 12px 15px;
   text-align: left;
   border-bottom: 1px solid #e0e0e0;
+  line-height: 1.4;
 }
 
 .wifi-table th {
