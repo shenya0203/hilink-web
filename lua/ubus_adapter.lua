@@ -374,144 +374,17 @@ function _M.set_config(module, args)
     end
     
     if module == "network" then
-        ngx.log(ngx.INFO, "Updating network config...")
-        
-        local eth_mode = nil
-        local eth_ip = nil
-        local eth_mask = nil
-        local eth_gw = nil
-        local eth_dns1 = nil
-        local eth_dns2 = nil
-        local eth_dns_mode = nil
-        
-        local lte_simnum = nil
-        local lte_apn = nil
-        local lte_user = nil
-        local lte_pswd = nil
-        local lte_auth = nil
-        local lte_dns_mode = nil
-        local lte_dns = nil
-        local lte_sdns = nil
-        local net_select = nil
-        local keepalive_period = nil
-        local keepalive_addr1 = nil
-        local keepalive_addr2 = nil
+        ngx.log(ngx.INFO, "Setting network config via ubus: " .. cjson.encode(args))
 
-        -- LAN 和 DHCP 参数
-        local lan_ip = nil
-        local lan_netmask = nil
-        local dhcp_enable = nil
-        local dhcp_start_ip = nil
-        local dhcp_end_ip = nil
-        local dhcp_lease = nil
-        
-        
-        for k, v in pairs(args) do
-            if k == "n_eth0.ip_mode" then eth_mode = tonumber(v) end
-            if k == "s_eth0.sip" then eth_ip = v end
-            if k == "s_eth0.mip" then eth_mask = v end
-            if k == "s_eth0.gip" then eth_gw = v end
-            if k == "s_eth0.dns_ip[0]" then eth_dns1 = v end
-            if k == "s_eth0.dns_ip[1]" then eth_dns2 = v end
-            if k == "n_eth0.dns_mode" then eth_dns_mode = tonumber(v) end   
-            
-            if k == "n_cell.sim_switch" then lte_simnum = tonumber(v) end
-            if k == "s_cell.apn.addr" then lte_apn = v end
-            if k == "s_cell.apn.user" then lte_user = v end
-            if k == "s_cell.apn.pswd" then lte_pswd = v end
-            if k == "s_cell.dns_ip[0]" then lte_dns = v end
-            if k == "s_cell.dns_ip[1]" then lte_sdns = v end
-            if k == "n_cell.dns_mode" then lte_dns_mode = tonumber(v) end
-            if k == "n_cell.apn.auth" then lte_auth = tonumber(v) end
-            if k == "n_keepalive_period" then keepalive_period = tonumber(v) end
-            if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end
-            if k == "s_keepalive_addr[1]" then keepalive_addr2 = v end
-            if k == "n_net_select" then net_select = tonumber(v) end
-
-            -- LAN 和 DHCP 参数解析
-            if k == "s_lan.ip" then lan_ip = v end
-            if k == "s_lan.netmask" then lan_netmask = v end
-            if k == "n_lan.dhcp_enable" then dhcp_enable = tonumber(v) end
-            if k == "s_lan.dhcp_start" then dhcp_start_ip = v end
-            if k == "s_lan.dhcp_end" then dhcp_end_ip = v end
-            if k == "n_lan.dhcp_lease" then dhcp_lease = tonumber(v) end
-        end
-        
-        if eth_mode ~= nil then
-            if eth_mode == 1 then
-                os.execute("uci set network.wan.proto=dhcp")
-            else
-                os.execute("uci set network.wan.proto=static")
-                if eth_ip then os.execute("uci set network.wan.ipaddr=" .. eth_ip) end
-                if eth_mask then os.execute("uci set network.wan.netmask=" .. eth_mask) end
-                if eth_gw then os.execute("uci set network.wan.gateway=" .. eth_gw) end
-                
-                os.execute("uci set network.wan.peerdns=" .. eth_dns_mode or 0)
-                -- DNS
-                os.execute("uci delete network.wan.dns")
-                if eth_dns1 and eth_dns1 ~= "" then 
-                    os.execute("uci add_list network.wan.dns=" .. eth_dns1) 
-                end
-                if eth_dns2 and eth_dns2 ~= "" then 
-                    os.execute("uci add_list network.wan.dns=" .. eth_dns2) 
-                end
-            end
-            os.execute("uci commit network")
-        end
-
-        os.execute("uci set network.lte.modem_simnum=" .. (lte_simnum or ""))
-
-        os.execute("uci set network.lte.modem_apn=" .. (lte_apn or ""))
-
-        os.execute("uci set network.lte.modem_user=" .. (lte_user or ""))
-
-        os.execute("uci set network.lte.modem_passwd=" .. (lte_pswd or ""))
-
-        os.execute("uci set network.lte.modem_auth=" .. (lte_auth or 0))
-
-        os.execute("uci delete network.lte.dns")
-        os.execute("uci delete network.lte._dns")
-        if lte_dns_mode == 1 then --自动获取
-            os.execute("uci add_list network.lte._dns=" .. (lte_dns or ""))   --配置为自动获取时 修改dns的option名称
-            os.execute("uci add_list network.lte._dns=" .. (lte_sdns or "")) 
+        -- 通过ubus接口将所有网络配置参数发送给后端daemon处理
+        local result = ubus_call("hilink", "set_network_config", args)
+        if result and result.result then
+            ngx.log(ngx.INFO, "Successfully set network config via ubus")
+            return true
         else
-            os.execute("uci add_list network.lte.dns=" .. (lte_dns or "")) 
-            os.execute("uci add_list network.lte.dns=" .. (lte_sdns or "")) 
+            ngx.log(ngx.ERR, "Failed to set network config via ubus")
+            return false
         end
-
-        os.execute("uci set network.lte.peerdns=" .. (lte_dns_mode or 0))
-
-
-        if net_select then os.execute("uci set mwan3.globals.net_select=" .. net_select) end
-
-        if keepalive_period then os.execute("uci set mwan3.globals.keepalive_period=" .. keepalive_period) end
-        if keepalive_addr1 then os.execute("uci set mwan3.globals.keepalive_ip1=" .. keepalive_addr1) end
-        if keepalive_addr2 then os.execute("uci set mwan3.globals.keepalive_ip2=" .. keepalive_addr2) end
-        os.execute("uci commit mwan3")
-        os.execute("uci commit network")
-
-        -- 处理 LAN 和 DHCP 配置，通过 ubus 调用后端 daemon
-        if lan_ip or lan_netmask or dhcp_enable or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
-            local lan_params = {}
-            if lan_ip then lan_params["s_lan.ip"] = lan_ip end
-            if lan_netmask then lan_params["s_lan.netmask"] = lan_netmask end
-            if dhcp_enable then lan_params["n_lan.dhcp_enable"] = dhcp_enable end
-            if dhcp_start_ip then lan_params["s_lan.dhcp_start"] = dhcp_start_ip end
-            if dhcp_end_ip then lan_params["s_lan.dhcp_end"] = dhcp_end_ip end
-            if dhcp_lease then lan_params["n_lan.dhcp_lease"] = dhcp_lease end
-
-            ngx.log(ngx.INFO, "Setting LAN/DHCP config via ubus: " .. cjson.encode(lan_params))
-
-            local result = ubus_call("hilink", "set_network_config_values", lan_params)
-            if result and result.result then
-                ngx.log(ngx.INFO, "Successfully set LAN/DHCP config via ubus")
-            else
-                ngx.log(ngx.ERR, "Failed to set LAN/DHCP config via ubus")
-                return false
-            end
-        end
-
-        return true
     end
     
     return true

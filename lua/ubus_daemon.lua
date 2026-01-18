@@ -1601,6 +1601,152 @@ end
 local function set_network_config_values(args)
     local cursor = uci_lib.cursor()
 
+    -- 处理 WAN 参数
+    local eth_mode = args["n_eth0.ip_mode"] and tonumber(args["n_eth0.ip_mode"])
+    local eth_ip = args["s_eth0.sip"]
+    local eth_mask = args["s_eth0.mip"]
+    local eth_gw = args["s_eth0.gip"]
+    local eth_dns_mode = args["n_eth0.dns_mode"] and tonumber(args["n_eth0.dns_mode"])
+    local eth_dns1 = args["s_eth0.dns_ip[0]"]
+    local eth_dns2 = args["s_eth0.dns_ip[1]"]
+
+    -- 设置 WAN 接口配置
+    if eth_mode ~= nil then
+        if eth_mode == 1 then
+            cursor:set("network", "wan", "proto", "dhcp")
+            log_info("Set network.wan.proto = dhcp")
+        else
+            cursor:set("network", "wan", "proto", "static")
+            log_info("Set network.wan.proto = static")
+            if eth_ip then
+                cursor:set("network", "wan", "ipaddr", eth_ip)
+                log_info("Set network.wan.ipaddr = " .. eth_ip)
+            end
+            if eth_mask then
+                cursor:set("network", "wan", "netmask", eth_mask)
+                log_info("Set network.wan.netmask = " .. eth_mask)
+            end
+            if eth_gw then
+                cursor:set("network", "wan", "gateway", eth_gw)
+                log_info("Set network.wan.gateway = " .. eth_gw)
+            end
+        end
+
+        -- 设置 DNS 模式
+        if eth_dns_mode ~= nil then
+            cursor:set("network", "wan", "peerdns", eth_dns_mode)
+            log_info("Set network.wan.peerdns = " .. eth_dns_mode)
+        end
+
+        -- 设置 DNS 服务器（仅 static 模式）
+        if eth_mode == 0 then
+            local dns_list = {}
+            if eth_dns1 and eth_dns1 ~= "" then
+                table.insert(dns_list, eth_dns1)
+            end
+            if eth_dns2 and eth_dns2 ~= "" then
+                table.insert(dns_list, eth_dns2)
+            end
+            if #dns_list > 0 then
+                cursor:set("network", "wan", "dns", dns_list)
+                log_info("Set network.wan.dns = " .. table.concat(dns_list, " "))
+            end
+        end
+    end
+
+    -- 处理 LTE 参数
+    local lte_simnum = args["n_cell.sim_switch"] and tonumber(args["n_cell.sim_switch"])
+    local lte_apn = args["s_cell.apn.addr"]
+    local lte_user = args["s_cell.apn.user"]
+    local lte_pswd = args["s_cell.apn.pswd"]
+    local lte_auth = args["n_cell.apn.auth"] and tonumber(args["n_cell.apn.auth"])
+    local lte_dns_mode = args["n_cell.dns_mode"] and tonumber(args["n_cell.dns_mode"])
+    local lte_dns = args["s_cell.dns_ip[0]"]
+    local lte_sdns = args["s_cell.dns_ip[1]"]
+
+    -- 设置 LTE 接口配置
+    if lte_simnum ~= nil then
+        cursor:set("network", "lte", "modem_simnum", lte_simnum)
+        log_info("Set network.lte.modem_simnum = " .. lte_simnum)
+    end
+    if lte_apn then
+        cursor:set("network", "lte", "modem_apn", lte_apn)
+        log_info("Set network.lte.modem_apn = " .. lte_apn)
+    end
+    if lte_user then
+        cursor:set("network", "lte", "modem_user", lte_user)
+        log_info("Set network.lte.modem_user = " .. lte_user)
+    end
+    if lte_pswd then
+        cursor:set("network", "lte", "modem_passwd", lte_pswd)
+        log_info("Set network.lte.modem_passwd = " .. lte_pswd)
+    end
+    if lte_auth ~= nil then
+        cursor:set("network", "lte", "modem_auth", lte_auth)
+        log_info("Set network.lte.modem_auth = " .. lte_auth)
+    end
+
+    -- 设置 LTE DNS
+    if lte_dns_mode ~= nil then
+        cursor:set("network", "lte", "peerdns", lte_dns_mode)
+        log_info("Set network.lte.peerdns = " .. lte_dns_mode)
+
+        cursor:delete("network", "lte", "dns")
+        cursor:delete("network", "lte", "_dns")
+
+        if lte_dns_mode == 1 then
+            -- 自动获取 DNS
+            local dns_list = {}
+            if lte_dns and lte_dns ~= "" then
+                table.insert(dns_list, lte_dns)
+            end
+            if lte_sdns and lte_sdns ~= "" then
+                table.insert(dns_list, lte_sdns)
+            end
+            if #dns_list > 0 then
+                cursor:set("network", "lte", "_dns", dns_list)
+                log_info("Set network.lte._dns = " .. table.concat(dns_list, " "))
+            end
+        else
+            -- 手动 DNS
+            local dns_list = {}
+            if lte_dns and lte_dns ~= "" then
+                table.insert(dns_list, lte_dns)
+            end
+            if lte_sdns and lte_sdns ~= "" then
+                table.insert(dns_list, lte_sdns)
+            end
+            if #dns_list > 0 then
+                cursor:set("network", "lte", "dns", dns_list)
+                log_info("Set network.lte.dns = " .. table.concat(dns_list, " "))
+            end
+        end
+    end
+
+    -- 处理 MWAN3 参数
+    local net_select = args["n_net_select"] and tonumber(args["n_net_select"])
+    local keepalive_period = args["n_keepalive_period"] and tonumber(args["n_keepalive_period"])
+    local keepalive_addr1 = args["s_keepalive_addr[0]"]
+    local keepalive_addr2 = args["s_keepalive_addr[1]"]
+
+    -- 设置 MWAN3 配置
+    if net_select ~= nil then
+        cursor:set("mwan3", "globals", "net_select", net_select)
+        log_info("Set mwan3.globals.net_select = " .. net_select)
+    end
+    if keepalive_period ~= nil then
+        cursor:set("mwan3", "globals", "keepalive_period", keepalive_period)
+        log_info("Set mwan3.globals.keepalive_period = " .. keepalive_period)
+    end
+    if keepalive_addr1 then
+        cursor:set("mwan3", "globals", "keepalive_ip1", keepalive_addr1)
+        log_info("Set mwan3.globals.keepalive_ip1 = " .. keepalive_addr1)
+    end
+    if keepalive_addr2 then
+        cursor:set("mwan3", "globals", "keepalive_ip2", keepalive_addr2)
+        log_info("Set mwan3.globals.keepalive_ip2 = " .. keepalive_addr2)
+    end
+
     -- 处理 LAN 和 DHCP 参数
     local lan_ip = args["s_lan.ip"]
     local lan_netmask = args["s_lan.netmask"]
@@ -1649,10 +1795,10 @@ local function set_network_config_values(args)
     end
 
     -- 提交配置
-    if lan_ip or lan_netmask then
-        cursor:commit("network")
-        log_info("Committed network configuration")
-    end
+    cursor:commit("network")
+    cursor:commit("mwan3")
+    log_info("Committed network and mwan3 configurations")
+
     if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
         cursor:commit("dhcp")
         log_info("Committed dhcp configuration")
@@ -1660,9 +1806,16 @@ local function set_network_config_values(args)
 
     -- 处理其他网络参数（保持原有逻辑）
     for k, v in pairs(args) do
-        -- 跳过已经处理的 LAN/DHCP 参数
+        -- 跳过已经处理的网络参数
         if k ~= "s_lan.ip" and k ~= "s_lan.netmask" and k ~= "n_lan.dhcp_enable" and
-           k ~= "s_lan.dhcp_start" and k ~= "s_lan.dhcp_end" and k ~= "n_lan.dhcp_lease" then
+           k ~= "s_lan.dhcp_start" and k ~= "s_lan.dhcp_end" and k ~= "n_lan.dhcp_lease" and
+           k ~= "n_eth0.ip_mode" and k ~= "s_eth0.sip" and k ~= "s_eth0.mip" and k ~= "s_eth0.gip" and
+           k ~= "n_eth0.dns_mode" and k ~= "s_eth0.dns_ip[0]" and k ~= "s_eth0.dns_ip[1]" and
+           k ~= "n_cell.sim_switch" and k ~= "s_cell.apn.addr" and k ~= "s_cell.apn.user" and
+           k ~= "s_cell.apn.pswd" and k ~= "n_cell.apn.auth" and k ~= "n_cell.dns_mode" and
+           k ~= "s_cell.dns_ip[0]" and k ~= "s_cell.dns_ip[1]" and
+           k ~= "n_net_select" and k ~= "n_keepalive_period" and
+           k ~= "s_keepalive_addr[0]" and k ~= "s_keepalive_addr[1]" then
             local key = string.match(k, "[ns]_(.+)")
             if key then
                 if string.find(key, "%.") then
@@ -2089,7 +2242,16 @@ local methods = {
             {}
         },
         
-        -- 设置网络配置
+        -- 设置网络配置 (兼容旧接口)
+        set_network_config = {
+            function(req, msg)
+                local res = set_network_config_values(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+
+        -- 设置网络配置 (新接口)
         set_network_config_values = {
             function(req, msg)
                 local res = set_network_config_values(msg)
