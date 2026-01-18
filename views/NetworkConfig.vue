@@ -64,7 +64,7 @@
     </div>
 
     <!-- 网络优先选择部分 -->
-    <form v-if="activeTab === 'ethernet'">
+    <form v-if="activeMainTab === 'wan' && activeTab === 'ethernet'">
       <legend>{{ t('network.prioritySelect') }}</legend>
       <div class="form-section">
         <div class="form-group">
@@ -126,7 +126,7 @@
     </form>
 
     <!-- 以太网配置部分 -->
-    <form v-if="activeTab === 'lte'" style="margin-top: 20px;">
+    <form v-if="activeMainTab === 'wan' && activeTab === 'lte'" style="margin-top: 20px;">
       <legend>{{ t('network.ethernet') }}</legend>
       <div class="form-section">
         <div class="form-group">
@@ -219,7 +219,7 @@
     </form>
 
     <!-- LTE/CAT1 配置部分 -->
-    <form v-if="activeTab === 'ltecat' && config.net_select !== '2'" style="margin-top: 20px;">
+    <form v-if="activeMainTab === 'wan' && activeTab === 'ltecat' && config.net_select !== '2'" style="margin-top: 20px;">
       <legend>{{ t('network.tabLte') }}</legend>
       <div class="form-section">
         <div class="form-group">
@@ -322,7 +322,7 @@
     </form>
 
     <!-- WiFi 配置部分 -->
-    <form v-if="activeTab === 'wifi'" style="margin-top: 20px;">
+    <form v-if="activeMainTab === 'wan' && activeTab === 'wifi'" style="margin-top: 20px;">
       <legend>{{ t('network.wifi') }}</legend>
       <div class="form-section">
         <div class="form-group">
