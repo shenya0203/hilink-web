@@ -560,7 +560,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { fetchNetworkConfigData, fetchNetworkData, fetchStatusData } from '../api/mockData'
+import { fetchNetworkConfigData, fetchNetworkLanConfigData, fetchNetworkData, fetchStatusData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import {
@@ -822,15 +822,16 @@ const loadData = async () => {
   try {
     loading.value = true
     error.value = null
-    
-    const [status, networkFlex, netConfig] = await Promise.all([
+
+    const [status, networkFlex, netConfig, lanConfig] = await Promise.all([
       fetchStatusData(),
       fetchNetworkData(),
-      fetchNetworkConfigData()
+      fetchNetworkConfigData(),
+      fetchNetworkLanConfigData()
     ])
-    
+
     console.log('=== 网络配置页面数据加载 ===')
-    
+
     if (netConfig) {
       Object.assign(config.value, {
         net_select: String(netConfig.net_select),
@@ -860,26 +861,41 @@ const loadData = async () => {
         lte_auth: String(netConfig.cell.apn.auth),
         lte_dns_mode: String(netConfig.cell.dns_mode),
         lte_dns: netConfig.cell.dns_ip[0],
-        lte_sdns: netConfig.cell.dns_ip[1],
-        // LAN (使用模拟数据或默认值)
-        s_lan: {
-          ip: '192.168.10.1',
-          netmask: '255.255.255.0',
-          dhcp_start: '192.168.10.100',
-          dhcp_end: '192.168.10.200'
-        },
-        n_lan: {
-          dhcp_enable: '1', // 默认开启
-          dhcp_lease: '24' // 默认24小时
-        }
+        lte_sdns: netConfig.cell.dns_ip[1]
       })
-
-      // 保存原始LAN IP用于检测变化
-      originalLanIp.value = config.value.s_lan.ip
     }
-    
+
+    // 从 LAN 配置 API 获取 LAN 数据
+    if (lanConfig) {
+      config.value.s_lan = {
+        ip: lanConfig.s_lan.ip || '192.168.10.1',
+        netmask: lanConfig.s_lan.netmask || '255.255.255.0',
+        dhcp_start: lanConfig.s_lan.dhcp_start || '192.168.10.100',
+        dhcp_end: lanConfig.s_lan.dhcp_end || '192.168.10.200'
+      }
+      config.value.n_lan = {
+        dhcp_enable: String(lanConfig.n_lan.dhcp_enable || 1),
+        dhcp_lease: String(lanConfig.n_lan.dhcp_lease || 24)
+      }
+    } else {
+      // 如果API调用失败，使用默认值
+      config.value.s_lan = {
+        ip: '192.168.10.1',
+        netmask: '255.255.255.0',
+        dhcp_start: '192.168.10.100',
+        dhcp_end: '192.168.10.200'
+      }
+      config.value.n_lan = {
+        dhcp_enable: '1',
+        dhcp_lease: '24'
+      }
+    }
+
+    // 保存原始LAN IP用于检测变化
+    originalLanIp.value = config.value.s_lan.ip
+
     console.log('最终配置对象:', config.value)
-    
+
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
     console.error('配置加载错误:', err)

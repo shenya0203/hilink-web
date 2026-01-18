@@ -26,6 +26,20 @@ product_name = "HLK_N720"
 -- UCI 配置文件操作封装
 local uci_lib = require("uci")
 
+-- UCI Helper
+local function get_uci(key)
+    local f = io.popen("uci get " .. key .. " 2>/dev/null")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content and content ~= "" then
+            local res = string.gsub(content, "\n", "")
+            if res ~= "" then return res end
+        end
+    end
+    return nil
+end
+
 local mac = nil
 
 -- 配置缓存标志
@@ -1791,10 +1805,164 @@ local methods = {
             {}
         },
         
-        -- 获取网络配置
+        -- 获取网络配置 (LAN + DHCP)
         get_network_config = {
             function(req, msg)
-                reply(req, deep_copy(network_config))
+                local cursor = uci_lib.cursor()
+
+                -- 读取 LAN 接口配置
+                local lan_ip = ""
+                local lan_netmask = ""
+
+                cursor:foreach("network", "interface", function(section)
+                    if section[".name"] == "lan" then
+                        lan_ip = section.ipaddr or ""
+                        lan_netmask = section.netmask or ""
+                    end
+                end)
+
+                -- 读取 DHCP 配置
+                local dhcp_start = 100  -- 默认值
+                local dhcp_limit = 150  -- 默认值
+                local dhcp_leasetime = "12h"  -- 默认值
+                local dhcp_ignore = "0"  -- 默认值，表示启用
+
+                cursor:foreach("dhcp", "dhcp", function(section)
+                    if section.interface == "lan" then
+                        dhcp_start = tonumber(section.start) or 100
+                        dhcp_limit = tonumber(section.limit) or 150
+                        dhcp_leasetime = section.leasetime or "12h"
+                        dhcp_ignore = section.ignore or "0"
+                    end
+                end)
+
+                -- 计算 DHCP IP 范围
+                local dhcp_start_ip = ""
+                local dhcp_end_ip = ""
+
+                if lan_ip ~= "" then
+                    -- 提取 IP 前三段 (例如 192.168.18.254 -> 192.168.18)
+                    local ip_parts = {}
+                    for part in string.gmatch(lan_ip, "([^%.]+)") do
+                        table.insert(ip_parts, part)
+                    end
+
+                    if #ip_parts >= 3 then
+                        local base_ip = ip_parts[1] .. "." .. ip_parts[2] .. "." .. ip_parts[3]
+
+                        -- 计算起始 IP
+                        dhcp_start_ip = base_ip .. "." .. tostring(dhcp_start)
+
+                        -- 计算结束 IP: start + limit - 1
+                        local end_offset = dhcp_start + dhcp_limit - 1
+                        dhcp_end_ip = base_ip .. "." .. tostring(end_offset)
+                    end
+                end
+
+                -- 解析租期 (去掉 'h' 后缀)
+                local dhcp_lease = 12  -- 默认值
+                if dhcp_leasetime then
+                    local num_str = string.match(dhcp_leasetime, "(%d+)")
+                    if num_str then
+                        dhcp_lease = tonumber(num_str) or 12
+                    end
+                end
+
+                -- DHCP 开关: ignore='1' 表示关闭，否则开启
+                local dhcp_enable = (dhcp_ignore ~= "1") and 1 or 0
+
+                -- 返回前端所需的 JSON 结构
+                local result = {
+                    s_lan = {
+                        ip = lan_ip,
+                        netmask = lan_netmask,
+                        dhcp_start = dhcp_start_ip,
+                        dhcp_end = dhcp_end_ip
+                    },
+                    n_lan = {
+                        dhcp_enable = dhcp_enable,
+                        dhcp_lease = dhcp_lease
+                    }
+                }
+
+                reply(req, result)
+            end,
+            {}
+        },
+
+        -- 获取网络配置 (WAN/LTE - 从ubus_adapter迁移)
+        get_network_config_wan = {
+            function(req, msg)
+                -- Read WAN config from UCI
+                local wan_proto = get_uci("network.wan.proto")
+                local wan_ip = get_uci("network.wan.ipaddr") or ""
+                local wan_netmask = get_uci("network.wan.netmask") or ""
+                local wan_gateway = get_uci("network.wan.gateway") or ""
+                local wan_dns_enable = get_uci("network.wan.peerdns") or 1  --0 手动设置 1 自动获取
+
+                local lte_dns_enable = get_uci("network.lte.peerdns") or 1  --0 手动设置 1 自动获取
+                local lte_device = get_uci("network.lte.modem_device") or ""
+                local lte_apn = get_uci("network.lte.modem_apn") or ""
+                local lte_user = get_uci("network.lte.modem_user") or ""
+                local lte_pswd = get_uci("network.lte.modem_passwd") or ""
+                local lte_auth = get_uci("network.lte.modem_auth") or 0
+                local lte_simnum = get_uci("network.lte.modem_simnum") or 0
+
+                -- Read DNS
+                local wan_dns = {}
+                local f = io.popen("uci get network.wan.dns 2>/dev/null")
+                if f then
+                    for line in f:lines() do
+                        for dns in string.gmatch(line, "%S+") do
+                            table.insert(wan_dns, dns)
+                        end
+                    end
+                    f:close()
+                end
+
+                local lte_dns = {}
+                local f = nil
+                if lte_dns_enable == 0 then
+                    f = io.popen("uci get network.lte.dns 2>/dev/null")
+                else
+                    f = io.popen("uci get network.lte._dns 2>/dev/null")
+                end
+                if f then
+                    for line in f:lines() do
+                        for dns in string.gmatch(line, "%S+") do
+                            table.insert(lte_dns, dns)
+                        end
+                    end
+                    f:close()
+                end
+
+                local ip_mode = 0
+                if wan_proto == "dhcp" then
+                    ip_mode = 1
+                end
+
+                local track_ip1 = get_uci("mwan3.globals.keepalive_ip1") or "223.5.5.5"
+                local track_ip2 = get_uci("mwan3.globals.keepalive_ip2") or "223.6.6.6"
+                local track_period = get_uci("mwan3.globals.keepalive_period") or 10
+                local net_select = get_uci("mwan3.globals.net_select") or 0
+
+                reply(req, {
+                    net_select = net_select, keepalive_period = track_period,
+                    keepalive_addr = {track_ip1, track_ip2},
+                    eth0 = {
+                        ip_mode = ip_mode,
+                        sip = wan_ip,
+                        gip = wan_gateway,
+                        mip = wan_netmask,
+                        dns_mode = wan_dns_enable,
+                        dns_ip = {wan_dns[1] or "", wan_dns[2] or ""}
+                    },
+                    cell = {
+                        sim_switch = lte_simnum,
+                        apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
+                        dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
+                    }
+                })
             end,
             {}
         },

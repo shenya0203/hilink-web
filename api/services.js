@@ -55,10 +55,18 @@ export function getCommTunnel() {
 }
 
 /**
- * 获取网络配置（nv 版本）
+ * 获取网络配置（nv 版本）- WAN/LTE
  */
 export function getNetworkConfig() {
     return apiClient.get('/download_nv.cgi?name=network')
+        .then(res => res.data)
+}
+
+/**
+ * 获取网络 LAN 配置（nv 版本）
+ */
+export function getNetworkLanConfig() {
+    return apiClient.get('/download_nv.cgi?name=network_lan')
         .then(res => res.data)
 }
 

@@ -181,10 +181,13 @@ local function handle_download_nv(args)
 
     if name == "misc" then
         response = ubus_adapter.get_misc_config()
-        
+
     elseif name == "network" then
         response = ubus_adapter.get_network_config()
-        
+
+    elseif name == "network_lan" then
+        response = ubus_adapter.get_network_lan_config()
+
     elseif name == "comm_tunnel" then
         response = ubus_adapter.get_comm_tunnel_config()
         

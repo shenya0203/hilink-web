@@ -85,79 +85,30 @@ function _M.get_network_status()
     return nil
 end
 
--- 3. Network Config Data
--- 3. Network Config Data
+-- 3. Network Config Data (WAN/LTE)
 function _M.get_network_config()
-    -- Read WAN config from UCI
-    local wan_proto = get_uci("network.wan.proto")
-    local wan_ip = get_uci("network.wan.ipaddr") or ""
-    local wan_netmask = get_uci("network.wan.netmask") or ""
-    local wan_gateway = get_uci("network.wan.gateway") or ""
-    local wan_dns_enable = get_uci("network.wan.peerdns") or 1  --0 手动设置 1 自动获取
-
-    local lte_dns_enable = get_uci("network.lte.peerdns") or 1  --0 手动设置 1 自动获取
-    local lte_device = get_uci("network.lte.modem_device") or ""
-    local lte_apn = get_uci("network.lte.modem_apn") or ""
-    local lte_user = get_uci("network.lte.modem_user") or ""
-    local lte_pswd = get_uci("network.lte.modem_passwd") or ""
-    local lte_auth = get_uci("network.lte.modem_auth") or 0
-    local lte_simnum = get_uci("network.lte.modem_simnum") or 0
-
-    -- Read DNS
-    local wan_dns = {}
-    local f = io.popen("uci get network.wan.dns 2>/dev/null")
-    if f then
-        for line in f:lines() do
-            for dns in string.gmatch(line, "%S+") do
-                table.insert(wan_dns, dns)
-            end
-        end
-        f:close()
+    ngx.log(ngx.ERR, "-------------------- get_network_config (WAN/LTE) ")
+    -- 通过ubus接口从后端daemon获取WAN/LTE网络配置
+    local result = ubus_call("hilink", "get_network_config_wan", {})
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_network_config_wan result: " .. cjson.encode(result))
+        return result
     end
+    ngx.log(ngx.WARN, "ubus call failed for get_network_config_wan")
+    return nil
+end
 
-    local lte_dns = {}
-    local f = nil
-    if lte_dns_enable == 0 then
-        f = io.popen("uci get network.lte.dns 2>/dev/null")
-    else
-        f = io.popen("uci get network.lte._dns 2>/dev/null")
+-- 3.1 Network LAN Config Data (LAN + DHCP)
+function _M.get_network_lan_config()
+    ngx.log(ngx.ERR, "-------------------- get_network_lan_config (LAN + DHCP) ")
+    -- 通过ubus接口从后端daemon获取LAN + DHCP网络配置
+    local result = ubus_call("hilink", "get_network_config", {})
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_network_config result: " .. cjson.encode(result))
+        return result
     end
-    if f then
-        for line in f:lines() do
-            for dns in string.gmatch(line, "%S+") do
-                table.insert(lte_dns, dns)
-            end
-        end
-        f:close()
-    end
-    
-    local ip_mode = 0
-    if wan_proto == "dhcp" then
-        ip_mode = 1
-    end
-
-    local track_ip1 = get_uci("mwan3.globals.keepalive_ip1") or "223.5.5.5"
-    local track_ip2 = get_uci("mwan3.globals.keepalive_ip2") or "223.6.6.6"    
-    local track_period = get_uci("mwan3.globals.keepalive_period") or 10
-    local net_select = get_uci("mwan3.globals.net_select") or 0
-    
-    return {
-        net_select = net_select, keepalive_period = track_period,
-        keepalive_addr = {track_ip1, track_ip2},
-        eth0 = {
-            ip_mode = ip_mode, 
-            sip = wan_ip, 
-            gip = wan_gateway,
-            mip = wan_netmask, 
-            dns_mode = wan_dns_enable, 
-            dns_ip = {wan_dns[1] or "", wan_dns[2] or ""}
-        },
-        cell = {
-            sim_switch = lte_simnum,
-            apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
-            dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
-        }
-    }
+    ngx.log(ngx.WARN, "ubus call failed for get_network_config")
+    return nil
 end
 
 -- 4. Misc Config Data (完整配置)
