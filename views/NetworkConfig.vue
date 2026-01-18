@@ -342,6 +342,14 @@
               :class="{ 'input-error': getFieldError('wifi_ssid') }"
               :disabled="config.n_wifi.enable !== '1'"
             />
+            <button
+              type="button"
+              class="scan-btn"
+              :disabled="config.n_wifi.enable !== '1'"
+              @click="handleScan"
+            >
+              扫描WiFi
+            </button>
             <span v-if="getFieldError('wifi_ssid')" class="field-error-text">
               {{ getFieldError('wifi_ssid') }}
             </span>
@@ -372,6 +380,51 @@
         </div>
       </div>
     </form>
+
+    <!-- WiFi扫描弹窗 -->
+    <div v-if="wifiScanModal.show" class="modal" @click="closeWifiScanModal">
+      <div class="modal-content wifi-scan-modal" @click.stop>
+        <div class="modal-header">
+          <h3>WiFi扫描</h3>
+          <button type="button" class="close-btn" @click="closeWifiScanModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="wifiScanModal.loading" class="scan-loading">
+            <div class="loading-spinner"></div>
+            <p>正在扫描周围 WiFi... (约3-5秒)</p>
+          </div>
+          <div v-else-if="wifiScanModal.networks && wifiScanModal.networks.length > 0" class="scan-results">
+            <table class="wifi-table">
+              <thead>
+                <tr>
+                  <th>SSID</th>
+                  <th>信号强度 (dBm)</th>
+                  <th>加密方式</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="network in wifiScanModal.networks" :key="network.ssid">
+                  <td>{{ network.ssid }}</td>
+                  <td>{{ network.signal }}</td>
+                  <td>
+                    <span v-if="network.security === 0">NONE</span>
+                    <span v-else-if="network.security === 1">WPA2</span>
+                    <span v-else-if="network.security === 2">WPA3</span>
+                  </td>
+                  <td>
+                    <button type="button" class="select-btn" @click="selectWifi(network)">选择</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="scan-empty">
+            <p>未扫描到 WiFi 网络</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- LAN 设置部分 -->
     <div v-if="activeMainTab === 'lan'" style="margin-top: 20px;">
@@ -532,6 +585,15 @@ const activeMainTab = ref('wan')
 const activeTab = ref('ethernet')
 const showRestartModal = ref(false)
 const originalLanIp = ref('')
+
+// WiFi扫描相关
+const wifiScanModal = ref({
+  show: false,
+  loading: false,
+  networks: []
+})
+const scanInterval = ref(null)
+const scanAttempts = ref(0)
 
 // 配置对象
 const config = ref({
@@ -906,6 +968,90 @@ watch(() => activeMainTab.value, (newVal) => {
   }
 })
 
+// WiFi扫描方法
+const handleScan = async () => {
+  try {
+    wifiScanModal.value.show = true
+    wifiScanModal.value.loading = true
+    wifiScanModal.value.networks = []
+    scanAttempts.value = 0
+
+    // 发起扫描
+    const startResponse = await fetch('/action_wifi.cgi?act=start')
+    const startResult = await startResponse.json()
+
+    if (!startResult.result) {
+      throw new Error('Failed to start WiFi scan')
+    }
+
+    // 开始轮询检查结果
+    scanInterval.value = setInterval(async () => {
+      try {
+        scanAttempts.value++
+        const checkResponse = await fetch('/action_wifi.cgi?act=check')
+        const checkResult = await checkResponse.json()
+
+        if (checkResult.result) {
+          if (checkResult.status === 'done') {
+            // 扫描完成
+            wifiScanModal.value.loading = false
+            wifiScanModal.value.networks = checkResult.data || []
+            clearInterval(scanInterval.value)
+          } else if (checkResult.status === 'scanning') {
+            // 仍在扫描，继续等待
+            wifiScanModal.value.loading = true
+          }
+        } else {
+          // 扫描失败
+          wifiScanModal.value.loading = false
+          clearInterval(scanInterval.value)
+          throw new Error(checkResult.msg || 'Scan failed')
+        }
+
+        // 超时检查 (6次 * 1000ms = 6秒)
+        if (scanAttempts.value >= 6) {
+          wifiScanModal.value.loading = false
+          clearInterval(scanInterval.value)
+          throw new Error('Scan timeout')
+        }
+      } catch (err) {
+        console.error('Scan check error:', err)
+        wifiScanModal.value.loading = false
+        clearInterval(scanInterval.value)
+      }
+    }, 1000)
+  } catch (err) {
+    console.error('Scan start error:', err)
+    wifiScanModal.value.loading = false
+    wifiScanModal.value.show = false
+  }
+}
+
+const selectWifi = (network) => {
+  // 填入SSID
+  config.value.s_wifi.ssid = network.ssid
+
+  // 根据安全类型设置加密方式
+  config.value.n_wifi.encryption = network.security.toString()
+
+  // 清空密码
+  config.value.s_wifi.password = ''
+
+  // 关闭弹窗
+  closeWifiScanModal()
+}
+
+const closeWifiScanModal = () => {
+  wifiScanModal.value.show = false
+  wifiScanModal.value.loading = false
+  wifiScanModal.value.networks = []
+  if (scanInterval.value) {
+    clearInterval(scanInterval.value)
+    scanInterval.value = null
+  }
+  scanAttempts.value = 0
+}
+
 onMounted(() => {
   loadData()
 })
@@ -1130,6 +1276,102 @@ onUnmounted(() => {
   padding: 12px 15px;
   border-radius: 4px;
   margin-bottom: 20px;
+}
+
+/* WiFi扫描相关样式 */
+.scan-btn {
+  padding: 6px 12px;
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+  transition: background-color 0.2s;
+}
+
+.scan-btn:hover:not(:disabled) {
+  background-color: #0052a3;
+}
+
+.scan-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.wifi-scan-modal {
+  max-width: 600px;
+  width: 90%;
+}
+
+.scan-loading {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.loading-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0066cc;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.scan-results {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.wifi-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.wifi-table th,
+.wifi-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.wifi-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+}
+
+.wifi-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+.select-btn {
+  padding: 4px 8px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.select-btn:hover {
+  background-color: #218838;
+}
+
+.scan-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
 }
 
 .modal-overlay {

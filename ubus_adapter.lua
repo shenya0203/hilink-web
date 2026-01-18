@@ -712,4 +712,16 @@ function _M.restart_service()
     end
 end
 
+-- 22. WiFi Scan
+function _M.wifi_scan(action)
+    ngx.log(ngx.ERR, "-------------------- wifi_scan action: ", action)
+    local result = ubus_call("hilink", "wifi_scan", { act = action })
+    if result then
+        ngx.log(ngx.ERR, "-------------------- wifi_scan result: ", cjson.encode(result))
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for wifi_scan")
+    return nil
+end
+
 return _M

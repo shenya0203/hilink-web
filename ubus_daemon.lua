@@ -10,6 +10,14 @@ local cjson = require "cjson"
 local shm = require "shm_reader"
 
 -- ==========================================================
+-- WiFi扫描全局配置
+-- ==========================================================
+local WIFI_IFACE = "wlan0"             -- 扫描接口
+local SCAN_TIMEOUT = 5                 -- 超时时间(秒)
+local SCAN_RESULT_FILE = "/tmp/wifi_scan.txt" -- 结果临时文件
+local SCAN_LOCK_FILE = "/tmp/wifi_scan.lock"  -- 锁文件
+
+-- ==========================================================
 -- 配置数据存储 (实际应用中应该从文件或数据库读取)
 -- ==========================================================
 
@@ -2175,6 +2183,141 @@ local methods = {
                 end
             end,
             {}
+        },
+
+        -- WiFi扫描
+        wifi_scan = {
+            function(req, msg)
+                local act = msg.act
+                local result = {}
+
+                if act == "start" then
+                    -- 检查锁文件
+                    local lock_file = io.open(SCAN_LOCK_FILE, "r")
+                    if lock_file then
+                        lock_file:close()
+                        -- 检查是否超时
+                        local file_stat = io.popen("stat -c %Y " .. SCAN_LOCK_FILE)
+                        if file_stat then
+                            local mtime_str = file_stat:read("*a")
+                            file_stat:close()
+                            local mtime = tonumber(string.gsub(mtime_str, "\n", ""))
+                            if mtime and (os.time() - mtime < SCAN_TIMEOUT) then
+                                result = { result = true, status = "scanning" }
+                            else
+                                -- 超时，删除锁文件
+                                os.remove(SCAN_LOCK_FILE)
+                                os.remove(SCAN_RESULT_FILE)
+                                result = { result = false, msg = "timeout" }
+                            end
+                        else
+                            result = { result = false, msg = "stat failed" }
+                        end
+                    else
+                        -- 开始扫描
+                        local lock = io.open(SCAN_LOCK_FILE, "w")
+                        if lock then
+                            lock:write(os.time())
+                            lock:close()
+                            -- 异步执行扫描命令
+                            os.execute("iwinfo " .. WIFI_IFACE .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
+                            result = { result = true, status = "started" }
+                        else
+                            result = { result = false, msg = "cannot create lock file" }
+                        end
+                    end
+
+                elseif act == "check" then
+                    -- 检查扫描结果
+                    local lock_file = io.open(SCAN_LOCK_FILE, "r")
+                    if not lock_file then
+                        result = { result = false, msg = "no scan in progress" }
+                    else
+                        lock_file:close()
+                        -- 检查是否超时
+                        local file_stat = io.popen("stat -c %Y " .. SCAN_LOCK_FILE)
+                        if file_stat then
+                            local mtime_str = file_stat:read("*a")
+                            file_stat:close()
+                            local mtime = tonumber(string.gsub(mtime_str, "\n", ""))
+                            if mtime and (os.time() - mtime >= SCAN_TIMEOUT) then
+                                -- 超时
+                                os.remove(SCAN_LOCK_FILE)
+                                os.remove(SCAN_RESULT_FILE)
+                                result = { result = false, msg = "timeout" }
+                            else
+                                -- 检查结果文件
+                                local result_file = io.open(SCAN_RESULT_FILE, "r")
+                                if not result_file then
+                                    result = { result = true, status = "scanning" }
+                                else
+                                    result_file:close()
+                                    -- 检查文件大小
+                                    local file_size = io.popen("wc -c < " .. SCAN_RESULT_FILE)
+                                    if file_size then
+                                        local size_str = file_size:read("*a")
+                                        file_size:close()
+                                        local size = tonumber(string.gsub(size_str, "\n", ""))
+                                        if size and size > 0 then
+                                            -- 解析结果
+                                            local content = read_file_content(SCAN_RESULT_FILE)
+                                            if content then
+                                                local wifi_list = {}
+                                                -- 按Cell切分解析
+                                                for cell in string.gmatch(content, "Cell %d+.-VHT Operation:") do
+                                                    local ssid = string.match(cell, 'ESSID: "([^"]+)"')
+                                                    local signal = string.match(cell, 'Signal: ([-]?%d+) dBm')
+                                                    local enc_str = string.match(cell, 'Encryption: ([^\n]+)')
+
+                                                    if ssid and ssid ~= "" and ssid ~= "unknown" and signal then
+                                                        local security_type = 0 -- NONE
+                                                        if enc_str and string.find(enc_str, "WPA") then
+                                                            if string.find(enc_str, "SAE") then
+                                                                security_type = 2 -- WPA3
+                                                            else
+                                                                security_type = 1 -- WPA2
+                                                            end
+                                                        end
+
+                                                        table.insert(wifi_list, {
+                                                            ssid = ssid,
+                                                            signal = signal,
+                                                            security = security_type
+                                                        })
+                                                    end
+                                                end
+
+                                                -- 清理文件
+                                                os.remove(SCAN_LOCK_FILE)
+                                                os.remove(SCAN_RESULT_FILE)
+
+                                                result = {
+                                                    result = true,
+                                                    status = "done",
+                                                    data = wifi_list
+                                                }
+                                            else
+                                                result = { result = false, msg = "cannot read result file" }
+                                            end
+                                        else
+                                            result = { result = true, status = "scanning" }
+                                        end
+                                    else
+                                        result = { result = false, msg = "cannot check file size" }
+                                    end
+                                end
+                            end
+                        else
+                            result = { result = false, msg = "stat failed" }
+                        end
+                    end
+                else
+                    result = { result = false, msg = "invalid action" }
+                end
+
+                reply(req, result)
+            end,
+            { act = ubus.STRING }
         }
     }
 }

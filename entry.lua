@@ -537,14 +537,34 @@ end
 local function handle_upgrade(args)
     ngx.log(ngx.ERR, "[DEBUG] handle_upgrade triggered")
     local reset_factory = tonumber(args.reset_factory) or 0
-    
+
     -- 调用 ubus 触发升级
     local success, msg = ubus_adapter.upgrade_firmware(reset_factory)
-    
+
     if success then
         send_success()
     else
         send_error(msg or "Failed to start upgrade")
+    end
+end
+
+-- 处理 /action_wifi.cgi (WiFi扫描)
+local function handle_wifi_scan(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_wifi_scan args: ", cjson.encode(args))
+    local act = args.act
+
+    if not act then
+        send_error("Missing act parameter")
+        return
+    end
+
+    -- 调用 ubus 触发WiFi扫描
+    local result = ubus_adapter.wifi_scan(act)
+
+    if result then
+        send_json(result)
+    else
+        send_error("WiFi scan failed")
     end
 end
 
@@ -594,6 +614,9 @@ elseif uri == "/action_reset.cgi" then
 
 elseif uri == "/action_upgrade.cgi" then
     handle_upgrade(args)
+
+elseif uri == "/action_wifi.cgi" then
+    handle_wifi_scan(args)
 
 -- 匹配 /upload/ 开头的 URI
 elseif string.sub(uri, 1, 8) == "/upload/" then
