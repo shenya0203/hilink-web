@@ -2266,27 +2266,41 @@ local methods = {
                                             if content then
                                                 local wifi_list = {}
                                                 -- 按Cell切分解析
-                                                for cell in string.gmatch(content, "Cell %d+.-VHT Operation:") do
-                                                    local ssid = string.match(cell, 'ESSID: "([^"]+)"')
-                                                    local signal = string.match(cell, 'Signal: ([-]?%d+) dBm')
-                                                    local enc_str = string.match(cell, 'Encryption: ([^\n]+)')
-
-                                                    if ssid and ssid ~= "" and ssid ~= "unknown" and signal then
-                                                        local security_type = 0 -- NONE
-                                                        if enc_str and string.find(enc_str, "WPA") then
-                                                            if string.find(enc_str, "SAE") then
-                                                                security_type = 2 -- WPA3
-                                                            else
-                                                                security_type = 1 -- WPA2
-                                                            end
-                                                        end
-
-                                                        table.insert(wifi_list, {
-                                                            ssid = ssid,
-                                                            signal = signal,
-                                                            security = security_type
-                                                        })
+                                                local cell_start = 1
+                                                while true do
+                                                    local cell_end = string.find(content, "Cell %d+", cell_start + 1)
+                                                    if not cell_end then
+                                                        cell_end = string.len(content) + 1
                                                     end
+
+                                                    local cell = string.sub(content, cell_start, cell_end - 1)
+                                                    if string.match(cell, "Cell %d+") then
+                                                        local ssid = string.match(cell, 'ESSID: "([^"]+)"')
+                                                        local signal = string.match(cell, 'Signal: ([-]?%d+) dBm')
+                                                        local enc_str = string.match(cell, 'Encryption: ([^\n]+)')
+
+                                                        if ssid and ssid ~= "" and ssid ~= "unknown" and signal then
+                                                            local security_type = 0 -- NONE
+                                                            if enc_str and string.find(enc_str, "WPA") then
+                                                                if string.find(enc_str, "SAE") then
+                                                                    security_type = 2 -- WPA3
+                                                                else
+                                                                    security_type = 1 -- WPA2
+                                                                end
+                                                            end
+
+                                                            table.insert(wifi_list, {
+                                                                ssid = ssid,
+                                                                signal = signal,
+                                                                security = security_type
+                                                            })
+                                                        end
+                                                    end
+
+                                                    if cell_end > string.len(content) then
+                                                        break
+                                                    end
+                                                    cell_start = cell_end
                                                 end
 
                                                 -- 清理文件
