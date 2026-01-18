@@ -2197,11 +2197,12 @@ local methods = {
                     if lock_file then
                         lock_file:close()
                         -- 检查是否超时
-                        local file_stat = io.popen("stat -c %Y " .. SCAN_LOCK_FILE)
+                        local file_stat = io.popen("date -r " .. SCAN_LOCK_FILE .. " +%s")
                         if file_stat then
                             local mtime_str = file_stat:read("*a")
                             file_stat:close()
-                            local mtime = tonumber(string.gsub(mtime_str, "\n", ""))
+                            local mtime_clean = string.gsub(mtime_str, "\n", "")
+                            local mtime = tonumber(mtime_clean)
                             if mtime and (os.time() - mtime < SCAN_TIMEOUT) then
                                 result = { result = true, status = "scanning" }
                             else
@@ -2211,7 +2212,7 @@ local methods = {
                                 result = { result = false, msg = "timeout" }
                             end
                         else
-                            result = { result = false, msg = "stat failed" }
+                            result = { result = false, msg = "date failed" }
                         end
                     else
                         -- 开始扫描
@@ -2235,11 +2236,12 @@ local methods = {
                     else
                         lock_file:close()
                         -- 检查是否超时
-                        local file_stat = io.popen("stat -c %Y " .. SCAN_LOCK_FILE)
+                        local file_stat = io.popen("date -r " .. SCAN_LOCK_FILE .. " +%s")
                         if file_stat then
                             local mtime_str = file_stat:read("*a")
                             file_stat:close()
-                            local mtime = tonumber(string.gsub(mtime_str, "\n", ""))
+                            local mtime_clean = string.gsub(mtime_str, "\n", "")
+                            local mtime = tonumber(mtime_clean)
                             if mtime and (os.time() - mtime >= SCAN_TIMEOUT) then
                                 -- 超时
                                 os.remove(SCAN_LOCK_FILE)
@@ -2253,14 +2255,14 @@ local methods = {
                                 else
                                     result_file:close()
                                     -- 检查文件大小
-                                    local file_size = io.popen("wc -c < " .. SCAN_RESULT_FILE)
-                                    if file_size then
-                                        local size_str = file_size:read("*a")
-                                        file_size:close()
-                                        local size = tonumber(string.gsub(size_str, "\n", ""))
+                                    local result_file = io.open(SCAN_RESULT_FILE, "r")
+                                    local size = 0
+                                    if result_file then
+                                        local content = result_file:read("*a")
+                                        result_file:close()
+                                        size = string.len(content)
                                         if size and size > 0 then
                                             -- 解析结果
-                                            local content = read_file_content(SCAN_RESULT_FILE)
                                             if content then
                                                 local wifi_list = {}
                                                 -- 按Cell切分解析
@@ -2308,7 +2310,7 @@ local methods = {
                                 end
                             end
                         else
-                            result = { result = false, msg = "stat failed" }
+                            result = { result = false, msg = "date failed" }
                         end
                     end
                 else
