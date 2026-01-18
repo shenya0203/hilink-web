@@ -396,6 +396,14 @@ function _M.set_config(module, args)
         local keepalive_period = nil
         local keepalive_addr1 = nil
         local keepalive_addr2 = nil
+
+        -- LAN 和 DHCP 参数
+        local lan_ip = nil
+        local lan_netmask = nil
+        local dhcp_enable = nil
+        local dhcp_start_ip = nil
+        local dhcp_end_ip = nil
+        local dhcp_lease = nil
         
         
         for k, v in pairs(args) do
@@ -416,9 +424,17 @@ function _M.set_config(module, args)
             if k == "n_cell.dns_mode" then lte_dns_mode = tonumber(v) end
             if k == "n_cell.apn.auth" then lte_auth = tonumber(v) end
             if k == "n_keepalive_period" then keepalive_period = tonumber(v) end
-            if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end  
+            if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end
             if k == "s_keepalive_addr[1]" then keepalive_addr2 = v end
             if k == "n_net_select" then net_select = tonumber(v) end
+
+            -- LAN 和 DHCP 参数解析
+            if k == "s_lan.ip" then lan_ip = v end
+            if k == "s_lan.netmask" then lan_netmask = v end
+            if k == "n_lan.dhcp_enable" then dhcp_enable = tonumber(v) end
+            if k == "s_lan.dhcp_start" then dhcp_start_ip = v end
+            if k == "s_lan.dhcp_end" then dhcp_end_ip = v end
+            if k == "n_lan.dhcp_lease" then dhcp_lease = tonumber(v) end
         end
         
         if eth_mode ~= nil then
@@ -473,6 +489,28 @@ function _M.set_config(module, args)
         if keepalive_addr2 then os.execute("uci set mwan3.globals.keepalive_ip2=" .. keepalive_addr2) end
         os.execute("uci commit mwan3")
         os.execute("uci commit network")
+
+        -- 处理 LAN 和 DHCP 配置，通过 ubus 调用后端 daemon
+        if lan_ip or lan_netmask or dhcp_enable or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
+            local lan_params = {}
+            if lan_ip then lan_params["s_lan.ip"] = lan_ip end
+            if lan_netmask then lan_params["s_lan.netmask"] = lan_netmask end
+            if dhcp_enable then lan_params["n_lan.dhcp_enable"] = dhcp_enable end
+            if dhcp_start_ip then lan_params["s_lan.dhcp_start"] = dhcp_start_ip end
+            if dhcp_end_ip then lan_params["s_lan.dhcp_end"] = dhcp_end_ip end
+            if dhcp_lease then lan_params["n_lan.dhcp_lease"] = dhcp_lease end
+
+            ngx.log(ngx.INFO, "Setting LAN/DHCP config via ubus: " .. cjson.encode(lan_params))
+
+            local result = ubus_call("hilink", "set_network_config_values", lan_params)
+            if result and result.result then
+                ngx.log(ngx.INFO, "Successfully set LAN/DHCP config via ubus")
+            else
+                ngx.log(ngx.ERR, "Failed to set LAN/DHCP config via ubus")
+                return false
+            end
+        end
+
         return true
     end
     

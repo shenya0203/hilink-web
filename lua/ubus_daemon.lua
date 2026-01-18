@@ -1540,27 +1540,149 @@ function set_misc_config_values(msg)
 end
 
 
+-- 计算 DHCP start 偏移量和 limit
+local function calculate_dhcp_range(lan_ip, dhcp_start_ip, dhcp_end_ip)
+    -- 解析 LAN IP 的前三段
+    local lan_parts = {}
+    for part in string.gmatch(lan_ip, "([^%.]+)") do
+        table.insert(lan_parts, part)
+    end
+
+    if #lan_parts < 4 then
+        log_error("Invalid LAN IP format: " .. lan_ip)
+        return nil, nil
+    end
+
+    -- 解析 DHCP 起始 IP
+    local start_parts = {}
+    for part in string.gmatch(dhcp_start_ip, "([^%.]+)") do
+        table.insert(start_parts, part)
+    end
+
+    -- 解析 DHCP 结束 IP
+    local end_parts = {}
+    for part in string.gmatch(dhcp_end_ip, "([^%.]+)") do
+        table.insert(end_parts, part)
+    end
+
+    if #start_parts < 4 or #end_parts < 4 then
+        log_error("Invalid DHCP IP format: start=" .. dhcp_start_ip .. ", end=" .. dhcp_end_ip)
+        return nil, nil
+    end
+
+    -- 检查前三段是否匹配 LAN IP
+    if lan_parts[1] ~= start_parts[1] or lan_parts[2] ~= start_parts[2] or lan_parts[3] ~= start_parts[3] or
+       lan_parts[1] ~= end_parts[1] or lan_parts[2] ~= end_parts[2] or lan_parts[3] ~= end_parts[3] then
+        log_error("DHCP IP range must be in the same subnet as LAN IP")
+        return nil, nil
+    end
+
+    -- 计算 start 偏移量 (相对于 LAN IP 的第四段)
+    local start_offset = tonumber(start_parts[4])
+    local end_offset = tonumber(end_parts[4])
+
+    if not start_offset or not end_offset then
+        log_error("Invalid DHCP IP offset values")
+        return nil, nil
+    end
+
+    -- 计算 limit (结束IP - 起始IP + 1)
+    local limit = end_offset - start_offset + 1
+
+    if limit <= 0 then
+        log_error("Invalid DHCP range: start=" .. start_offset .. ", end=" .. end_offset)
+        return nil, nil
+    end
+
+    log_info("Calculated DHCP range: start=" .. start_offset .. ", limit=" .. limit)
+    return start_offset, limit
+end
+
 local function set_network_config_values(args)
-    for k, v in pairs(args) do
-        local key = string.match(k, "[ns]_(.+)")
-        if key then
-            if string.find(key, "%.") then
-                local parts = {}
-                for part in string.gmatch(key, "[^%.]+") do
-                    table.insert(parts, part)
-                end
-                
-                local target = network_config
-                for i = 1, #parts - 1 do
-                    if target[parts[i]] then
-                        target = target[parts[i]]
-                    end
-                end
-                target[parts[#parts]] = tonumber(v) or v
-            else
-                network_config[key] = tonumber(v) or v
+    local cursor = uci_lib.cursor()
+
+    -- 处理 LAN 和 DHCP 参数
+    local lan_ip = args["s_lan.ip"]
+    local lan_netmask = args["s_lan.netmask"]
+    local dhcp_enable = args["n_lan.dhcp_enable"]
+    local dhcp_start_ip = args["s_lan.dhcp_start"]
+    local dhcp_end_ip = args["s_lan.dhcp_end"]
+    local dhcp_lease = args["n_lan.dhcp_lease"]
+
+    -- 设置 LAN 接口配置
+    if lan_ip or lan_netmask then
+        if lan_ip then
+            cursor:set("network", "lan", "ipaddr", lan_ip)
+            log_info("Set network.lan.ipaddr = " .. lan_ip)
+        end
+        if lan_netmask then
+            cursor:set("network", "lan", "netmask", lan_netmask)
+            log_info("Set network.lan.netmask = " .. lan_netmask)
+        end
+    end
+
+    -- 设置 DHCP 配置
+    if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
+        -- DHCP 开关设置
+        if dhcp_enable ~= nil then
+            local ignore = (dhcp_enable == 1) and "0" or "1"
+            cursor:set("dhcp", "lan", "ignore", ignore)
+            log_info("Set dhcp.lan.ignore = " .. ignore)
+        end
+
+        -- DHCP 租期设置
+        if dhcp_lease then
+            local leasetime = tostring(dhcp_lease) .. "h"
+            cursor:set("dhcp", "lan", "leasetime", leasetime)
+            log_info("Set dhcp.lan.leasetime = " .. leasetime)
+        end
+
+        -- 计算 DHCP start 和 limit
+        if dhcp_start_ip and dhcp_end_ip and lan_ip then
+            local start_offset, limit = calculate_dhcp_range(lan_ip, dhcp_start_ip, dhcp_end_ip)
+            if start_offset and limit then
+                cursor:set("dhcp", "lan", "start", tostring(start_offset))
+                cursor:set("dhcp", "lan", "limit", tostring(limit))
+                log_info("Set dhcp.lan.start = " .. start_offset .. ", limit = " .. limit)
             end
-            log_info("network." .. key .. " = " .. tostring(v))
+        end
+    end
+
+    -- 提交配置
+    if lan_ip or lan_netmask then
+        cursor:commit("network")
+        log_info("Committed network configuration")
+    end
+    if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
+        cursor:commit("dhcp")
+        log_info("Committed dhcp configuration")
+    end
+
+    -- 处理其他网络参数（保持原有逻辑）
+    for k, v in pairs(args) do
+        -- 跳过已经处理的 LAN/DHCP 参数
+        if k ~= "s_lan.ip" and k ~= "s_lan.netmask" and k ~= "n_lan.dhcp_enable" and
+           k ~= "s_lan.dhcp_start" and k ~= "s_lan.dhcp_end" and k ~= "n_lan.dhcp_lease" then
+            local key = string.match(k, "[ns]_(.+)")
+            if key then
+                if string.find(key, "%.") then
+                    local parts = {}
+                    for part in string.gmatch(key, "[^%.]+") do
+                        table.insert(parts, part)
+                    end
+
+                    local target = network_config
+                    for i = 1, #parts - 1 do
+                        if target[parts[i]] then
+                            target = target[parts[i]]
+                        end
+                    end
+                    target[parts[#parts]] = tonumber(v) or v
+                else
+                    network_config[key] = tonumber(v) or v
+                end
+                log_info("network." .. key .. " = " .. tostring(v))
+            end
         end
     end
     return true
@@ -1968,7 +2090,7 @@ local methods = {
         },
         
         -- 设置网络配置
-        set_network_config = {
+        set_network_config_values = {
             function(req, msg)
                 local res = set_network_config_values(msg)
                 reply(req, {result = res})
