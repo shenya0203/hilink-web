@@ -2352,6 +2352,34 @@ local methods = {
                 local track_period = get_uci("mwan3.globals.keepalive_period") or 10
                 local net_select = get_uci("mwan3.globals.net_select") or 0
 
+                -- Read WiFi STA configuration
+                local wifi_enable = 0
+                local wifi_encryption = "0"
+                local wifi_ssid = ""
+                local wifi_password = ""
+
+                -- Get UCI cursor for wireless config
+                local uci_cursor = require("uci").cursor()
+                uci_cursor:foreach("wireless", "wifi-iface", function(section)
+                    if section.mode == "sta" then
+                        wifi_enable = section.disabled == "0" and 1 or 0
+                        wifi_ssid = section.ssid or ""
+                        wifi_password = section.key or ""
+
+                        -- Map encryption to frontend format
+                        local enc = section.encryption or "none"
+                        if enc == "none" then
+                            wifi_encryption = "0"
+                        elseif enc == "psk2" then
+                            wifi_encryption = "1"  -- WPA2
+                        elseif enc == "sae" then
+                            wifi_encryption = "2"  -- WPA3
+                        else
+                            wifi_encryption = "0"  -- default to none
+                        end
+                    end
+                end)
+
                 reply(req, {
                     net_select = net_select, keepalive_period = track_period,
                     keepalive_addr = {track_ip1, track_ip2},
@@ -2367,6 +2395,14 @@ local methods = {
                         sim_switch = lte_simnum,
                         apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
                         dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
+                    },
+                    n_wifi = {
+                        enable = wifi_enable,
+                        encryption = wifi_encryption
+                    },
+                    s_wifi = {
+                        ssid = wifi_ssid,
+                        password = wifi_password
                     }
                 })
             end,

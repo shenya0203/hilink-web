@@ -454,14 +454,15 @@ const exportParams = async () => {
   try {
     // 1. 定义所有需要获取的配置项名称
     const configNames = [
-      'misc', 
-      'network', 
-      'comm_tunnel', 
-      'uart', 
+      'misc',
+      'network',
+      'network_lan',
+      'comm_tunnel',
+      'uart',
       'offline_cache',
-      'edge', 
-      'edge_report', 
-      'edge_access', 
+      'edge',
+      'edge_report',
+      'edge_access',
       'edge_link_ctrl'
     ]
 
@@ -688,7 +689,7 @@ const importParams = async () => {
         }
 
         // 1. 恢复普通配置 (通过 update_nv.cgi)
-        const configModules = ['misc', 'network', 'comm_tunnel', 'uart', 'offline_cache', 'edge', 'edge_access', 'edge_link_ctrl']
+        const configModules = ['misc', 'network', 'network_lan', 'comm_tunnel', 'uart', 'offline_cache', 'edge', 'edge_access', 'edge_link_ctrl']
         
         for (const name of configModules) {
           if (fullConfig.configs && fullConfig.configs[name]) {
