@@ -571,6 +571,17 @@ export default {
         dhcpStart: '起始 IP',
         dhcpEnd: '结束 IP',
         dhcpLease: '租期 (小时)',
+        // Wi-Fi AP (热点)
+        wifiApConfig: 'Wi-Fi AP (热点) 配置',
+        apEnable: 'AP 开关',
+        apSsid: '热点名称 (SSID)',
+        apEncryption: '加密方式',
+        apPassword: '热点密码',
+        apChannel: '信道选择',
+        auto: '自动',
+        apHidden: 'SSID 隐藏',
+        apSsidVisible: '显示 SSID',
+        apSsidHidden: '隐藏 SSID',
         // LTE/CAT1
         simSwitch: 'SIM卡切换',
         externalSimFirst: '外置SIM优先',
@@ -592,7 +603,12 @@ export default {
         invalidGateway: '网关地址格式错误',
         gatewayNotInSubnet: '网关不在子网范围内',
         invalidStringSafe: '输入包含非法字符 (空格, 括号等) 或长度不符',
-        subnetConflict: 'LAN 口 IP 网段不能与 WAN 口 IP 网段冲突，请修改其中一个'
+        subnetConflict: 'LAN 口 IP 网段不能与 WAN 口 IP 网段冲突，请修改其中一个',
+        // AP 验证错误信息
+        apSsidRequired: '热点名称不能为空',
+        apSsidInvalid: '热点名称无效 (1-32个字符)',
+        apPasswordRequired: '加密模式下密码不能为空',
+        apPasswordInvalid: '密码无效 (8-63个字符)'
     },
 
     // 页脚

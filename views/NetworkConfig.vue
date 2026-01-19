@@ -521,6 +521,84 @@
           </div>
         </div>
       </form>
+
+      <!-- Wi-Fi AP (热点) 配置 -->
+      <form style="margin-top: 20px;">
+        <legend>{{ t('network.wifiApConfig') }}</legend>
+        <div class="form-section">
+          <div class="form-group">
+            <label>{{ t('network.apEnable') }}:</label>
+            <select v-model="config.n_ap.enable">
+              <option value="0">{{ t('common.disable') }}</option>
+              <option value="1">{{ t('common.enable') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apSsid') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model="config.s_ap.ssid"
+                type="text"
+                placeholder=""
+                :class="{ 'input-error': getFieldError('ap_ssid') }"
+                :disabled="config.n_ap.enable !== '1'"
+              />
+              <span v-if="getFieldError('ap_ssid')" class="field-error-text">
+                {{ getFieldError('ap_ssid') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apEncryption') }}:</label>
+            <select v-model="config.n_ap.encryption" :disabled="config.n_ap.enable !== '1'">
+              <option value="0">OPEN</option>
+              <option value="1">WPA2-PSK</option>
+              <option value="2">WPA/WPA2-PSK</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apPassword') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model="config.s_ap.password"
+                type="password"
+                placeholder=""
+                :class="{ 'input-error': getFieldError('ap_password') }"
+                :disabled="config.n_ap.enable !== '1' || config.n_ap.encryption === '0'"
+              />
+              <span v-if="getFieldError('ap_password')" class="field-error-text">
+                {{ getFieldError('ap_password') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apChannel') }}:</label>
+            <select v-model="config.n_ap.channel" :disabled="config.n_ap.enable !== '1'">
+              <option value="0">{{ t('network.auto') }}</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13">13</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apHidden') }}:</label>
+            <select v-model="config.n_ap.hidden" :disabled="config.n_ap.enable !== '1'">
+              <option value="0">{{ t('network.apSsidVisible') }}</option>
+              <option value="1">{{ t('network.apSsidHidden') }}</option>
+            </select>
+          </div>
+        </div>
+      </form>
     </div>
 
     <!-- 应用保存按钮 -->
@@ -638,6 +716,17 @@ const config = ref({
   n_lan: {
     dhcp_enable: '',
     dhcp_lease: ''
+  },
+  // AP (热点)
+  n_ap: {
+    enable: '',
+    encryption: '',
+    channel: '',
+    hidden: ''
+  },
+  s_ap: {
+    ssid: '',
+    password: ''
   }
 })
 
@@ -761,7 +850,24 @@ const networkErrors = computed(() => {
     }
   }
 
-  // 6. WAN/LAN 网段冲突校验
+  // 6. AP 验证
+  if (config.value.n_ap.enable === '1') {
+    if (!config.value.s_ap.ssid || config.value.s_ap.ssid.trim() === '') {
+      errors['ap_ssid'] = t('network.apSsidRequired') || 'SSID is required'
+    } else if (!isValidStringSafe(config.value.s_ap.ssid, 1, 32)) {
+      errors['ap_ssid'] = t('network.apSsidInvalid') || 'Invalid SSID (1-32 characters)'
+    }
+
+    if (config.value.n_ap.encryption !== '0') { // 非OPEN模式
+      if (!config.value.s_ap.password || config.value.s_ap.password.trim() === '') {
+        errors['ap_password'] = t('network.apPasswordRequired') || 'Password is required for encrypted hotspot'
+      } else if (!isValidStringSafe(config.value.s_ap.password, 8, 63)) {
+        errors['ap_password'] = t('network.apPasswordInvalid') || 'Invalid password (8-63 characters)'
+      }
+    }
+  }
+
+  // 7. WAN/LAN 网段冲突校验
   if (config.value.eth_mode === '0' && // WAN为静态IP模式
       isValidIP(config.value.eth_ip) && isValidSubnetMask(config.value.eth_netmask) &&
       isValidIP(config.value.s_lan.ip) && isValidSubnetMask(config.value.s_lan.netmask)) {
@@ -812,7 +918,8 @@ const hasMainTabError = (mainTabName) => {
            errors.subnet_conflict
   }
   if (mainTabName === 'lan') {
-    return errors.lan_ip || errors.lan_netmask || errors.dhcp_start || errors.dhcp_end || errors.dhcp_lease
+    return errors.lan_ip || errors.lan_netmask || errors.dhcp_start || errors.dhcp_end || errors.dhcp_lease ||
+           errors.ap_ssid || errors.ap_password
   }
   return false
 }
@@ -877,6 +984,18 @@ const loadData = async () => {
         dhcp_enable: String(lanConfig.n_lan.dhcp_enable || 1),
         dhcp_lease: String(lanConfig.n_lan.dhcp_lease || 24)
       }
+
+      // AP 配置容错处理
+      config.value.n_ap = {
+        enable: String(lanConfig.n_ap?.enable ?? 0),
+        encryption: String(lanConfig.n_ap?.encryption ?? 1),
+        channel: String(lanConfig.n_ap?.channel ?? 0),
+        hidden: String(lanConfig.n_ap?.hidden ?? 0)
+      }
+      config.value.s_ap = {
+        ssid: lanConfig.s_ap?.ssid ?? '',
+        password: lanConfig.s_ap?.password ?? ''
+      }
     } else {
       // 如果API调用失败，使用默认值
       config.value.s_lan = {
@@ -888,6 +1007,18 @@ const loadData = async () => {
       config.value.n_lan = {
         dhcp_enable: '1',
         dhcp_lease: '24'
+      }
+
+      // AP 配置默认值
+      config.value.n_ap = {
+        enable: '0',
+        encryption: '1',
+        channel: '0',
+        hidden: '0'
+      }
+      config.value.s_ap = {
+        ssid: '',
+        password: ''
       }
     }
 
@@ -948,6 +1079,14 @@ const saveConfig = async () => {
     params.push(`s_lan.dhcp_start=${c.s_lan.dhcp_start}`)
     params.push(`s_lan.dhcp_end=${c.s_lan.dhcp_end}`)
     params.push(`n_lan.dhcp_lease=${c.n_lan.dhcp_lease}`)
+
+    // AP 参数
+    params.push(`n_ap.enable=${c.n_ap.enable}`)
+    params.push(`s_ap.ssid=${c.s_ap.ssid}`)
+    params.push(`s_ap.password=${c.s_ap.password}`)
+    params.push(`n_ap.encryption=${c.n_ap.encryption}`)
+    params.push(`n_ap.channel=${c.n_ap.channel}`)
+    params.push(`n_ap.hidden=${c.n_ap.hidden}`)
 
     const queryString = params.join('&')
     console.log('Saving network config:', queryString)

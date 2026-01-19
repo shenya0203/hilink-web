@@ -1794,6 +1794,85 @@ local function set_network_config_values(args)
         end
     end
 
+    -- 处理 AP 参数
+    local ap_enable = args["n_ap.enable"]
+    local ap_ssid = args["s_ap.ssid"]
+    local ap_password = args["s_ap.password"]
+    local ap_encryption = args["n_ap.encryption"]
+    local ap_channel = args["n_ap.channel"]
+    local ap_hidden = args["n_ap.hidden"]
+
+    if ap_enable ~= nil or ap_ssid or ap_password or ap_encryption or ap_channel or ap_hidden then
+        -- 查找现有的AP配置
+        local ap_iface_name = nil
+        cursor:foreach("wireless", "wifi-iface", function(section)
+            if section.mode == "ap" and section.network == "lan" then
+                ap_iface_name = section[".name"]
+            end
+        end)
+
+        -- 如果没有找到AP配置，创建一个新的
+        if not ap_iface_name then
+            ap_iface_name = cursor:add("wireless", "wifi-iface")
+            cursor:set("wireless", ap_iface_name, "mode", "ap")
+            cursor:set("wireless", ap_iface_name, "network", "lan")
+            log_info("Created new wifi-iface for AP: " .. ap_iface_name)
+        end
+
+        -- 设置AP参数
+        if ap_ssid then
+            cursor:set("wireless", ap_iface_name, "ssid", ap_ssid)
+            log_info("Set wireless." .. ap_iface_name .. ".ssid = " .. ap_ssid)
+        end
+
+        if ap_password then
+            cursor:set("wireless", ap_iface_name, "key", ap_password)
+            log_info("Set wireless." .. ap_iface_name .. ".key = " .. ap_password)
+        end
+
+        if ap_encryption then
+            local enc_str = "none"
+            local enc_num = tonumber(ap_encryption)
+            if enc_num == 0 then
+                enc_str = "none"
+            elseif enc_num == 1 then
+                enc_str = "psk2"
+            elseif enc_num == 2 then
+                enc_str = "psk-mixed"
+            end
+            cursor:set("wireless", ap_iface_name, "encryption", enc_str)
+            log_info("Set wireless." .. ap_iface_name .. ".encryption = " .. enc_str)
+        end
+
+        if ap_hidden then
+            local hidden_val = (ap_hidden == "1") and "1" or "0"
+            cursor:set("wireless", ap_iface_name, "hidden", hidden_val)
+            log_info("Set wireless." .. ap_iface_name .. ".hidden = " .. hidden_val)
+        end
+
+        -- 设置信道（需要找到对应的wifi-device）
+        if ap_channel then
+            cursor:foreach("wireless", "wifi-device", function(section)
+                local device_name = section[".name"]
+                cursor:set("wireless", device_name, "channel", ap_channel)
+                log_info("Set wireless." .. device_name .. ".channel = " .. ap_channel)
+            end)
+        end
+
+        -- 设置设备启用状态
+        if ap_enable then
+            local disabled = (ap_enable == "1") and "0" or "1"
+            cursor:foreach("wireless", "wifi-device", function(section)
+                local device_name = section[".name"]
+                cursor:set("wireless", device_name, "disabled", disabled)
+                log_info("Set wireless." .. device_name .. ".disabled = " .. disabled)
+            end)
+        end
+
+        cursor:commit("wireless")
+        log_info("Committed wireless configuration")
+    end
+
     -- 提交配置
     cursor:commit("network")
     cursor:commit("mwan3")
@@ -1812,6 +1891,8 @@ local function set_network_config_values(args)
            k ~= "n_eth0.ip_mode" and k ~= "s_eth0.sip" and k ~= "s_eth0.mip" and k ~= "s_eth0.gip" and
            k ~= "n_eth0.dns_mode" and k ~= "s_eth0.dns_ip[0]" and k ~= "s_eth0.dns_ip[1]" and
            k ~= "n_cell.sim_switch" and k ~= "s_cell.apn.addr" and k ~= "s_cell.apn.user" and
+           k ~= "n_ap.enable" and k ~= "s_ap.ssid" and k ~= "s_ap.password" and
+           k ~= "n_ap.encryption" and k ~= "n_ap.channel" and k ~= "n_ap.hidden" and
            k ~= "s_cell.apn.pswd" and k ~= "n_cell.apn.auth" and k ~= "n_cell.dns_mode" and
            k ~= "s_cell.dns_ip[0]" and k ~= "s_cell.dns_ip[1]" and
            k ~= "n_net_select" and k ~= "n_keepalive_period" and
@@ -2110,6 +2191,7 @@ local methods = {
                         dhcp_ignore = section.ignore or "0"
                     end
                 end)
+                
 
                 -- 计算 DHCP IP 范围
                 local dhcp_start_ip = ""
@@ -2146,6 +2228,44 @@ local methods = {
                 -- DHCP 开关: ignore='1' 表示关闭，否则开启
                 local dhcp_enable = (dhcp_ignore ~= "1") and 1 or 0
 
+                -- 读取 Wi-Fi AP 配置
+                local ap_enable = 0
+                local ap_ssid = ""
+                local ap_password = ""
+                local ap_encryption = 1  -- 默认 WPA2-PSK
+                local ap_channel = 0    -- 默认自动
+                local ap_hidden = 0     -- 默认显示SSID
+
+                cursor:foreach("wireless", "wifi-iface", function(section)
+                    if section.mode == "ap" and section.network == "lan" then
+                        -- AP 启用状态：如果wifi-device没有disabled，则认为启用
+                        local device_disabled = get_uci("wireless." .. section.device .. ".disabled") or "1"
+                        ap_enable = (device_disabled ~= "1") and 1 or 0
+
+                        -- 读取AP配置
+                        ap_ssid = section.ssid or ""
+                        ap_encryption = section.encryption or "none"
+
+                        -- 转换加密方式为数字
+                        if ap_encryption == "none" then
+                            ap_encryption = 0  -- OPEN
+                        elseif ap_encryption == "psk2" then
+                            ap_encryption = 1  -- WPA2-PSK
+                        elseif ap_encryption == "psk-mixed" or ap_encryption == "psk2+psk" then
+                            ap_encryption = 2  -- WPA/WPA2-PSK
+                        else
+                            ap_encryption = 1  -- 默认 WPA2-PSK
+                        end
+
+                        ap_password = section.key or ""
+                        ap_hidden = (section.hidden == "1") and 1 or 0
+
+                        -- 读取信道配置
+                        local device_channel = get_uci("wireless." .. section.device .. ".channel")
+                        ap_channel = tonumber(device_channel) or 0
+                    end
+                end)
+
                 -- 返回前端所需的 JSON 结构
                 local result = {
                     s_lan = {
@@ -2157,6 +2277,17 @@ local methods = {
                     n_lan = {
                         dhcp_enable = dhcp_enable,
                         dhcp_lease = dhcp_lease
+                    },
+                    -- AP 配置
+                    n_ap = {
+                        enable = ap_enable,
+                        encryption = ap_encryption,
+                        channel = ap_channel,
+                        hidden = ap_hidden
+                    },
+                    s_ap = {
+                        ssid = ap_ssid,
+                        password = ap_password
                     }
                 }
 

@@ -551,6 +551,17 @@ export default {
         dhcpStart: 'Start IP',
         dhcpEnd: 'End IP',
         dhcpLease: 'Lease (hours)',
+        // Wi-Fi AP (Hotspot)
+        wifiApConfig: 'Wi-Fi AP (Hotspot) Configuration',
+        apEnable: 'AP Enable',
+        apSsid: 'Hotspot Name (SSID)',
+        apEncryption: 'Encryption',
+        apPassword: 'Hotspot Password',
+        apChannel: 'Channel Selection',
+        auto: 'Auto',
+        apHidden: 'SSID Hidden',
+        apSsidVisible: 'Show SSID',
+        apSsidHidden: 'Hide SSID',
         // LTE/CAT1
         simSwitch: 'SIM Switch',
         externalSimFirst: 'External SIM First',
@@ -572,7 +583,12 @@ export default {
         invalidGateway: 'Invalid gateway address format.',
         gatewayNotInSubnet: 'Gateway is not within the subnet range.',
         invalidStringSafe: 'Input contains invalid characters (spaces, parentheses, etc.) or has an invalid length.',
-        subnetConflict: 'LAN IP subnet cannot conflict with WAN IP subnet, please modify one of them.'
+        subnetConflict: 'LAN IP subnet cannot conflict with WAN IP subnet, please modify one of them.',
+        // AP validation error messages
+        apSsidRequired: 'Hotspot name cannot be empty',
+        apSsidInvalid: 'Invalid hotspot name (1-32 characters)',
+        apPasswordRequired: 'Password is required for encrypted mode',
+        apPasswordInvalid: 'Invalid password (8-63 characters)'
     },
 
     // Footer
