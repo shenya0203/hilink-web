@@ -1658,6 +1658,13 @@ local function set_network_config_values(args)
     local wifi_ssid = args["s_wifi.ssid"]
     local wifi_password = args["s_wifi.password"]
     local wifi_encryption = args["n_wifi.encryption"]
+    local wifi_ip_mode = args["n_wifi.ip_mode"] and tonumber(args["n_wifi.ip_mode"])
+    local wifi_ip = args["s_wifi.ip"]
+    local wifi_netmask = args["s_wifi.netmask"]
+    local wifi_gw = args["s_wifi.gw"]
+    local wifi_dns_mode = args["n_wifi.dns_mode"] and tonumber(args["n_wifi.dns_mode"])
+    local wifi_dns1 = args["s_wifi.dns_ip[0]"]
+    local wifi_dns2 = args["s_wifi.dns_ip[1]"]
 
     if wifi_enable ~= nil or wifi_ssid or wifi_password or wifi_encryption then
         -- 查找已有的 STA 接口（device=radio0, mode=sta）
@@ -1711,6 +1718,56 @@ local function set_network_config_values(args)
 
         cursor:commit("wireless")
         log_info("Committed wireless configuration")
+    end
+
+    if wifi_ip_mode ~= nil or wifi_ip or wifi_netmask or wifi_gw or wifi_dns_mode ~= nil or wifi_dns1 or wifi_dns2 then
+        if wifi_ip_mode ~= nil then
+            if wifi_ip_mode == 1 then
+                cursor:set("network", "wwan", "proto", "dhcp")
+                log_info("Set network.wwan.proto = dhcp")
+            else
+                cursor:set("network", "wwan", "proto", "static")
+                log_info("Set network.wwan.proto = static")
+                if wifi_ip then
+                    cursor:set("network", "wwan", "ipaddr", wifi_ip)
+                    log_info("Set network.wwan.ipaddr = " .. wifi_ip)
+                end
+                if wifi_netmask then
+                    cursor:set("network", "wwan", "netmask", wifi_netmask)
+                    log_info("Set network.wwan.netmask = " .. wifi_netmask)
+                end
+                if wifi_gw then
+                    cursor:set("network", "wwan", "gateway", wifi_gw)
+                    log_info("Set network.wwan.gateway = " .. wifi_gw)
+                end
+            end
+        end
+
+        if wifi_dns_mode ~= nil then
+            cursor:set("network", "wwan", "peerdns", wifi_dns_mode)
+            log_info("Set network.wwan.peerdns = " .. wifi_dns_mode)
+
+            cursor:delete("network", "wwan", "dns")
+            cursor:delete("network", "wwan", "_dns")
+
+            local dns_list = {}
+            if wifi_dns1 and wifi_dns1 ~= "" then
+                table.insert(dns_list, wifi_dns1)
+            end
+            if wifi_dns2 and wifi_dns2 ~= "" then
+                table.insert(dns_list, wifi_dns2)
+            end
+
+            if #dns_list > 0 then
+                if wifi_dns_mode == 1 then
+                    cursor:set("network", "wwan", "_dns", dns_list)
+                    log_info("Set network.wwan._dns = " .. table.concat(dns_list, " "))
+                else
+                    cursor:set("network", "wwan", "dns", dns_list)
+                    log_info("Set network.wwan.dns = " .. table.concat(dns_list, " "))
+                end
+            end
+        end
     end
 
     -- 处理 LTE 参数
@@ -1956,7 +2013,9 @@ local function set_network_config_values(args)
            k ~= "n_ap.enable" and k ~= "s_ap.ssid" and k ~= "s_ap.password" and
            k ~= "n_ap.encryption" and k ~= "n_ap.channel" and k ~= "n_ap.hidden" and
            k ~= "n_wifi.enable" and k ~= "s_wifi.ssid" and k ~= "s_wifi.password" and
-           k ~= "n_wifi.encryption" and
+           k ~= "n_wifi.encryption" and k ~= "n_wifi.ip_mode" and k ~= "s_wifi.ip" and
+           k ~= "s_wifi.netmask" and k ~= "s_wifi.gw" and k ~= "n_wifi.dns_mode" and
+           k ~= "s_wifi.dns_ip[0]" and k ~= "s_wifi.dns_ip[1]" and
            k ~= "s_cell.apn.pswd" and k ~= "n_cell.apn.auth" and k ~= "n_cell.dns_mode" and
            k ~= "s_cell.dns_ip[0]" and k ~= "s_cell.dns_ip[1]" and
            k ~= "n_net_select" and k ~= "n_keepalive_period" and
@@ -2421,6 +2480,11 @@ local methods = {
                 local wifi_encryption = "0"
                 local wifi_ssid = ""
                 local wifi_password = ""
+                local wwan_proto = get_uci("network.wwan.proto")
+                local wwan_ip = get_uci("network.wwan.ipaddr") or ""
+                local wwan_netmask = get_uci("network.wwan.netmask") or ""
+                local wwan_gateway = get_uci("network.wwan.gateway") or ""
+                local wwan_dns_enable = get_uci("network.wwan.peerdns") or 1  --0 手动设置 1 自动获取
 
                 -- Get UCI cursor for wireless config
                 local uci_cursor = require("uci").cursor()
@@ -2444,6 +2508,27 @@ local methods = {
                     end
                 end)
 
+                local wwan_dns = {}
+                local f = nil
+                if wwan_dns_enable == 0 then
+                    f = io.popen("uci get network.wwan.dns 2>/dev/null")
+                else
+                    f = io.popen("uci get network.wwan._dns 2>/dev/null")
+                end
+                if f then
+                    for line in f:lines() do
+                        for dns in string.gmatch(line, "%S+") do
+                            table.insert(wwan_dns, dns)
+                        end
+                    end
+                    f:close()
+                end
+
+                local wifi_ip_mode = 0
+                if wwan_proto == "dhcp" then
+                    wifi_ip_mode = 1
+                end
+
                 reply(req, {
                     net_select = net_select, keepalive_period = track_period,
                     keepalive_addr = {track_ip1, track_ip2},
@@ -2462,11 +2547,17 @@ local methods = {
                     },
                     n_wifi = {
                         enable = wifi_enable,
-                        encryption = wifi_encryption
+                        encryption = wifi_encryption,
+                        ip_mode = wifi_ip_mode,
+                        dns_mode = wwan_dns_enable
                     },
                     s_wifi = {
                         ssid = wifi_ssid,
-                        password = wifi_password
+                        password = wifi_password,
+                        ip = wwan_ip,
+                        netmask = wwan_netmask,
+                        gw = wwan_gateway,
+                        dns_ip = {wwan_dns[1] or "", wwan_dns[2] or ""}
                     }
                 })
             end,
