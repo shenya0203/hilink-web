@@ -1653,7 +1653,65 @@ local function set_network_config_values(args)
             end
         end
     end
-    --wifi 的sta配置 
+    -- Wi-Fi STA 配置
+    local wifi_enable = args["n_wifi.enable"]
+    local wifi_ssid = args["s_wifi.ssid"]
+    local wifi_password = args["s_wifi.password"]
+    local wifi_encryption = args["n_wifi.encryption"]
+
+    if wifi_enable ~= nil or wifi_ssid or wifi_password or wifi_encryption then
+        -- 查找已有的 STA 接口（device=radio0, mode=sta）
+        local sta_section = nil
+        cursor:foreach("wireless", "wifi-iface", function(section)
+            if section.device == "radio0" and section.mode == "sta" then
+                sta_section = section[".name"]
+                return false
+            end
+        end)
+
+        -- 不存在则创建新的 STA 接口
+        if not sta_section then
+            sta_section = cursor:add("wireless", "wifi-iface")
+            cursor:set("wireless", sta_section, "device", "radio0")
+            cursor:set("wireless", sta_section, "mode", "sta")
+            log_info("Created new wifi-iface for STA: " .. sta_section)
+        end
+
+        -- 设置 STA 参数
+        if wifi_ssid then
+            cursor:set("wireless", sta_section, "ssid", wifi_ssid)
+            log_info("Set wireless." .. sta_section .. ".ssid = " .. wifi_ssid)
+        end
+        if wifi_password then
+            cursor:set("wireless", sta_section, "key", wifi_password)
+            log_info("Set wireless." .. sta_section .. ".key = " .. wifi_password)
+        end
+        if wifi_encryption ~= nil then
+            local enc_str = "none"
+            local enc_num = tonumber(wifi_encryption)
+            if enc_num == 0 then
+                enc_str = "none"
+            elseif enc_num == 1 then
+                enc_str = "psk2"
+            elseif enc_num == 2 then
+                enc_str = "sae"
+            end
+            cursor:set("wireless", sta_section, "encryption", enc_str)
+            log_info("Set wireless." .. sta_section .. ".encryption = " .. enc_str)
+        end
+
+        cursor:set("wireless", sta_section, "network", "wwan")
+        log_info("Set wireless." .. sta_section .. ".network = wwan")
+
+        if wifi_enable ~= nil then
+            local disabled = (tonumber(wifi_enable) == 1) and "0" or "1"
+            cursor:set("wireless", sta_section, "disabled", disabled)
+            log_info("Set wireless." .. sta_section .. ".disabled = " .. disabled)
+        end
+
+        cursor:commit("wireless")
+        log_info("Committed wireless configuration")
+    end
 
     -- 处理 LTE 参数
     local lte_simnum = args["n_cell.sim_switch"] and tonumber(args["n_cell.sim_switch"])
@@ -1897,6 +1955,8 @@ local function set_network_config_values(args)
            k ~= "n_cell.sim_switch" and k ~= "s_cell.apn.addr" and k ~= "s_cell.apn.user" and
            k ~= "n_ap.enable" and k ~= "s_ap.ssid" and k ~= "s_ap.password" and
            k ~= "n_ap.encryption" and k ~= "n_ap.channel" and k ~= "n_ap.hidden" and
+           k ~= "n_wifi.enable" and k ~= "s_wifi.ssid" and k ~= "s_wifi.password" and
+           k ~= "n_wifi.encryption" and
            k ~= "s_cell.apn.pswd" and k ~= "n_cell.apn.auth" and k ~= "n_cell.dns_mode" and
            k ~= "s_cell.dns_ip[0]" and k ~= "s_cell.dns_ip[1]" and
            k ~= "n_net_select" and k ~= "n_keepalive_period" and
