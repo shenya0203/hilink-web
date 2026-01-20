@@ -1653,6 +1653,7 @@ local function set_network_config_values(args)
             end
         end
     end
+    --wifi 的sta配置 
 
     -- 处理 LTE 参数
     local lte_simnum = args["n_cell.sim_switch"] and tonumber(args["n_cell.sim_switch"])
@@ -1751,6 +1752,9 @@ local function set_network_config_values(args)
     local lan_ip = args["s_lan.ip"]
     local lan_netmask = args["s_lan.netmask"]
     local dhcp_enable = args["n_lan.dhcp_enable"]
+    if dhcp_enable ~= nil then
+        dhcp_enable = tonumber(dhcp_enable)
+    end
     local dhcp_start_ip = args["s_lan.dhcp_start"]
     local dhcp_end_ip = args["s_lan.dhcp_end"]
     local dhcp_lease = args["n_lan.dhcp_lease"]
