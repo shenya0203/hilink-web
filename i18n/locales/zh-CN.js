@@ -574,6 +574,6 @@ export default {
 
     // 页脚
     footer: {
-        copyright: 'Copyright © USR IOT'
+        copyright: 'Copyright © HiLink IOT'
     }
 }

@@ -249,9 +249,8 @@
         <div class="modal-body">
           <p>{{ upgradeStatus }}</p>
           <div class="progress-bar-container">
-            <div class="progress-bar-fill" :style="{ width: upgradeProgress + '%' }">
-              <span class="progress-text">{{ upgradeProgress }}%</span>
-            </div>
+            <div class="progress-bar-fill" :style="{ width: upgradeProgress + '%' }"></div>
+            <span class="progress-text">{{ upgradeProgress }}%</span>
           </div>
           <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
         </div>
@@ -894,8 +893,8 @@ const executeUpgrade = async () => {
 // 升级流程控制
 const startUpgradeProcess = () => {
   let progress = 0
-  const totalTime = 240 // 180秒超时
-  const intervalTime = 100 // 100ms更新一次
+  const totalTime = 220 // 180秒超时
+  const intervalTime = 90 // 100ms更新一次
   const steps = totalTime * 1000 / intervalTime
   let currentStep = 0
   
@@ -1275,21 +1274,26 @@ onUnmounted(() => {
   border-radius: 10px;
   margin: 15px 0;
   overflow: hidden;
+  position: relative;
 }
 
 .progress-bar-fill {
   height: 100%;
   background-color: #0066cc;
   transition: width 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .progress-text {
-  color: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #333;
   font-size: 12px;
   font-weight: bold;
+  pointer-events: none;
+  z-index: 2;
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
 }
 
 .warning-text {
