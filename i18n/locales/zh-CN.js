@@ -35,7 +35,8 @@ export default {
         saveSuccess: '保存成功',
         saveFailed: '保存失败',
         uploadSuccess: '上传成功',
-        uploadFailed: '上传失败'
+        uploadFailed: '上传失败',
+        operationFailed: '操作失败'
     },
 
     // 顶部导航栏

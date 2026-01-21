@@ -2148,17 +2148,20 @@ local methods = {
         restart_service = {
             function(req, msg)
                 log_info("Service restart requested...")
-                -- TODO: User to fill in specific service restart command here
-                -- Example: os.execute("/etc/init.d/your_service restart")
-                -- 这里可能需要重启网络
-                os.execute("/etc/init.d/network restart")
-                os.execute("/etc/init.d/edge restart")
-                os.execute("/etc/init.d/mqtt_app restart")
-                os.execute("/etc/init.d/socket restart")
-                os.execute("/etc/init.d/hlk_cloud restart")
-                os.execute("/etc/init.d/cron restart")
-                
-                
+                -- 后台延迟执行，确保 ubus 先回复前端
+                -- 使用 nohup 和完全的输入输出重定向，确保与父进程完全脱离
+                local cmd = "( sleep 3; " ..
+                    "/etc/init.d/network restart; " ..
+                    "/etc/init.d/edge restart; " ..
+                    "/etc/init.d/mqtt_app restart; " ..
+                    "/etc/init.d/socket restart; " ..
+                    "/etc/init.d/uart restart; " ..
+                    "/etc/init.d/hlk_cloud restart; " ..
+                    "/etc/init.d/cron restart" ..
+                " ) </dev/null >/dev/null 2>&1 &"
+                log_info("Executing restart command: " .. cmd)
+                os.execute(cmd)
+                -- 立即返回成功响应，给前端足够时间接收
                 reply(req, {result = true})
             end,
             {}
