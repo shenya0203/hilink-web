@@ -37,8 +37,8 @@
             <select v-model.number="socketList[activeTab].mode">
               <option :value="0">{{ t('socket.tcpClient') }}</option>
               <option :value="1">{{ t('socket.tcpServer') }}</option>
-              <option :value="2">{{ t('socket.udpClient') }}</option>
-              <option :value="3">HTTP Client</option>
+              <!-- <option :value="2">{{ t('socket.udpClient') }}</option> -->
+              <!-- <option :value="3">HTTP Client</option> -->
             </select>
           </div>
         </div>
@@ -263,6 +263,7 @@
         </div>
 
         <!-- UDP Client 配置 -->
+        <!-- 已隐藏：设备不支持 UDP Client 模式
         <div v-if="socketList[activeTab].mode === 2" class="form-section">
           <div class="section-title">{{ t('socket.udpClient') }} {{ t('socket.config') }}</div>
           <div class="form-group">
@@ -312,8 +313,10 @@
             </select>
           </div>
         </div>
+        -->
 
         <!-- HTTP Client 配置 -->
+        <!-- 已隐藏：设备不支持 HTTP Client 模式
         <div v-if="socketList[activeTab].mode === 3" class="form-section">
           <div class="section-title">HTTP Client {{ t('socket.config') }}</div>
           <div class="form-group">
@@ -361,6 +364,7 @@
             </select>
           </div>
         </div>
+        -->
       </template>
     </form>
 
