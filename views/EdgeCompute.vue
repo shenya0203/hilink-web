@@ -981,7 +981,7 @@
     </div>
     <!-- Export Options Modal -->
     <div v-if="showExportOptionsModal" class="modal-overlay" @click.self="showExportOptionsModal = false">
-      <div class="modal" style="max-width: 400px; text-align: center;">
+      <div class="modal" style="max-width: 550px; text-align: center;">
         <h3 style="border: none; margin-bottom: 20px;">{{ t('edge.exportOptions') || '导出选项' }}</h3>
         <div class="modal-buttons" style="justify-content: center; gap: 20px;">
           <button class="btn-save" @click="exportToCloud">到Cloud</button>

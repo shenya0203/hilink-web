@@ -1412,7 +1412,8 @@ onUnmounted(() => {
 }
 
 .time-input {
-  width: 50px;
+  width: 70px;
+  flex: none;
   padding: 6px 8px;
   border: 1px solid #ddd;
   border-radius: 2px;
