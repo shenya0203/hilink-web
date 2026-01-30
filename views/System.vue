@@ -310,7 +310,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
@@ -1070,12 +1070,18 @@ const saveTimeConfig = async () => {
 // 保存设备配置
 const saveDeviceConfig = async () => {
   try {
+    // 最终校验一遍数据
+    const tr = miscConfig.value.timing_reset;
+    const hh = Math.min(23, Math.max(0, Number(tr.hh) || 0));
+    const mm = Math.min(59, Math.max(0, Number(tr.mm) || 0));
+    const ss = Math.min(59, Math.max(0, Number(tr.ss) || 0));
+
     const params = {
       file: 'misc',
-      'n_timing_reset.enable': miscConfig.value.timing_reset.enable,
-      'n_timing_reset.hh': miscConfig.value.timing_reset.hh,
-      'n_timing_reset.mm': miscConfig.value.timing_reset.mm,
-      'n_timing_reset.ss': miscConfig.value.timing_reset.ss
+      'n_timing_reset.enable': tr.enable,
+      'n_timing_reset.hh': hh,
+      'n_timing_reset.mm': mm,
+      'n_timing_reset.ss': ss
     }
     
     const queryString = Object.entries(params)
@@ -1130,14 +1136,19 @@ const loadMiscConfig = async () => {
     // 合并数据
     Object.assign(miscConfig.value, data)
     
+    // 强制转换为 Number 类型，解决 enable === 1 判断失效和输入框回显问题
+    if (miscConfig.value.timing_reset) {
+      miscConfig.value.timing_reset.enable = Number(miscConfig.value.timing_reset.enable) || 0
+      miscConfig.value.timing_reset.hh = Number(miscConfig.value.timing_reset.hh) || 0
+      miscConfig.value.timing_reset.mm = Number(miscConfig.value.timing_reset.mm) || 0
+      miscConfig.value.timing_reset.ss = Number(miscConfig.value.timing_reset.ss) || 0
+    } else {
+      miscConfig.value.timing_reset = { enable: 0, hh: 0, mm: 0, ss: 0 }
+    }
+    
     // 确保 ntp_url 是数组
     if (!Array.isArray(miscConfig.value.ntp_url)) {
       miscConfig.value.ntp_url = ['', '', '', '']
-    }
-    
-    // 确保 timing_reset 对象存在
-    if (!miscConfig.value.timing_reset) {
-      miscConfig.value.timing_reset = { enable: 0, hh: 0, mm: 0, ss: 0 }
     }
     
   } catch (err) {
@@ -1145,6 +1156,23 @@ const loadMiscConfig = async () => {
     throw err
   }
 }
+
+// 自动修正数值校验 (Clamping)
+watch(() => miscConfig.value.timing_reset.hh, (val) => {
+  if (val === undefined || val === null || val === '') return
+  if (val > 23) miscConfig.value.timing_reset.hh = 23
+  if (val < 0) miscConfig.value.timing_reset.hh = 0
+})
+watch(() => miscConfig.value.timing_reset.mm, (val) => {
+  if (val === undefined || val === null || val === '') return
+  if (val > 59) miscConfig.value.timing_reset.mm = 59
+  if (val < 0) miscConfig.value.timing_reset.mm = 0
+})
+watch(() => miscConfig.value.timing_reset.ss, (val) => {
+  if (val === undefined || val === null || val === '') return
+  if (val > 59) miscConfig.value.timing_reset.ss = 59
+  if (val < 0) miscConfig.value.timing_reset.ss = 0
+})
 
 // 加载数据
 const loadData = async () => {
