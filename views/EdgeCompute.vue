@@ -51,7 +51,7 @@
         <button class="btn-outline" @click="triggerFileSelect">{{ t('edge.selectFile') }}</button>
         <button class="btn-outline" @click="importCsv" :disabled="!selectedCsvFile">{{ t('edge.import') }}</button>
         <button class="btn-outline" @click="showExportModal">{{ t('edge.export') }}</button>
-        <span class="file-hint">{{ t('edge.pleaseSelectFile') }}</span>
+        <span class="file-hint">{{ selectedCsvFile ? selectedCsvFile.name : t('edge.pleaseSelectFile') }}</span>
         <input type="file" ref="csvFileInput" @change="handleCsvSelect" accept=".csv" style="display:none" />
       </div>
       

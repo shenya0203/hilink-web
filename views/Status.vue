@@ -292,6 +292,34 @@ const refreshData = async () => {
   } catch (err) {
     // 静默刷新失败时，不覆盖当前显示的数据
     console.error('数据刷新错误:', err)
+
+    // 熔断机制：检测 401 或网络错误
+    // 如果是 401 (Unauthorized) 错误，或者发生了网络错误（通常没有 response），立即停止轮询
+    if (err.response?.status === 401 || !err.response) {
+      if (refreshTimer) {
+        clearInterval(refreshTimer)
+        refreshTimer = null
+      }
+    }
+  }
+}
+
+// 页面可见性变化处理
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    // 页面不可见，清除定时器
+    if (refreshTimer) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  } else {
+    // 页面重新可见
+    // 立即执行一次数据加载
+    refreshData()
+    // 重启定时器（如果未启动）
+    if (!refreshTimer) {
+      refreshTimer = setInterval(refreshData, 5000)
+    }
   }
 }
 
@@ -304,6 +332,9 @@ onMounted(() => {
   refreshTimer = setInterval(() => {
     refreshData()
   }, 5000)
+
+  // 监听页面可见性变化
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 // 组件卸载时清除定时器
@@ -311,5 +342,7 @@ onUnmounted(() => {
   if (refreshTimer) {
     clearInterval(refreshTimer)
   }
+  // 移除事件监听器
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
