@@ -675,6 +675,7 @@
                 v-model.number="slaveForm.slaveAddress" 
                 type="number" 
                 placeholder="1" 
+                :class="{ 'input-error': slaveAddressError }"
                 :style="{ color: slaveAddressError ? 'red' : '', borderColor: slaveAddressError ? 'red' : '' }"
               />
               <span v-if="slaveAddressError" style="color: red; font-size: 12px; margin-top: 4px;">{{ slaveAddressError }}</span>
@@ -1718,6 +1719,83 @@ const slaveRemotePortError = ref('')
 const slavePollIntervalError = ref('')
 const slaveAddressError = ref('')
 
+// 从机地址重复校验
+const validateSlaveAddressDuplicate = () => {
+  const address = slaveForm.value.slaveAddress
+  
+  // Basic validity check
+  if (!isValidSlaveAddress(address)) {
+    slaveAddressError.value = t('edge.invalidSlaveAddress')
+    return
+  }
+  
+  // Duplicate check
+  const isDuplicate = slaveList.value.some((slave, index) => {
+    // 忽略系统从机
+    if (slave.isSystem) return false
+    // 忽略当前编辑项
+    if (isEditingSlave.value && index === editingSlaveIndex.value) return false
+    
+    // 校验逻辑：
+    // 场景 A (Modbus TCP): protocol === 1
+    // 若 remoteAddress 和 remotePort 与现有非系统从机完全相同，则 slaveAddress 不允许重复。
+    if (slaveForm.value.protocol === 1 && slave.protocol === 1) {
+      if (slaveForm.value.remoteAddress === slave.remoteAddress && 
+          slaveForm.value.remotePort === slave.remotePort &&
+          slave.slaveAddress === address) {
+        return true
+      }
+    }
+    // 场景 B (Modbus RTU): protocol === 0
+    // 若 serialPort 与现有非系统从机完全相同，则 slaveAddress 不允许重复。
+    if (slaveForm.value.protocol === 0 && slave.protocol === 0) {
+      if (slaveForm.value.serialPort === slave.serialPort &&
+          slave.slaveAddress === address) {
+        return true
+      }
+    }
+    return false
+  })
+
+  if (isDuplicate) {
+    slaveAddressError.value = t('edge.slaveAddressDuplicate')
+  } else {
+    slaveAddressError.value = ''
+  }
+}
+
+// 自动建议下一个从机地址
+const suggestNextSlaveAddress = () => {
+  // 仅在添加模式下自动建议地址
+  if (isEditingSlave.value) return
+
+  const protocol = slaveForm.value.protocol
+  const address = slaveForm.value.remoteAddress
+  const port = slaveForm.value.remotePort
+  const serial = slaveForm.value.serialPort
+  
+  let maxAddr = 0
+  let matched = false
+  
+  slaveList.value.forEach(slave => {
+    if (slave.isSystem) return
+    
+    if (protocol === 1 && slave.protocol === 1) {
+      if (address === slave.remoteAddress && port === slave.remotePort) {
+        matched = true
+        maxAddr = Math.max(maxAddr, slave.slaveAddress || 0)
+      }
+    } else if (protocol === 0 && slave.protocol === 0) {
+      if (serial === slave.serialPort) {
+        matched = true
+        maxAddr = Math.max(maxAddr, slave.slaveAddress || 0)
+      }
+    }
+  })
+  
+  slaveForm.value.slaveAddress = matched ? maxAddr + 1 : 1
+}
+
 // 从机表单验证函数
 const validateSlaveForm = () => {
   // 验证详细信息
@@ -1753,12 +1831,8 @@ const validateSlaveForm = () => {
     slavePollIntervalError.value = ''
   }
   
-  // 验证从机地址
-  if (!isValidSlaveAddress(slaveForm.value.slaveAddress)) {
-    slaveAddressError.value = t('edge.invalidSlaveAddress')
-  } else {
-    slaveAddressError.value = ''
-  }
+  // 验证从机地址及其重复性
+  validateSlaveAddressDuplicate()
 }
 
 // 从机表单验证状态计算属性
@@ -1789,6 +1863,8 @@ watch(() => slaveForm.value.remoteAddress, () => {
     } else {
       slaveRemoteAddressError.value = ''
     }
+    suggestNextSlaveAddress()
+    validateSlaveAddressDuplicate()
   }
 })
 
@@ -1799,6 +1875,8 @@ watch(() => slaveForm.value.remotePort, () => {
     } else {
       slaveRemotePortError.value = ''
     }
+    suggestNextSlaveAddress()
+    validateSlaveAddressDuplicate()
   }
 })
 
@@ -1812,13 +1890,16 @@ watch(() => slaveForm.value.pollInterval, () => {
   }
 })
 
+watch(() => slaveForm.value.serialPort, () => {
+  if (showSlaveModal.value && slaveForm.value.protocol === 0) {
+    suggestNextSlaveAddress()
+    validateSlaveAddressDuplicate()
+  }
+})
+
 watch(() => slaveForm.value.slaveAddress, () => {
   if (showSlaveModal.value) {
-    if (!isValidSlaveAddress(slaveForm.value.slaveAddress)) {
-      slaveAddressError.value = t('edge.invalidSlaveAddress')
-    } else {
-      slaveAddressError.value = ''
-    }
+    validateSlaveAddressDuplicate()
   }
 })
 
@@ -1840,6 +1921,8 @@ watch(() => slaveForm.value.protocol, () => {
       slaveRemoteAddressError.value = ''
       slaveRemotePortError.value = ''
     }
+    suggestNextSlaveAddress()
+    validateSlaveAddressDuplicate()
   }
 })
 
@@ -2293,6 +2376,10 @@ const showAddSlaveModal = () => {
     pollInterval: 100,
     mergeCollect: false
   }
+  
+  // 自动建议地址
+  suggestNextSlaveAddress()
+  
   showSlaveModal.value = true
   slaveNameError.value = ''
 }
@@ -3859,5 +3946,10 @@ tr.selected:hover {
   border-radius: 4px;
   margin-bottom: 20px;
   font-size: 13px;
+}
+
+.input-error {
+  color: red !important;
+  border-color: red !important;
 }
 </style>

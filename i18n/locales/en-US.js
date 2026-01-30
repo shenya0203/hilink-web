@@ -409,7 +409,9 @@ export default {
         invalidTopic: 'Topic must be 1-32 bytes, no spaces or brackets',
         invalidSubTopic: 'Subscribe topic must be 1-32 bytes, no spaces or brackets',
         invalidPubTopic: 'Publish topic must be 1-32 bytes, no spaces or brackets',
-        changeRange: 'Change Range'
+        changeRange: 'Change Range',
+        slaveAddressDuplicate: 'Slave address duplicate',
+        slaveNameDuplicate: 'Slave name duplicate',
     },
 
     // System Settings Page
