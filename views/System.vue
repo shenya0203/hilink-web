@@ -891,14 +891,18 @@ const executeUpgrade = async () => {
 }
 
 // 升级流程控制
+let upgradeTimer = null
 const startUpgradeProcess = () => {
   let progress = 0
-  const totalTime = 220 // 180秒超时
-  const intervalTime = 90 // 100ms更新一次
+  const totalTime = 220 // 220秒超时
+  const intervalTime = 90 // 90ms更新一次
   const steps = totalTime * 1000 / intervalTime
   let currentStep = 0
+  upgradeCompleteTriggered = false // 重置完成标志位
   
-  const timer = setInterval(() => {
+  if (upgradeTimer) clearInterval(upgradeTimer)
+
+  upgradeTimer = setInterval(() => {
     currentStep++
     progress = Math.floor((currentStep / steps) * 100)
     
@@ -914,43 +918,59 @@ const startUpgradeProcess = () => {
     
     // 超时处理
     if (currentStep >= steps) {
-      clearInterval(timer)
+      clearInterval(upgradeTimer)
+      upgradeTimer = null
       isUpgrading.value = false
       alert(t('system.upgradeTimeout'))
-      window.location.reload()
+      window.location.href = '/?t=' + Date.now()
     }
   }, intervalTime)
-  
-  // 保存定时器ID以便清理（虽然这里简化了没存到ref，但在组件销毁时应该清理，这里简单处理）
 }
 
 // 检测设备是否在线
 let isChecking = false
+let upgradeCompleteTriggered = false // 新增：全局标志位，确保成功逻辑只跑一次
+
 const checkDeviceOnline = async () => {
-  if (isChecking) return
+  // 如果正在检查，或者已经触发过完成逻辑，直接返回
+  if (isChecking || upgradeCompleteTriggered) return
   isChecking = true
   
   try {
     // 尝试请求一个静态资源或API，设置较短超时
-    await fetch('/favicon.ico?' + new Date().getTime(), { 
+    await fetch('/favicon.ico?t=' + Date.now(), { 
       method: 'HEAD',
       cache: 'no-store',
-      mode: 'no-cors', // 允许跨域（虽然是同源）
-      signal: AbortSignal.timeout(2000) // 2秒超时
+      mode: 'no-cors',
+      signal: AbortSignal.timeout(2000)
     })
     
     // 如果成功返回，说明设备已重启完成
+    upgradeCompleteTriggered = true // 锁定，防止重复进入成功逻辑
+
+    // 1. 彻底停止计时器
+    if (upgradeTimer) {
+      clearInterval(upgradeTimer)
+      upgradeTimer = null
+    }
+
+    // 2. 更新 UI 状态
     upgradeProgress.value = 100
-    upgradeStatus.value = t('system.upgradeComplete')
+    // 直接修改状态文本，让用户在弹窗里看到变化，不需要 alert 阻塞
+    upgradeStatus.value = t('system.upgradeComplete') 
     
+    // 3. 静默跳转
+    // 延迟 2 秒以确保：
+    // a. 用户看到了 100% 进度和“完成”文本
+    // b. 给浏览器留出响应时间，避免在跳转时执行未清理的闭包
     setTimeout(() => {
-      alert(t('system.upgradeComplete'))
-      window.location.reload()
-    }, 1000)
+      // 在 URL 中注入随机数和时间戳，强制 Nginx 和浏览器放弃缓存
+      const buster = Math.random().toString(36).substring(7);
+      window.location.replace(`/?t=${Date.now()}&v=${buster}#/system`);
+    }, 2000)
     
   } catch (e) {
-    // 失败则继续等待，由主定时器控制循环
-  } finally {
+    // 只有失败才重置 isChecking，允许下一轮周期探测
     isChecking = false
   }
 }
@@ -1215,6 +1235,10 @@ onMounted(() => {
 onUnmounted(() => {
   if (timeInterval) {
     clearInterval(timeInterval)
+  }
+  if (upgradeTimer) {
+    clearInterval(upgradeTimer)
+    upgradeTimer = null
   }
 })
 </script>
