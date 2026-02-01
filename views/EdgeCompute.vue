@@ -356,6 +356,41 @@
       </div>
     </div>
 
+    <div v-if="activeTab === 4" class="tab-content">
+      <div class="table-container">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ t('edge.ruleName') }}</th>
+                <th>{{ t('edge.sourceSerial') }}</th>
+                <th>{{ t('edge.targetChannel') }}</th>
+                <th>{{ t('edge.enableStatus') }}</th>
+                <th>{{ t('edge.operation') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(rule, index) in passthroughRules" :key="rule.id">
+                <td>{{ rule.name }}</td>
+                <td>{{ rule.source }}</td>
+                <td>{{ rule.target }}</td>
+                <td>{{ rule.enable === 1 ? t('edge.open') : t('edge.close') }}</td>
+                <td class="action-cell">
+                  <button class="btn-small" @click="editPassthroughRule(index)">{{ t('edge.edit') }}</button>
+                  <button class="btn-small btn-danger" @click="deletePassthroughRule(index)">{{ t('edge.delete') }}</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button class="btn-action" @click="showAddPassthroughModal">{{ t('edge.addPassthroughRule') }}</button>
+        <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
+      </div>
+    </div>
+
     <!-- 添加分组对话框 -->
     <div v-if="showReportGroupModal" class="modal-overlay" @click.self="closeReportGroupModal">
       <div class="modal" style="max-width: 600px;">
@@ -512,6 +547,152 @@
           </button>
           <button class="btn-cancel" @click="closeReportGroupModal">{{ t('edge.cancel') }}</button>
           <button v-if="reportGroupForm.channel === 'Cloud'" class="btn-save" @click="openCloudPointModal">{{ t('edge.configPoints') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showPassthroughModal" class="modal-overlay" @click.self="closePassthroughModal">
+      <div class="modal" style="max-width: 700px;">
+        <h3>{{ isEditingPassthrough ? t('edge.editPassthroughRule') : t('edge.addPassthroughRule') }}</h3>
+        <div class="modal-form">
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.ruleName') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="passthroughForm.name" 
+                type="text"
+                :style="{ color: passthroughNameError ? 'red' : '', borderColor: passthroughNameError ? 'red' : '' }"
+              />
+              <span v-if="passthroughNameError" style="color: red; font-size: 12px; margin-top: 4px;">{{ passthroughNameError }}</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.enable') }}:</label>
+            <select v-model.number="passthroughForm.enable">
+              <option :value="0">{{ t('edge.close') }}</option>
+              <option :value="1">{{ t('edge.open') }}</option>
+            </select>
+          </div>
+          <div class="form-group" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.sourceSerial') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <select v-model="passthroughForm.source">
+                <option value="UART1" :disabled="isSourceConflict('UART1')">UART1</option>
+                <option value="UART2" :disabled="isSourceConflict('UART2')">UART2</option>
+              </select>
+              <span v-if="passthroughSourceError" style="color: red; font-size: 12px; margin-top: 4px;">{{ passthroughSourceError }}</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.targetChannel') }}:</label>
+            <select v-model="passthroughForm.target">
+              <option value="MQTT1">MQTT1</option>
+              <option value="MQTT2">MQTT2</option>
+              <option value="SOCKA">SOCKA</option>
+              <option value="SOCKB">SOCKB</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.idleTime') }}:</label>
+            <div class="input-with-unit">
+              <input v-model.number="passthroughForm.packet_rule.idle_time" type="number" />
+              <span class="unit">ms</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.maxFrameLength') }}:</label>
+            <div class="input-with-unit">
+              <input v-model.number="passthroughForm.packet_rule.max_len" type="number" />
+              <span class="unit">bytes</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('edge.formatType') }}:</label>
+            <select v-model="passthroughForm.format_type">
+              <option value="Raw">{{ t('edge.formatRaw') }}</option>
+              <option value="HexString">{{ t('edge.formatHex') }}</option>
+              <option value="JSON">{{ t('edge.formatJson') }}</option>
+            </select>
+          </div>
+
+          <template v-if="passthroughForm.format_type === 'JSON'">
+            <div class="form-group">
+              <label>{{ t('edge.dataEncoding') }}:</label>
+              <select v-model="passthroughForm.data_encoding">
+                <option value="Hex">{{ t('edge.encodingHex') }}</option>
+                <option value="Base64">{{ t('edge.encodingBase64') }}</option>
+              </select>
+            </div>
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.jsonTemplate') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <textarea 
+                  ref="passthroughTemplateRef"
+                  v-model="passthroughForm.json_template" 
+                  rows="10" 
+                  style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 2px; font-family: monospace;"
+                ></textarea>
+                <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+                  <span style="font-size: 12px; color: #666;">{{ t('edge.insertPlaceholder') }}:</span>
+                  <button class="btn-outline" type="button" @click="insertPassthroughPlaceholder('${DATA}')">${DATA}</button>
+                  <button class="btn-outline" type="button" @click="insertPassthroughPlaceholder('${TIMESTAMP}')">${TIMESTAMP}</button>
+                  <button class="btn-outline" type="button" @click="insertPassthroughPlaceholder('${DEVICE_SN}')">${DEVICE_SN}</button>
+                </div>
+                <span v-if="passthroughJsonError" style="color: red; font-size: 12px; margin-top: 5px;">{{ passthroughJsonError }}</span>
+                <span v-else style="color: #999; font-size: 12px; margin-top: 5px;">{{ t('edge.jsonTemplateHint') }}</span>
+              </div>
+            </div>
+          </template>
+
+          <template v-if="passthroughTargetIsMqtt">
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.pubTopic') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model="passthroughForm.mqtt_config.pub_topic" 
+                  type="text" 
+                  :style="{ color: passthroughPubTopicError ? 'red' : '', borderColor: passthroughPubTopicError ? 'red' : '' }"
+                />
+                <span v-if="passthroughPubTopicError" style="color: red; font-size: 12px; margin-top: 4px;">{{ passthroughPubTopicError }}</span>
+                <span v-else-if="passthroughPubTopicWarning" style="color: #e0a800; font-size: 12px; margin-top: 4px;">{{ passthroughPubTopicWarning }}</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.pubQos') }}:</label>
+              <select v-model="passthroughForm.mqtt_config.qos">
+                <option value="QOS0">QOS0</option>
+                <option value="QOS1">QOS1</option>
+                <option value="QOS2">QOS2</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>{{ t('edge.retainMessage') }}:</label>
+              <input type="checkbox" v-model="passthroughForm.mqtt_config.retain" />
+            </div>
+            <div class="form-group" style="align-items: flex-start;">
+              <label style="margin-top: 5px;">{{ t('edge.subTopic') }}:</label>
+              <div style="flex: 1; display: flex; flex-direction: column;">
+                <input 
+                  v-model="passthroughForm.mqtt_config.sub_topic" 
+                  type="text" 
+                  :style="{ color: passthroughSubTopicError ? 'red' : '', borderColor: passthroughSubTopicError ? 'red' : '' }"
+                />
+                <span v-if="passthroughSubTopicError" style="color: red; font-size: 12px; margin-top: 4px;">{{ passthroughSubTopicError }}</span>
+                <span v-else-if="passthroughSubTopicWarning" style="color: #e0a800; font-size: 12px; margin-top: 4px;">{{ passthroughSubTopicWarning }}</span>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="modal-buttons">
+          <button 
+            class="btn-save" 
+            @click="savePassthroughRule"
+            :disabled="hasPassthroughFormErrors"
+            :style="{ backgroundColor: hasPassthroughFormErrors ? '#ccc' : '', cursor: hasPassthroughFormErrors ? 'not-allowed' : 'pointer', opacity: hasPassthroughFormErrors ? 0.6 : 1 }"
+          >
+            {{ t('edge.save') }}
+          </button>
+          <button class="btn-cancel" @click="closePassthroughModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -1005,7 +1186,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { 
@@ -1035,7 +1216,8 @@ const tabList = ref([
   { name: t('edge.tabGatewayEnable') },
   { name: t('edge.tabDataCollection') },
   { name: t('edge.tabDataReport') },
-  { name: t('edge.tabProtocolConvert') }
+  { name: t('edge.tabProtocolConvert') },
+  { name: t('edge.tabPassthrough') }
 ])
 
 // 边缘计算配置
@@ -1194,6 +1376,101 @@ const reportGroupForm = ref({
   selectedPointsText: '' // New field for Cloud points display
 })
 
+const passthroughRules = ref([])
+const showPassthroughModal = ref(false)
+const isEditingPassthrough = ref(false)
+const editingPassthroughIndex = ref(-1)
+const passthroughTemplateRef = ref(null)
+const passthroughForm = ref({
+  id: '',
+  name: '',
+  enable: 1,
+  source: 'UART1',
+  target: 'MQTT1',
+  packet_rule: {
+    idle_time: 20,
+    max_len: 1024
+  },
+  mqtt_config: {
+    pub_topic: '/passthrough/up',
+    sub_topic: '/passthrough/down',
+    qos: 'QOS0',
+    retain: false
+  },
+  format_type: 'JSON',
+  data_encoding: 'Hex',
+  json_template: '{\n  "dev": "${DEVICE_SN}",\n  "ts": ${TIMESTAMP},\n  "payload": "${DATA}"\n}'
+})
+
+const passthroughNameError = ref('')
+const passthroughSourceError = ref('')
+const passthroughPubTopicError = ref('')
+const passthroughSubTopicError = ref('')
+const passthroughJsonError = ref('')
+const passthroughPubTopicWarning = ref('')
+const passthroughSubTopicWarning = ref('')
+
+const passthroughTargetIsMqtt = computed(() => {
+  return passthroughForm.value.target === 'MQTT1' || passthroughForm.value.target === 'MQTT2'
+})
+
+const hasPassthroughFormErrors = computed(() => {
+  if (passthroughNameError.value || passthroughSourceError.value) return true
+  if (passthroughTargetIsMqtt.value && (passthroughPubTopicError.value || passthroughSubTopicError.value)) return true
+  if (passthroughForm.value.format_type === 'JSON' && passthroughJsonError.value) return true
+  return false
+})
+
+const validateSourceConflict = (uartName) => {
+  const portNumber = uartName === 'UART2' ? 2 : 1
+  const hasConflict = slaveList.value.some(slave => {
+    return !slave.isSystem && slave.protocol === 0 && Number(slave.serialPort || 1) === portNumber
+  })
+  return hasConflict ? `${uartName} ${t('edge.modbusConflict')}` : ''
+}
+
+const isSourceConflict = (uartName) => {
+  return !!validateSourceConflict(uartName)
+}
+
+const isValidPassthroughTopic = (topic) => {
+  if (!isValidTopic(topic)) return false
+  return !/[+#]/.test(topic)
+}
+
+const getTopicConflictWarning = (topic) => {
+  if (!topic) return ''
+  const hit = reportGroups.value.some(g => g.topic === topic)
+  return hit ? t('edge.topicConflictWarn') : ''
+}
+
+const normalizePassthroughTemplate = (template) => {
+  return template
+    .replace(/\$\{DATA\}/g, 'DATA')
+    .replace(/\$\{TIMESTAMP\}/g, '0')
+    .replace(/\$\{DEVICE_SN\}/g, 'SN')
+    .replace(/\$\{TS\}/g, '0')
+    .replace(/\$\{DEV_ID\}/g, 'SN')
+}
+
+const validatePassthroughJsonTemplate = () => {
+  if (passthroughForm.value.format_type !== 'JSON') {
+    passthroughJsonError.value = ''
+    return
+  }
+  const content = passthroughForm.value.json_template
+  if (!content) {
+    passthroughJsonError.value = t('edge.invalidJsonTemplate')
+    return
+  }
+  try {
+    JSON.parse(normalizePassthroughTemplate(content))
+    passthroughJsonError.value = ''
+  } catch (e) {
+    passthroughJsonError.value = t('edge.invalidJsonTemplate')
+  }
+}
+
 const isJsonError = ref(false)
 const reportGroupNameError = ref('')
 
@@ -1265,6 +1542,134 @@ const saveCloudPoints = () => {
   closeCloudPointModal()
 }
 
+const resetPassthroughForm = (data = {}) => {
+  passthroughForm.value = {
+    id: data.id || '',
+    name: data.name || '',
+    enable: data.enable ?? 1,
+    source: data.source || 'UART1',
+    target: data.target || 'MQTT1',
+    packet_rule: {
+      idle_time: data.packet_rule?.idle_time ?? 20,
+      max_len: data.packet_rule?.max_len ?? 1024
+    },
+    mqtt_config: {
+      pub_topic: data.mqtt_config?.pub_topic || '/passthrough/up',
+      sub_topic: data.mqtt_config?.sub_topic || '/passthrough/down',
+      qos: data.mqtt_config?.qos || 'QOS0',
+      retain: data.mqtt_config?.retain ?? false
+    },
+    format_type: data.format_type || 'JSON',
+    data_encoding: data.data_encoding || 'Hex',
+    json_template: data.json_template || '{\n  "dev": "${DEVICE_SN}",\n  "ts": ${TIMESTAMP},\n  "payload": "${DATA}"\n}'
+  }
+}
+
+const showAddPassthroughModal = () => {
+  isEditingPassthrough.value = false
+  editingPassthroughIndex.value = -1
+  resetPassthroughForm({
+    id: `pt_${Date.now()}`
+  })
+  passthroughNameError.value = ''
+  passthroughSourceError.value = validateSourceConflict(passthroughForm.value.source)
+  passthroughPubTopicError.value = ''
+  passthroughSubTopicError.value = ''
+  passthroughPubTopicWarning.value = ''
+  passthroughSubTopicWarning.value = ''
+  passthroughJsonError.value = ''
+  updatePassthroughTopicStatus()
+  showPassthroughModal.value = true
+  nextTick(() => {
+    validatePassthroughJsonTemplate()
+  })
+}
+
+const editPassthroughRule = (index) => {
+  const rule = passthroughRules.value[index]
+  if (!rule) return
+  isEditingPassthrough.value = true
+  editingPassthroughIndex.value = index
+  resetPassthroughForm(JSON.parse(JSON.stringify(rule)))
+  passthroughNameError.value = ''
+  passthroughSourceError.value = validateSourceConflict(passthroughForm.value.source)
+  passthroughPubTopicError.value = ''
+  passthroughSubTopicError.value = ''
+  passthroughPubTopicWarning.value = ''
+  passthroughSubTopicWarning.value = ''
+  validatePassthroughJsonTemplate()
+  updatePassthroughTopicStatus()
+  showPassthroughModal.value = true
+}
+
+const closePassthroughModal = () => {
+  showPassthroughModal.value = false
+}
+
+const updatePassthroughTopicStatus = () => {
+  if (!passthroughTargetIsMqtt.value) {
+    passthroughPubTopicError.value = ''
+    passthroughSubTopicError.value = ''
+    passthroughPubTopicWarning.value = ''
+    passthroughSubTopicWarning.value = ''
+    return
+  }
+  const pubTopic = passthroughForm.value.mqtt_config.pub_topic
+  const subTopic = passthroughForm.value.mqtt_config.sub_topic
+  passthroughPubTopicError.value = isValidPassthroughTopic(pubTopic) ? '' : t('edge.invalidPubTopic')
+  passthroughSubTopicError.value = isValidPassthroughTopic(subTopic) ? '' : t('edge.invalidSubTopic')
+  passthroughPubTopicWarning.value = getTopicConflictWarning(pubTopic)
+  passthroughSubTopicWarning.value = getTopicConflictWarning(subTopic)
+}
+
+const savePassthroughRule = () => {
+  if (!passthroughForm.value.name) {
+    passthroughNameError.value = t('edge.pleaseInputRuleName')
+    return
+  }
+  passthroughNameError.value = ''
+  passthroughSourceError.value = validateSourceConflict(passthroughForm.value.source)
+  updatePassthroughTopicStatus()
+  validatePassthroughJsonTemplate()
+  if (hasPassthroughFormErrors.value) return
+
+  const newRule = {
+    ...JSON.parse(JSON.stringify(passthroughForm.value))
+  }
+
+  if (isEditingPassthrough.value && editingPassthroughIndex.value >= 0) {
+    passthroughRules.value[editingPassthroughIndex.value] = newRule
+  } else {
+    passthroughRules.value.push(newRule)
+  }
+  closePassthroughModal()
+}
+
+const deletePassthroughRule = (index) => {
+  const rule = passthroughRules.value[index]
+  if (!rule) return
+  if (confirm(`${t('edge.confirmDeleteRule')} "${rule.name}" ${t('edge.confirmQuestion')}`)) {
+    passthroughRules.value.splice(index, 1)
+  }
+}
+
+const insertPassthroughPlaceholder = (text) => {
+  const textarea = passthroughTemplateRef.value
+  if (!textarea) {
+    passthroughForm.value.json_template += text
+    return
+  }
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const value = passthroughForm.value.json_template || ''
+  passthroughForm.value.json_template = value.slice(0, start) + text + value.slice(end)
+  nextTick(() => {
+    textarea.focus()
+    const pos = start + text.length
+    textarea.setSelectionRange(pos, pos)
+  })
+}
+
 // Time selection parts
 const timeParts = ref({ h: '00', m: '00', s: '00' })
 
@@ -1291,6 +1696,30 @@ watch(() => reportGroupForm.value.template, (newVal) => {
   } catch (e) {
     isJsonError.value = true
   }
+})
+
+watch(() => passthroughForm.value.source, (newVal) => {
+  passthroughSourceError.value = validateSourceConflict(newVal)
+})
+
+watch(() => passthroughForm.value.target, () => {
+  updatePassthroughTopicStatus()
+})
+
+watch(() => passthroughForm.value.mqtt_config.pub_topic, () => {
+  updatePassthroughTopicStatus()
+})
+
+watch(() => passthroughForm.value.mqtt_config.sub_topic, () => {
+  updatePassthroughTopicStatus()
+})
+
+watch(() => passthroughForm.value.format_type, () => {
+  validatePassthroughJsonTemplate()
+})
+
+watch(() => passthroughForm.value.json_template, () => {
+  validatePassthroughJsonTemplate()
 })
 
 const validateTimeInput = (type) => {
@@ -2171,6 +2600,74 @@ const saveReportData = async () => {
   }
 }
 
+const savePassthroughData = async () => {
+  const rules = passthroughRules.value.map(rule => ({
+    id: rule.id,
+    name: rule.name,
+    enable: rule.enable,
+    source: rule.source,
+    target: rule.target,
+    packet_rule: {
+      idle_time: rule.packet_rule?.idle_time ?? 20,
+      max_len: rule.packet_rule?.max_len ?? 1024
+    },
+    mqtt_config: {
+      pub_topic: rule.mqtt_config?.pub_topic || '',
+      sub_topic: rule.mqtt_config?.sub_topic || '',
+      qos: rule.mqtt_config?.qos || 'QOS0',
+      retain: rule.mqtt_config?.retain ?? false
+    },
+    format_type: rule.format_type,
+    data_encoding: rule.data_encoding,
+    json_template: rule.json_template || ''
+  }))
+
+  rules.forEach(rule => {
+    const conflict = validateSourceConflict(rule.source)
+    if (conflict) {
+      throw new Error(conflict)
+    }
+    if (rule.target === 'MQTT1' || rule.target === 'MQTT2') {
+      if (!isValidPassthroughTopic(rule.mqtt_config.pub_topic)) {
+        throw new Error(t('edge.invalidPubTopic'))
+      }
+      if (!isValidPassthroughTopic(rule.mqtt_config.sub_topic)) {
+        throw new Error(t('edge.invalidSubTopic'))
+      }
+    }
+    if (rule.format_type === 'JSON') {
+      try {
+        JSON.parse(normalizePassthroughTemplate(rule.json_template || ''))
+      } catch (e) {
+        throw new Error(t('edge.invalidJsonTemplate'))
+      }
+    }
+  })
+
+  const params = {
+    file: 'passthrough',
+    'n_rule_num': rules.length
+  }
+  rules.forEach((rule, index) => {
+    params[`n_rule[${index}].enable`] = rule.enable
+    params[`s_rule[${index}].source`] = rule.source
+    params[`s_rule[${index}].target`] = rule.target
+  })
+  await apiClient.get('/update_nv.cgi', { params })
+
+  const passthroughConfig = { rules }
+  await apiClient.post('/upload/nv1', JSON.stringify(passthroughConfig), {
+    headers: { 'Content-Type': 'application/json' }
+  })
+
+  const formData = new FormData()
+  const jsonBlob = new Blob([JSON.stringify(passthroughConfig, null, 2)], { type: 'application/octet-stream' })
+  formData.append('c', jsonBlob, 'passthrough.json')
+  await apiClient.post('/upload/nv2', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 const handleRestart = async () => {
   showSuccessModal.value = false
   await restartService()
@@ -2650,6 +3147,10 @@ const saveCurrentPage = async () => {
       await apiClient.post('/upload/conver_csv', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      showSuccessModal.value = true
+      return
+    } else if (activeTab.value === 4) {
+      await savePassthroughData()
       showSuccessModal.value = true
       return
     }
