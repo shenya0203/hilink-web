@@ -180,13 +180,16 @@ local function get_current_run_net()
     -- 1. 获取接口物理状态
     local wan_online = check_is_online("wan")
     local lte_online = check_is_online("lte")
+    local wifi_online = check_is_online("wwan")
+
+    --查看mwan3的配置中的globals中的 net_select 配置
 
     -- 2. 互斥判断：只有一个接口在线的情况
-    if wan_online and not lte_online then
+    if (wan_online or wifi_online) and not lte_online then
         return "EtherNet"
-    elseif not wan_online and lte_online then
+    elseif not (wan_online or wifi_online) and lte_online then
         return "LTE"
-    elseif not wan_online and not lte_online then
+    elseif not (wan_online or wifi_online) and not lte_online then
         return "None" -- 全部离线
     end
 
@@ -206,7 +209,7 @@ local function get_current_run_net()
         end
         
         -- 3.3 明确匹配 EtherNet 优先策略 (如 policy_eth_pri)
-        if string.find(policy, "eth") or string.find(policy, "wan") then
+        if string.find(policy, "eth") or string.find(policy, "wan") or string.find(policy, "wwan") then
             return "EtherNet"
         end
     end

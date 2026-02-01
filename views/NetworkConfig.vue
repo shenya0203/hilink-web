@@ -650,13 +650,30 @@
           <div class="form-group">
             <label>{{ t('network.apPassword') }}:</label>
             <div class="input-wrapper">
-              <input
-                v-model="config.s_ap.password"
-                type="password"
-                placeholder=""
-                :class="{ 'input-error': getFieldError('ap_password') }"
-                :disabled="config.n_ap.enable !== '1' || config.n_ap.encryption === '0'"
-              />
+              <div class="password-group">
+                <input
+                  v-model="config.s_ap.password"
+                  :type="showApPassword ? 'text' : 'password'"
+                  placeholder=""
+                  :class="{ 'input-error': getFieldError('ap_password') }"
+                  :disabled="config.n_ap.enable !== '1' || config.n_ap.encryption === '0'"
+                  style="padding-right: 35px;"
+                />
+                <span 
+                  class="toggle-icon" 
+                  @click="showApPassword = !showApPassword"
+                  v-if="config.n_ap.enable === '1' && config.n_ap.encryption !== '0'"
+                >
+                  <svg v-if="showApPassword" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                </span>
+              </div>
               <span v-if="getFieldError('ap_password')" class="field-error-text">
                 {{ getFieldError('ap_password') }}
               </span>
@@ -753,6 +770,7 @@ const error = ref(null)
 const activeMainTab = ref('wan')
 const activeTab = ref('ethernet')
 const showRestartModal = ref(false)
+const showApPassword = ref(false)
 const originalLanIp = ref('')
 
 // WiFi扫描相关
@@ -1779,5 +1797,26 @@ onUnmounted(() => {
 
 .btn-continue:hover {
   background-color: #f5f5f5;
+}
+.password-group {
+  position: relative;
+  width: 100%;
+}
+
+.toggle-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.toggle-icon:hover {
+  color: #0066cc;
 }
 </style>
