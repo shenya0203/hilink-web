@@ -125,7 +125,17 @@ export default {
         // Cloud 连接状态
         cloudStatus: 'Cloud 连接状态',
         cloudConnectionStatus: 'Cloud 连接状态',
-        cloudConnectionFlag: 'Cloud 连接标识'
+        cloudConnectionFlag: 'Cloud 连接标识',
+
+        // WiFi STA
+        wifiSta: 'WiFi STA',
+        negotiatedRate: '协商速率',
+
+        // WiFi AP Device List
+        wifiApDeviceList: 'WiFi AP 设备列表',
+        ipAddress: 'IP 地址',
+        leaseRemaining: '租期剩余',
+        static: '静态'
     },
 
     // 串口配置页面

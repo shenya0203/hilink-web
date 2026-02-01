@@ -124,7 +124,17 @@ export default {
         // Cloud Connection Status
         cloudStatus: 'Cloud Connection Status',
         cloudConnectionStatus: 'Cloud Status',
-        cloudConnectionFlag: 'Cloud Flag'
+        cloudConnectionFlag: 'Cloud Flag',
+        // WiFi STA
+        wifiSta: 'WiFi STA',
+        negotiatedRate: 'Negotiated Rate',
+
+        // WiFi AP Device List
+        wifiApDeviceList: 'WiFi AP Device List',
+        ipAddress: 'IP Address',
+        leaseRemaining: 'Lease Remaining',
+        static: 'Static'
+
     },
 
     // UART Configuration Page

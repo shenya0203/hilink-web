@@ -17,6 +17,11 @@ local SCAN_TIMEOUT = 5                 -- 超时时间(秒)
 local SCAN_RESULT_FILE = "/tmp/wifi_scan.txt" -- 结果临时文件
 local SCAN_LOCK_FILE = "/tmp/wifi_scan.lock"  -- 锁文件
 
+-- Data Collection Config
+local WIFI_STA_IFACE = "wlan0"
+local WIFI_AP_IFACE = "wlan0-1"
+local NETWORK_STA_LOGICAL = "wwan"
+
 -- ==========================================================
 -- 配置数据存储 (实际应用中应该从文件或数据库读取)
 -- ==========================================================
@@ -1970,6 +1975,49 @@ if not conn then
 end
 
 -- ==========================================================
+-- Helper Functions for WiFi
+-- ==========================================================
+
+local function parse_dhcp_leases()
+    local leases = {}
+    local f = io.open("/tmp/dhcp.leases", "r")
+    if not f then return leases end
+    
+    for line in f:lines() do
+        -- Format: timestamp mac ip hostname mac_id
+        local ts, mac, ip, hostname = string.match(line, "(%d+)%s+(%S+)%s+(%S+)%s+(%S+)")
+        if mac and ip then
+            leases[mac] = {
+                ip = ip,
+                hostname = (hostname == "*") and "Unknown" or hostname,
+                expires = tonumber(ts)
+            }
+        end
+    end
+    f:close()
+    return leases
+end
+
+local function parse_arp_table()
+    local arp = {}
+    local f = io.open("/proc/net/arp", "r")
+    if not f then return arp end
+    
+    -- Skip header
+    f:read() 
+    
+    for line in f:lines() do
+        -- IP address       HW type     Flags       HW address            Mask     Device
+        local ip, mac = string.match(line, "(%d+%.%d+%.%d+%.%d+)%s+%S+%s+%S+%s+(%S+)")
+        if ip and mac then
+            arp[mac] = ip
+        end
+    end
+    f:close()
+    return arp
+end
+
+-- ==========================================================
 -- 定义 ubus 方法
 -- ==========================================================
 
@@ -1999,8 +2047,19 @@ local function collect_network_status()
             lte_netmask = "",
             lte_dns = "", 
             lte_sdns = ""
+        },
+        wifi_sta = {
+            status = "Disconnected",
+            ip = "",
+            ssid = "",
+            signal = 0,
+            rate = ""
+        },
+        wifi_ap = {
+            clients = {}
         }
     }
+    log_info("collect_network_status")
 
     local cursor = uci_lib.cursor()
 
@@ -2036,9 +2095,7 @@ local function collect_network_status()
     end
 
     -- 3. LTE Info from /tmp/modem_info.json
-    --net_status.lte.sim --改为表示sim状态 1 表示ready 其他值暂时表示Not ready
     net_status.lte.sim = "0"
-
     local modem_info_str = read_file_content("/tmp/modem_info.json")
     
     if modem_info_str then
@@ -2054,7 +2111,6 @@ local function collect_network_status()
             net_status.lte.lte_sta = info.connection_status
             net_status.lte.sim = info.sim_status == "ready" and "1" or "0"
             log_info("net_status: "..cjson.encode(net_status))
-
 
             if info.signal then
                 local dbm = tonumber(string.match(info.signal, "([-%d]+)"))
@@ -2092,11 +2148,7 @@ local function collect_network_status()
         end
     end
     
-    -- 5. SIM Num
-    --local sim_num = cursor:get("network", "lte", "modem_simnum")
-    --net_status.lte.sim = sim_num or 1
-
-    -- 6. Connection Status via mwan3
+    -- 5. Connection Status via mwan3
     local wan_online = check_is_online("wan")
     local lte_online = check_is_online("lte")
     if wan_online then
@@ -2105,21 +2157,131 @@ local function collect_network_status()
     if lte_online then
         net_status.lte.lte_sta = "Connected"
     end
-    --[[
-    local f = io.popen("mwan3 status")
+
+    -- ==========================================================
+    -- WiFi STA Information
+    -- ==========================================================
+    local sta_status = conn:call("network.interface." .. NETWORK_STA_LOGICAL, "status", {})
+    if sta_status and sta_status.up then
+        net_status.wifi_sta.status = "Connected"
+        if sta_status["ipv4-address"] and #sta_status["ipv4-address"] > 0 then
+            net_status.wifi_sta.ip = sta_status["ipv4-address"][1].address
+        end
+    else
+        net_status.wifi_sta.status = "Disconnected"
+    end
+
+    -- Get physical info (Signal, Rate)
+    local f = io.popen("iwinfo " .. WIFI_STA_IFACE .. " assolist 2>/dev/null")
     if f then
-        local mwan3_out = f:read("*a")
+        local content = f:read("*a")
         f:close()
-        if mwan3_out then
-            if string.find(mwan3_out, "wan is online") then
-                net_status.eth.link_sta = 1
-            end
-            if string.find(mwan3_out, "lte is online") then
-                net_status.lte.lte_sta = "Connected"
+        if content then
+            -- Match signal: "Signal: -65 dBm"
+            --local signal = string.match(content, "Signal:%s*([-%d]+)%s*dBm")
+            --if signal then
+            --    net_status.wifi_sta.signal = tonumber(signal)
+            --end
+            local signal = string.match(content, "([-%d]+)%s*dBm")
+            if signal then
+                net_status.wifi_sta.signal = tonumber(signal)
+            end            
+            
+            -- Match RX/TX Rate: "RX: 72.2 MBit/s", "TX: 72.2 MBit/s"
+            -- Or combined output depending on iwinfo version/driver
+            -- Trying to capture the whole lines or just the rates
+            local rx_rate = string.match(content, "RX:%s*([%d%.]+%s*M?Bit/s)")
+            local tx_rate = string.match(content, "TX:%s*([%d%.]+%s*M?Bit/s)")
+            
+            if rx_rate and tx_rate then
+                net_status.wifi_sta.rate = "RX: " .. rx_rate .. " / TX: " .. tx_rate
             end
         end
     end
-    ]]--
+
+    -- ==========================================================
+    -- WiFi AP Client List
+    -- ==========================================================
+    local dhcp_leases = parse_dhcp_leases()
+    local arp_table = parse_arp_table()
+    local clients = {}
+
+    local f_ap = io.popen("iwinfo " .. WIFI_AP_IFACE .. " assolist 2>/dev/null")
+    if f_ap then
+        local current_mac = nil
+        local current_client = {}
+        
+        for line in f_ap:lines() do
+            -- MAC Address line: "00:11:22:33:44:55  -70 dBm / -90 dBm (SNR 20)  120 ms remaining"
+            -- OR simply "00:11:22:33:44:55" at start of line
+            local mac = string.match(line, "^(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)")
+            
+            if mac then
+                -- Push previous client if exists
+                if current_mac then
+                    table.insert(clients, current_client)
+                end
+                
+                current_mac = mac
+                current_client = {
+                    mac = mac,
+                    signal = 0,
+                    rx_rate = "-",
+                    tx_rate = "-"
+                }
+                
+                -- Attempt to parse signal on same line
+                local signal = string.match(line, "([-%d]+)%s*dBm")
+                if signal then current_client.signal = tonumber(signal) end
+                
+            elseif current_mac then
+                -- Parse details for current mac
+                -- RX: 6.0 MBit/s -> 6.0 MBit/s
+                local rx = string.match(line, "RX:%s*([%d%.]+%s*M?Bit/s)")
+                if rx then current_client.rx_rate = rx end
+                
+                local tx = string.match(line, "TX:%s*([%d%.]+%s*M?Bit/s)")
+                if tx then current_client.tx_rate = tx end
+                
+                -- Sometimes signal is on a separate line
+                local signal = string.match(line, "Signal:%s*([-%d]+)%s*dBm")
+                if signal then current_client.signal = tonumber(signal) end
+            end
+        end
+        -- Add last client
+        if current_mac then
+            table.insert(clients, current_client)
+        end
+        f_ap:close()
+    end
+
+    -- Enrich data
+    local now = os.time()
+    for _, client in ipairs(clients) do
+        local mac = client.mac:lower()
+        local lease = dhcp_leases[mac]
+        
+        if lease then
+            client.ip = lease.ip
+            client.hostname = lease.hostname
+            client.lease_remaining = lease.expires - now
+        else
+            -- Fallback to ARP
+            client.ip = arp_table[mac] or "-"
+            client.hostname = "Unknown"
+            -- Mark as Static or Unknown
+            if client.ip ~= "-" then
+                client.lease_remaining = "Static"
+            else
+                client.lease_remaining = -1
+            end
+        end
+        
+        -- Format rates
+        client.rates = "RX: " .. client.rx_rate .. " / TX: " .. client.tx_rate
+    end
+
+    net_status.wifi_ap.clients = clients
 
     return net_status
 end
