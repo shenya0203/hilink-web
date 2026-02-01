@@ -579,7 +579,7 @@ export default {
         probeServer2: '探测服务器地址2',
         // WiFi
         wifi: 'WiFi',
-        wifiEnable: 'WiFi 开关',
+        wifiStaEnable: 'WiFi 开关',
         wifiSsid: 'WiFi SSID',
         wifiPassword: 'WiFi 密码',
         wifiEncryption: '加密方式',

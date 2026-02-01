@@ -326,7 +326,7 @@
       <legend>{{ t('network.wifi') }}</legend>
       <div class="form-section">
         <div class="form-group">
-          <label>{{ t('network.wifiEnable') }}:</label>
+          <label>{{ t('network.wifiStaEnable') }}:</label>
           <select v-model="config.n_wifi.enable">
             <option value="0">{{ t('common.disable') }}</option>
             <option value="1">{{ t('common.enable') }}</option>

@@ -559,7 +559,7 @@ export default {
         probeServer2: 'Probe Server 2',
         // WiFi
         wifi: 'WiFi',
-        wifiEnable: 'WiFi Enable',
+        wifiStaEnable: 'WiFi Enable',
         wifiSsid: 'WiFi SSID',
         wifiPassword: 'WiFi Password',
         wifiEncryption: 'Encryption',

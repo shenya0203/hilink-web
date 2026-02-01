@@ -2284,6 +2284,7 @@ local function collect_network_status()
     -- ==========================================================
     -- WiFi STA Information
     -- ==========================================================
+    --获取配置 查看是否开启
     local sta_status = conn:call("network.interface." .. NETWORK_STA_LOGICAL, "status", {})
     if sta_status and sta_status.up then
         net_status.wifi_sta.status = "Connected"
