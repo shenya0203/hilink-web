@@ -789,11 +789,19 @@
               <option v-for="n in 7" :key="n-1" :value="n-1">{{ n - 1 }}</option>
             </select>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault">
-            <label>{{ t('edge.timeout') }}:</label>
-            <div class="input-with-unit">
-              <input v-model.number="pointForm.timeout" type="number" placeholder="200" />
-              <span class="unit">ms</span>
+          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.timeout') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <div class="input-with-unit">
+                <input 
+                  v-model.number="pointForm.timeout" 
+                  type="number" 
+                  placeholder="200" 
+                  :style="{ color: pointTimeoutError ? 'red' : '', borderColor: pointTimeoutError ? 'red' : '' }"
+                />
+                <span class="unit">ms</span>
+              </div>
+              <span v-if="pointTimeoutError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointTimeoutError }}</span>
             </div>
           </div>
           <div class="form-group" v-if="!pointForm.isDefault">
@@ -1018,7 +1026,8 @@ import {
   isValidRegisterAddress, 
   isValidChangeRange, 
   isValidReportPeriod, 
-  isValidTopic 
+  isValidTopic,
+  isValidTimeout
 } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 
@@ -1490,6 +1499,8 @@ const pointForm = ref({
   changeRange: 2
 })
 
+// 超时时间输入处理 (Removed)
+
 // 计算属性：可见的标签页（网关使能关闭时只显示网关使能标签）
 const visibleTabs = computed(() => {
   if (edgeConfig.value.all_en === 0) {
@@ -1586,6 +1597,7 @@ watch(() => pointForm.value.name, () => {
 
 // 数据点表单其他字段验证错误状态
 const pointDetailError = ref('')
+const pointTimeoutError = ref('')
 const pointRegisterAddressError = ref('')
 const pointChangeRangeError = ref('')
 
@@ -1595,7 +1607,8 @@ const hasPointFormErrors = computed(() => {
     !!pointRegisterError.value ||
     !!pointDetailError.value || 
     !!pointRegisterAddressError.value || 
-    !!pointChangeRangeError.value
+    !!pointChangeRangeError.value ||
+    !!pointTimeoutError.value
 })
 
 // 监听数据点表单字段变化
@@ -1639,6 +1652,16 @@ watch(() => pointForm.value.reportOnChange, () => {
       }
     } else {
       pointChangeRangeError.value = ''
+    }
+  }
+})
+
+watch(() => pointForm.value.timeout, () => {
+  if (showPointModal.value) {
+    if (!isValidTimeout(pointForm.value.timeout)) {
+      pointTimeoutError.value = t('edge.invalidTimeout')
+    } else {
+      pointTimeoutError.value = ''
     }
   }
 })

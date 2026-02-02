@@ -211,6 +211,17 @@ export const isValidPollInterval = (interval) => {
 };
 
 /**
+ * 验证超时时间
+ * 规则：整数，范围 200 ~ 10000 (ms)
+ * @param {number|string} timeout 超时时间
+ */
+export const isValidTimeout = (timeout) => {
+    if (timeout === '' || timeout === null || timeout === undefined) return false;
+    const t = Number(timeout);
+    return Number.isInteger(t) && t >= 200 && t <= 10000;
+};
+
+/**
  * 验证从机地址
  * 规则：整数，范围 1 ~ 247
  * @param {number|string} address 从机地址
