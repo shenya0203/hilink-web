@@ -1480,7 +1480,7 @@ const slaveForm = ref({
   remotePort: 2100,
   serialPort: 1,
   slaveAddress: 1,
-  pollInterval: 100,
+  pollInterval: 200,
   mergeCollect: false
 })
 
@@ -2396,7 +2396,7 @@ const showAddSlaveModal = () => {
     remotePort: 2100,
     serialPort: 1,
     slaveAddress: 1,
-    pollInterval: 100,
+    pollInterval: 200,
     mergeCollect: false
   }
   
@@ -2849,7 +2849,7 @@ const parseCsvContent = (content) => {
         detail: parts[2] || '',
         protocol: parts[3] === '2' ? 1 : 0,
         slaveAddress: parseInt(parts[4]) || 1,
-        pollInterval: parseInt(parts[5]) || 100,
+        pollInterval: parseInt(parts[5]) || 200,
         mergeCollect: parts[7] === '1',
         isSystem: false,
         points: []

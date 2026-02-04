@@ -401,7 +401,7 @@ export default {
         invalidDetailInfo: 'Detail must be 0-16 bytes, no spaces or brackets',
         invalidServerAddress: 'Invalid server address (valid IPv4 required)',
         invalidModbusPort: 'Port must be between 1-65534',
-        invalidPollInterval: 'Poll interval must be between 100-5000 ms',
+        invalidPollInterval: 'Poll interval must be between 200-5000 ms',
         invalidTimeout: 'Timeout must be between 200-10000 ms',
         invalidSlaveAddress: 'Slave address must be between 1-247',
         invalidRegisterAddress: 'Register address must be between 1-65535',
