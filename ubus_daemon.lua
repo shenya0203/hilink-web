@@ -243,13 +243,20 @@ local function timezone_to_utc_num(tz_str)
 end
 
 local function utc_num_to_timezone(num)
-    num = tonumber(num) or 8
+    num = tonumber(num) or 0
+    
+    -- POSIX 标准：东区（+）用负号，西区（-）用正号
+    -- 格式建议使用 <+/-偏移量>反向偏移量，这是最标准且兼容性最好的写法
     if num > 0 then
-        return "UTC+" .. num -- UTC-8 for GMT+8
+        -- 例如：UTC+8 -> <+08>-8
+        return string.format("<+%02d>-%d", num, num)
     elseif num < 0 then
-        return "UTC-" .. math.abs(num)
+        -- 例如：UTC-5 -> <-05>5
+        local abs_num = math.abs(num)
+        return string.format("<-%02d>%d", abs_num, abs_num)
     else
-        return "UTC"
+        -- 零时区
+        return "UTC0"
     end
 end
 
@@ -335,14 +342,16 @@ end
 
 local function set_system_config(hostname, timezone_num)
     local cursor = uci_lib.cursor()
+    local tz_val = utc_num_to_timezone(timezone_num)
     
-    -- Update system section
     cursor:foreach("system", "system", function(section)
         cursor:set("system", section[".name"], "hostname", hostname)
-        cursor:set("system", section[".name"], "timezone", utc_num_to_timezone(timezone_num))
+        cursor:set("system", section[".name"], "timezone", tz_val)
     end)
     
     cursor:commit("system")
+    -- 核心步骤：让系统根据新的 timezone 重新生成 /etc/TZ 文件
+    os.execute("/etc/init.d/system restart")
     return true
 end
 
@@ -671,7 +680,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.001",
+    soft_ver = "V1.002",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2132,11 +2141,11 @@ local methods = {
                 
                 -- 延时执行 sysupgrade，确保 reply 能发送出去
                 -- 假设固件已由前端上传至 /tmp/firmware.bin
-                local cmd = "(sleep 2;/etc/init.d/network stop;/etc/init.d/cron stop;sysupgrade "
+                local cmd = "(sleep 2;echo \"0 0 0 0\" > /proc/sys/kernel/printk;/etc/init.d/network stop;/etc/init.d/cron stop;sysupgrade "
                 if reset_factory == 1 then
-                    cmd = cmd .. "-n "
+                    cmd = cmd .. "-n -q "
                 end
-                cmd = cmd .. "/tmp/firmware.bin ) &"
+                cmd = cmd .. "/tmp/firmware.bin > /dev/null 2>&1) &"
                 
                 log_info("Executing upgrade command: " .. cmd)
                 os.execute(cmd)
@@ -2157,7 +2166,8 @@ local methods = {
                     "/etc/init.d/socket restart; " ..
                     "/etc/init.d/uart restart; " ..
                     "/etc/init.d/hlk_cloud restart; " ..
-                    "/etc/init.d/cron restart" ..
+                    "/etc/init.d/cron restart;" ..
+                    "/etc/init.d/nginx_hlk restart" ..
                 " ) </dev/null >/dev/null 2>&1 &"
                 log_info("Executing restart command: " .. cmd)
                 os.execute(cmd)
