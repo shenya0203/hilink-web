@@ -1066,6 +1066,11 @@ local edge_points_csv = "V,V1.0,N7X0,;\nSC,Device1,1,2,1,100,0,0,192.168.0.21:21
 -- 14. 协议转换点位数据 (CSV格式)
 local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 
+-- 15. Passthrough 透传配置
+local passthrough_config = {
+    rules = {}
+}
+
 local function get_communication_enable(tunnel)
     -- log_info("查找目标: " .. tunnel)
     
@@ -2901,6 +2906,7 @@ local methods = {
         set_config = {
             function(req, msg)
                 local module = msg.module
+                log_info("Setting config for module: " .. cjson.encode(msg))
                 local args = {}
                 for k, v in pairs(msg) do
                     if k ~= "module" then
@@ -2921,6 +2927,8 @@ local methods = {
                     result = set_network_config_values(args)
                 elseif module == "edge" then
                     result = set_edge_config_values(args)
+                elseif module == "passthrough" then
+                    result = set_passthrough_config(args)
                 else
                     log_error("Unknown module: " .. tostring(module))
                 end
@@ -3274,6 +3282,62 @@ local methods = {
                 reply(req, result)
             end,
             { act = ubus.STRING }
+        },
+
+        -- 获取Passthrough透传配置
+        get_passthrough_config = {
+            function(req, msg)
+                local config = { rules = {} }
+                
+                -- 从 /etc/config/device/passthrough/*.json 读取所有规则文件
+                local p = io.popen("ls /etc/config/device/passthrough/*.json 2>/dev/null")
+                if p then
+                    for file_path in p:lines() do
+                        local content = read_file_content(file_path)
+                        if content then
+                            local ok, rule = pcall(cjson.decode, content)
+                            if ok and rule then
+                                table.insert(config.rules, rule)
+                            else
+                                log_error("Failed to decode passthrough rule: " .. file_path)
+                            end
+                        end
+                    end
+                    p:close()
+                end
+                
+                -- 更新内存缓存
+                passthrough_config = config
+                
+                log_info("Loaded passthrough config, rules count: " .. #config.rules)
+                reply(req, deep_copy(config))
+            end,
+            {}
+        },
+
+        -- 设置Passthrough透传配置（内存缓存）
+        set_passthrough_config = {
+            function(req, msg)
+                if msg.rules then
+                    log_info("Update passthrouth : " .. cjson.encode(msg.rules))
+                    os.execute("rm -rf /etc/config/device/passthrough/*.json")
+                    passthrough_config.rules = msg.rules
+                    --写入到/etc/config/device/passthrough目录下， 文件名是 name字段 的值 文件后缀是 .json
+                    for _, rule in ipairs(msg.rules) do
+                        if rule.name then
+                            local file_path = "/etc/config/device/passthrough/" .. rule.name .. ".json"
+                            local content = cjson.encode(rule)
+                            write_file_content(file_path, content)
+                            log_info("Saved passthrough rule: " .. file_path)
+                        else                            
+                            log_error("Passthrough rule missing name field, skipping: " .. cjson.encode(rule))
+                        end
+                    end
+                    log_info("Updated passthrough config, rules count: " .. #msg.rules)
+                end
+                reply(req, {result = true})
+            end,
+            {}
         }
     }
 }

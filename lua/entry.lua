@@ -208,6 +208,9 @@ local function handle_download_nv(args)
         
     elseif name == "edge_link_ctrl" then
         response = ubus_adapter.get_edge_link_ctrl_config()
+        
+    elseif name == "passthrough" then
+        response = ubus_adapter.get_passthrough_config()
     end
 
     -- Ensure response is not nil
@@ -385,6 +388,12 @@ local function handle_upload(uri)
                 end
             end
             notify_core_process("report_strategy")
+        elseif string.find(clean_json, "passthrough") then
+            ngx.log(ngx.ERR, "[DEBUG] Detected passthrough config upload")
+            ubus_adapter.set_passthrough_config(cjson.decode(clean_json))
+            notify_core_process("passthrough")
+        else
+            ngx.log(ngx.ERR, "[DEBUG] Unrecognized JSON content for nv1/nv2 upload : ", clean_json)
         end
     elseif string.find(uri, "/upload/template") then
         -- 3.4 上报模板

@@ -586,4 +586,30 @@ function _M.wifi_scan(action)
     return nil
 end
 
+-- 23. Passthrough Config - 透传配置
+function _M.get_passthrough_config()
+    ngx.log(ngx.ERR, "-------------------- get_passthrough_config ")
+    -- 通过ubus接口从后端daemon获取透传配置
+    local result = ubus_call("hilink", "get_passthrough_config", {})
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_passthrough_config result: ", cjson.encode(result))
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for get_passthrough_config")
+    return nil
+end
+
+function _M.set_passthrough_config(data)
+    ngx.log(ngx.ERR, "Setting passthrough config via ubus: ", cjson.encode(data))
+    -- 通过ubus接口设置透传配置
+    local result = ubus_call("hilink", "set_passthrough_config", data or {})
+    if result and result.result then
+        ngx.log(ngx.ERR, "Successfully set passthrough config via ubus")
+        return true
+    else
+        ngx.log(ngx.ERR, "Failed to set passthrough config via ubus")
+        return false
+    end
+end
+
 return _M

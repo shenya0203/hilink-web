@@ -3698,13 +3698,14 @@ const loadData = async () => {
     error.value = null
     
     // 并行获取所有数据
-    const [edgeRes, edgeFileRes, edgeReportRes, edgeAccessRes, edgeLinkCtrlRes, edgeProtoAccessRes] = await Promise.all([
+    const [edgeRes, edgeFileRes, edgeReportRes, edgeAccessRes, edgeLinkCtrlRes, edgeProtoAccessRes, passthroughRes] = await Promise.all([
       apiClient.get('/download_nv.cgi', { params: { name: 'edge' } }),
       apiClient.get('/download_file.cgi', { params: { name: 'edge' } }),
       apiClient.get('/download_nv.cgi', { params: { name: 'edge_report' } }),
       apiClient.get('/download_nv.cgi', { params: { name: 'edge_access' } }),
       apiClient.get('/download_nv.cgi', { params: { name: 'edge_link_ctrl' } }),
-      apiClient.get('/download_file.cgi', { params: { name: 'edge_proto_access' } })
+      apiClient.get('/download_file.cgi', { params: { name: 'edge_proto_access' } }),
+      apiClient.get('/download_nv.cgi', { params: { name: 'passthrough' } }).catch(() => ({ data: null }))
     ])
     
     console.log('=== 边缘计算页面数据加载 ===')
@@ -3902,6 +3903,38 @@ const loadData = async () => {
             }
          }
        })
+    }
+
+    // 解析 Passthrough 数据
+    // 数据格式: { rules: [...] }
+    if (passthroughRes.data) {
+      const passthroughData = passthroughRes.data
+      if (passthroughData.rules && Array.isArray(passthroughData.rules)) {
+        passthroughRules.value = passthroughData.rules.map((rule, index) => ({
+          id: rule.id || `pt_${Date.now()}_${index}`,
+          name: rule.name || '',
+          enable: rule.enable ?? 1,
+          source: rule.source || 'UART1',
+          target: rule.target || 'MQTT1',
+          packet_rule: {
+            idle_time: rule.packet_rule?.idle_time ?? 20,
+            max_len: rule.packet_rule?.max_len ?? 1024
+          },
+          mqtt_config: {
+            pub_topic: rule.mqtt_config?.pub_topic || '/passthrough/up',
+            sub_topic: rule.mqtt_config?.sub_topic || '/passthrough/down',
+            qos: rule.mqtt_config?.qos || 'QOS0',
+            retain: rule.mqtt_config?.retain ?? false
+          },
+          format_type: rule.format_type || 'JSON',
+          data_encoding: rule.data_encoding || 'Hex',
+          json_template: rule.json_template || '{\n  "dev": "${DEVICE_SN}",\n  "ts": ${TIMESTAMP},\n  "payload": "${DATA}"\n}'
+        }))
+      } else {
+        passthroughRules.value = []
+      }
+    } else {
+      passthroughRules.value = []
     }
     
   } catch (err) {
