@@ -239,7 +239,11 @@ export default {
         invalidServerAddress: '服务器地址格式错误 (IP或域名)',
         invalidPort: '端口号必须在 1024-65534 之间',
         invalidReconnectInterval: '重连间隔必须在 5-60 秒之间',
-        invalidKeepalive: 'Keepalive值必须在 5-600 秒之间'
+        invalidKeepalive: 'Keepalive值必须在 5-600 秒之间',
+        invalidWillTopic: '长度范围 1-200 字节',
+        invalidWillMessage: '长度范围 1-200 字节',
+        invalidUsername: '长度范围 0-200 字节',
+        invalidPassword: '长度范围 0-200 字节'
     },
 
     // 云平台配置页面

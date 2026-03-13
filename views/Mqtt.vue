@@ -130,11 +130,29 @@
           <template v-if="mqttList[activeTab].conn_verify === 1">
             <div class="form-group">
               <label>{{ t('mqtt.username') }}:</label>
-              <input v-model="mqttList[activeTab].conn_user_name" type="text" />
+              <div class="input-wrapper">
+                <input 
+                  v-model="mqttList[activeTab].conn_user_name" 
+                  type="text" 
+                  :class="{ 'input-error': getFieldError(activeTab, 'conn_user_name') }"
+                />
+                <span v-if="getFieldError(activeTab, 'conn_user_name')" class="field-error-text">
+                  {{ getFieldError(activeTab, 'conn_user_name') }}
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ t('mqtt.password') }}:</label>
-              <input v-model="mqttList[activeTab].conn_user_password" type="password" />
+              <div class="input-wrapper">
+                <input 
+                  v-model="mqttList[activeTab].conn_user_password" 
+                  type="password" 
+                  :class="{ 'input-error': getFieldError(activeTab, 'conn_user_password') }"
+                />
+                <span v-if="getFieldError(activeTab, 'conn_user_password')" class="field-error-text">
+                  {{ getFieldError(activeTab, 'conn_user_password') }}
+                </span>
+              </div>
             </div>
           </template>
 
@@ -147,11 +165,29 @@
           <template v-if="mqttList[activeTab].will_flag === 1">
             <div class="form-group">
               <label>{{ t('mqtt.willTopic') }}:</label>
-              <input v-model="mqttList[activeTab].will.topic" type="text" />
+              <div class="input-wrapper">
+                <input 
+                  v-model="mqttList[activeTab].will.topic" 
+                  type="text" 
+                  :class="{ 'input-error': getFieldError(activeTab, 'will_topic') }"
+                />
+                <span v-if="getFieldError(activeTab, 'will_topic')" class="field-error-text">
+                  {{ getFieldError(activeTab, 'will_topic') }}
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ t('mqtt.willMessage') }}:</label>
-              <input v-model="mqttList[activeTab].will.msg" type="text" />
+              <div class="input-wrapper">
+                <input 
+                  v-model="mqttList[activeTab].will.msg" 
+                  type="text" 
+                  :class="{ 'input-error': getFieldError(activeTab, 'will_msg') }"
+                />
+                <span v-if="getFieldError(activeTab, 'will_msg')" class="field-error-text">
+                  {{ getFieldError(activeTab, 'will_msg') }}
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ t('mqtt.willQos') }}:</label>
@@ -300,6 +336,18 @@ const serverCertFile = ref(null)
 const clientCertFile = ref(null)
 const clientKeyFile = ref(null)
 
+// 字节长度计算辅助函数
+const getByteLen = (val) => {
+  if (!val) return 0
+  let len = 0
+  for (let i = 0; i < val.length; i++) {
+    const a = val.charAt(i);
+    if (a.match(/[^\x00-\xff]/ig) != null) len += 3; // 汉字一般占3字节(UTF-8)
+    else len += 1;
+  }
+  return len
+}
+
 // 验证逻辑
 const mqttErrors = computed(() => {
   const errors = {}
@@ -331,6 +379,32 @@ const mqttErrors = computed(() => {
     // Reconnect Interval
     if (!isValidReconnectInterval(mqtt.reconn_space)) {
       errors[`${index}_reconn_space`] = t('mqtt.invalidReconnectInterval')
+    }
+
+    // Will Topic & Message Validation
+    if (mqtt.will_flag === 1) {
+      const topicLen = getByteLen(mqtt.will?.topic)
+      if (topicLen < 1 || topicLen > 200) {
+        errors[`${index}_will_topic`] = t('mqtt.invalidWillTopic') || 'Length limit 1-200 bytes'
+      }
+
+      const msgLen = getByteLen(mqtt.will?.msg)
+      if (msgLen < 1 || msgLen > 200) {
+        errors[`${index}_will_msg`] = t('mqtt.invalidWillMessage') || 'Length limit 1-200 bytes'
+      }
+    }
+
+    // Username & Password Validation
+    if (mqtt.conn_verify === 1) {
+      const userLen = getByteLen(mqtt.conn_user_name);
+      if (userLen > 200) {
+        errors[`${index}_conn_user_name`] = t('mqtt.invalidUsername') || 'Length limit 0-200 bytes';
+      }
+
+      const passLen = getByteLen(mqtt.conn_user_password);
+      if (passLen > 200) {
+        errors[`${index}_conn_user_password`] = t('mqtt.invalidPassword') || 'Length limit 0-200 bytes';
+      }
     }
   })
   

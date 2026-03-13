@@ -227,7 +227,11 @@ export default {
         clientCert: 'Client Certificate',
         clientKey: 'Client Private Key',
         restartRequired: 'MQTT configuration requires a device restart to take effect.',
-        continueConfig: 'Continue Configuration'
+        continueConfig: 'Continue Configuration',
+        invalidWillTopic: 'Length limit 1-200 bytes',
+        invalidWillMessage: 'Length limit 1-200 bytes',
+        invalidUsername: 'Length limit 0-200 bytes',
+        invalidPassword: 'Length limit 0-200 bytes'
     },
 
     // Cloud Platform Configuration Page
