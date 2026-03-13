@@ -181,6 +181,7 @@ export default {
         heartbeat: '心跳包使能',
         heartbeatInterval: '心跳包时间(秒)',
         heartbeatContent: '心跳包发送内容',
+        invalidHeartbeatInterval: "心跳时间范围为30-300秒",
         heartbeatCustomContent: '心跳包自定义内容',
         tcpClient: 'TCP Client',
         tcpServer: 'TCP Server',
@@ -434,6 +435,7 @@ export default {
         invalidPubTopic: '发布主题长度须1-32字节，禁止空格和括号',
         slaveAddressDuplicate: '从机地址重复',
         slaveNameDuplicate: '从机名称重复',
+        pointsLimitReached: '点位数量已达上限(1000)，无法继续添加',
     },
 
     // 系统设置页面

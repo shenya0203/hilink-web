@@ -277,3 +277,16 @@ export const isValidTopic = (topic) => {
     const forbidden = /[\s\(\)\[\]\{\}]/;
     return !forbidden.test(topic);
 };
+
+/**
+ * 验证自定义内容 (注册包/心跳包)
+ * 规则：长度 1-128 字节，仅支持 'a'-'z', 'A'-'Z', '0'-'9', '-', '.', '@'
+ */
+export const isValidCustomContent = (content) => {
+    if (!content) return false;
+    // 如果不是字符串，转成字符串以防万一
+    const str = String(content);
+    if (str.length < 1 || str.length > 128) return false;
+    const reg = /^[a-zA-Z0-9\-\.\@]+$/;
+    return reg.test(str);
+};

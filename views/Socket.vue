@@ -181,9 +181,18 @@
             <div v-if="socketList[activeTab].tcpc.regp_fmt === 3" class="form-group-with-hint">
               <div class="form-group">
                 <label>{{ t('socket.customContent') }}:</label>
-                <input v-model="socketList[activeTab].tcpc.regp_ctx" type="text" maxlength="128" />
+                <div class="input-wrapper">
+                  <input 
+                    v-model="socketList[activeTab].tcpc.regp_ctx" 
+                    type="text" 
+                    maxlength="128" 
+                    :class="{ 'input-error': getFieldError(activeTab, 'tcpc_regp_ctx') }"
+                  />
+                  <span v-if="getFieldError(activeTab, 'tcpc_regp_ctx')" class="field-error-text">
+                    {{ getFieldError(activeTab, 'tcpc_regp_ctx') }}
+                  </span>
+                </div>
               </div>
-              <div class="hint-text">{{ t('socket.customContentHint') }}</div>
             </div>
           </template>
 
@@ -198,7 +207,18 @@
           <template v-if="socketList[activeTab].tcpc.hrtp_en === 1">
             <div class="form-group">
               <label>{{ t('socket.heartbeatInterval') }}:</label>
-              <input v-model.number="socketList[activeTab].tcpc.hrtp_tim" type="number" min="1" />
+              <div class="input-wrapper">
+                <input 
+                  v-model.number="socketList[activeTab].tcpc.hrtp_tim" 
+                  type="number" 
+                  min="30"
+                  max="300"
+                  :class="{ 'input-error': getFieldError(activeTab, 'tcpc_hrtp_tim') }"
+                />
+                <span v-if="getFieldError(activeTab, 'tcpc_hrtp_tim')" class="field-error-text">
+                  {{ getFieldError(activeTab, 'tcpc_hrtp_tim') }}
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label>{{ t('socket.heartbeatContent') }}:</label>
@@ -211,9 +231,18 @@
             <div v-if="socketList[activeTab].tcpc.hrtp_fmt === 2" class="form-group-with-hint">
               <div class="form-group">
                 <label>{{ t('socket.heartbeatCustomContent') }}:</label>
-                <input v-model="socketList[activeTab].tcpc.hrtp_ctx" type="text" maxlength="128" />
+                <div class="input-wrapper">
+                  <input 
+                    v-model="socketList[activeTab].tcpc.hrtp_ctx" 
+                    type="text" 
+                    maxlength="128" 
+                    :class="{ 'input-error': getFieldError(activeTab, 'tcpc_hrtp_ctx') }"
+                  />
+                  <span v-if="getFieldError(activeTab, 'tcpc_hrtp_ctx')" class="field-error-text">
+                    {{ getFieldError(activeTab, 'tcpc_hrtp_ctx') }}
+                  </span>
+                </div>
               </div>
-              <div class="hint-text">{{ t('socket.customContentHint') }}</div>
             </div>
           </template>
 
@@ -406,7 +435,7 @@ import { fetchSocketConfigData, fetchOfflineCacheData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
-import { isValidServerAddress, isValidPort, isValidReconnectInterval } from '../utils/validation.js'
+import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidCustomContent } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 
 // 使用 i18n
@@ -449,6 +478,28 @@ const socketErrors = computed(() => {
       }
       if (!isValidReconnectInterval(sock.tcpc.reconn_interval)) {
         errors[`${index}_tcpc_reconn_interval`] = t('socket.invalidReconnectInterval') || 'Invalid Interval (5-60s)'
+      }
+
+      // 心跳包间隔验证
+      if (sock.tcpc.hrtp_en === 1) {
+        const hrtp_tim = Number(sock.tcpc.hrtp_tim);
+        if (!Number.isInteger(hrtp_tim) || hrtp_tim < 30 || hrtp_tim > 300) {
+            errors[`${index}_tcpc_hrtp_tim`] = t('socket.invalidHeartbeatInterval') || '心跳时间范围为30-300秒';
+        }
+      }
+
+      // 注册包自定义内容验证
+      if (sock.tcpc.regp_en === 1 && sock.tcpc.regp_fmt === 3) {
+        if (!isValidCustomContent(sock.tcpc.regp_ctx)) {
+          errors[`${index}_tcpc_regp_ctx`] = t('socket.customContentHint');
+        }
+      }
+
+      // 心跳包自定义内容验证
+      if (sock.tcpc.hrtp_en === 1 && sock.tcpc.hrtp_fmt === 2) {
+        if (!isValidCustomContent(sock.tcpc.hrtp_ctx)) {
+          errors[`${index}_tcpc_hrtp_ctx`] = t('socket.customContentHint');
+        }
       }
     }
     // TCP Server
@@ -636,30 +687,6 @@ const buildSocketParams = (sock, i) => {
 
 const saveConfig = async () => {
   try {
-    // 验证自定义内容
-    for (let i = 0; i < socketList.value.length; i++) {
-      const sock = socketList.value[i]
-      // 检查Socket是否启用且为TCP Client模式
-      if (sock.enable === 1 && sock.mode === 0) {
-        // 检查注册包自定义内容
-        if (sock.tcpc.regp_en === 1 && sock.tcpc.regp_fmt === 3) {
-          const regpCtx = String(sock.tcpc.regp_ctx || '').trim()
-          if (regpCtx === '') {
-            alert(t('socket.registerCustomContentRequired'))
-            return
-          }
-        }
-        // 检查心跳包自定义内容
-        if (sock.tcpc.hrtp_en === 1 && sock.tcpc.hrtp_fmt === 2) {
-          const hrtpCtx = String(sock.tcpc.hrtp_ctx || '').trim()
-          if (hrtpCtx === '') {
-            alert(t('socket.heartbeatCustomContentRequired'))
-            return
-          }
-        }
-      }
-    }
-    
     const sockParams = []
     socketList.value.forEach((sock, i) => sockParams.push(...buildSocketParams(sock, i)))
     const cacheParams = offlineCacheList.value.map((en, i) => `n_tunnel[${i}].enable=${en}`)

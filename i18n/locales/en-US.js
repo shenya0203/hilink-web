@@ -180,6 +180,8 @@ export default {
         heartbeat: 'Heartbeat',
         heartbeatInterval: 'Heartbeat Interval (s)',
         heartbeatContent: 'Heartbeat Content',
+        invalidHeartbeatInterval: 'Heartbeat interval must be between 30 and 300 seconds.',
+
         tcpClient: 'TCP Client',
         tcpServer: 'TCP Server',
         udpClient: 'UDP Client',
@@ -189,7 +191,8 @@ export default {
         config: 'Config',
         path: 'Path',
         restartRequired: 'Socket configuration requires a device restart to take effect.',
-        continueConfig: 'Continue Configuration'
+        continueConfig: 'Continue Configuration',
+        customContentHint: '(1-128 bytes, supports a-z/A-Z/0-9 and -.@)',
     },
 
     // MQTT Configuration Page
@@ -413,6 +416,7 @@ export default {
         changeRange: 'Change Range',
         slaveAddressDuplicate: 'Slave address duplicate',
         slaveNameDuplicate: 'Slave name duplicate',
+        pointsLimitReached: 'Points limit reached (1000), cannot add more points',
     },
 
     // System Settings Page

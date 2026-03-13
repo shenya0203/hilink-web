@@ -2476,7 +2476,13 @@ const deleteSlave = (index) => {
 
 // 数据点对话框操作
 const showAddPointModal = () => {
+  console.log("totalPoints.value", totalPoints.value)
   if (!currentSlave.value || currentSlave.value.isSystem) return
+
+  if (totalPoints.value >= 1000) {
+    alert(t('edge.pointsLimitReached'))
+    return
+  }
   
   isEditingPoint.value = false
   editingPointIndex.value = -1
