@@ -335,7 +335,7 @@ const isResetting = ref(false)
 // 处理重启 (改为重启服务)
 const handleRestart = async () => {
   showRestartModal.value = false
-  await restartService()
+  await restartService(miscConfig.value.web_port)
 }
 
 // misc 配置数据

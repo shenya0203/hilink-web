@@ -90,7 +90,16 @@
 
           <div class="form-group">
             <label>{{ t('mqtt.keepalive') }}:</label>
-            <input v-model.number="mqttList[activeTab].keepalive" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="mqttList[activeTab].keepalive" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'keepalive') }"
+              />
+              <span v-if="getFieldError(activeTab, 'keepalive')" class="field-error-text">
+                {{ getFieldError(activeTab, 'keepalive') }}
+              </span>
+            </div>
           </div>
 
           <div class="form-group">
@@ -300,22 +309,28 @@ const mqttErrors = computed(() => {
     
     // Client ID
     if (!isValidClientId(mqtt.client_id)) {
-       errors[`${index}_client_id`] = t('mqtt.invalidClientId') || 'Invalid Client ID (Max 16 chars, Alphanumeric, _, -)'
+       errors[`${index}_client_id`] = t('mqtt.invalidClientId')
     }
     
     // Server Address
     if (!isValidServerAddress(mqtt.server_ip)) {
-      errors[`${index}_server_ip`] = t('mqtt.invalidServerAddress') || 'Invalid Server Address'
+      errors[`${index}_server_ip`] = t('mqtt.invalidServerAddress')
     }
     
     // Server Port
     if (!isValidPort(mqtt.server_port)) {
-      errors[`${index}_server_port`] = t('mqtt.invalidPort') || 'Invalid Port (1024-65534)'
+      errors[`${index}_server_port`] = t('mqtt.invalidPort')
     }
     
+    // Keepalive
+    const keepalive = Number(mqtt.keepalive);
+    if (!Number.isInteger(keepalive) || keepalive < 5 || keepalive > 600) {
+        errors[`${index}_keepalive`] = t('mqtt.invalidKeepalive');
+    }
+
     // Reconnect Interval
     if (!isValidReconnectInterval(mqtt.reconn_space)) {
-      errors[`${index}_reconn_space`] = t('mqtt.invalidReconnectInterval') || 'Invalid Interval (5-60s)'
+      errors[`${index}_reconn_space`] = t('mqtt.invalidReconnectInterval')
     }
   })
   

@@ -36,7 +36,8 @@ export default {
         saveFailed: '保存失败',
         uploadSuccess: '上传成功',
         uploadFailed: '上传失败',
-        operationFailed: '操作失败'
+        operationFailed: '操作失败',
+        uploadedFile: '已上传文件',
     },
 
     // 顶部导航栏
@@ -237,7 +238,8 @@ export default {
         invalidClientId: 'Client ID 格式错误 (最大16字符, 字母/数字/_/-)',
         invalidServerAddress: '服务器地址格式错误 (IP或域名)',
         invalidPort: '端口号必须在 1024-65534 之间',
-        invalidReconnectInterval: '重连间隔必须在 5-60 秒之间'
+        invalidReconnectInterval: '重连间隔必须在 5-60 秒之间',
+        invalidKeepalive: 'Keepalive值必须在 5-600 秒之间'
     },
 
     // 云平台配置页面

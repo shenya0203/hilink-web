@@ -123,8 +123,11 @@
                 <input type="file" ref="serverCertInput" @change="handleServerCertSelect" accept=".crt,.pem" style="display:none" />
                 <button type="button" class="btn-upload" @click="triggerFileSelect('server')">{{ t('common.selectFile') }}</button>
                 <button type="button" class="btn-upload" @click.prevent="uploadServerCert" :disabled="!serverCertFile">{{ t('common.upload') }}...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_server_name && socketList[activeTab].tcpc.ssl_server_name !== 'null'" class="file-name">
-                  {{ t('common.selectedFile') }}: {{ socketList[activeTab].tcpc.ssl_server_name }}
+                <span v-if="serverCertFile" class="file-name">
+                  {{ t('common.selectedFile')}}: {{ serverCertFile.name }}
+                </span>
+                <span v-else-if="socketList[activeTab].tcpc.ssl_server_name && socketList[activeTab].tcpc.ssl_server_name !== 'null'" class="file-name">
+                  {{ t('common.uploadedFile') }}: {{ socketList[activeTab].tcpc.ssl_server_name }}
                 </span>
               </div>
             </template>
@@ -136,8 +139,11 @@
                 <input type="file" ref="clientCertInput" @change="handleClientCertSelect" accept=".crt,.pem" style="display:none" />
                 <button type="button" class="btn-upload" @click="triggerFileSelect('client_cert')">{{ t('common.selectFile') }}</button>
                 <button type="button" class="btn-upload" @click.prevent="uploadClientCert" :disabled="!clientCertFile">{{ t('common.upload') }}...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_client_name && socketList[activeTab].tcpc.ssl_client_name !== 'null'" class="file-name">
-                  {{ t('common.selectedFile') }}: {{ socketList[activeTab].tcpc.ssl_client_name }}
+                <span v-if="clientCertFile" class="file-name">
+                  {{ t('common.selectedFile')}}: {{ clientCertFile.name }}
+                </span>
+                <span v-else-if="socketList[activeTab].tcpc.ssl_client_name && socketList[activeTab].tcpc.ssl_client_name !== 'null'" class="file-name">
+                  {{ t('common.uploadedFile')}}: {{ socketList[activeTab].tcpc.ssl_client_name }}
                 </span>
               </div>
               <div class="form-group">
@@ -145,8 +151,11 @@
                 <input type="file" ref="clientKeyInput" @change="handleClientKeySelect" accept=".key,.pem" style="display:none" />
                 <button type="button" class="btn-upload" @click="triggerFileSelect('client_key')">{{ t('common.selectFile') }}</button>
                 <button type="button" class="btn-upload" @click.prevent="uploadClientKey" :disabled="!clientKeyFile">{{ t('common.upload') }}...</button>
-                <span v-if="socketList[activeTab].tcpc.ssl_client_key && socketList[activeTab].tcpc.ssl_client_key !== 'null'" class="file-name">
-                  {{ t('common.selectedFile') }}: {{ socketList[activeTab].tcpc.ssl_client_key }}
+                <span v-if="clientKeyFile" class="file-name">
+                  {{ t('common.selectedFile')}}: {{ clientKeyFile.name }}
+                </span>
+                <span v-else-if="socketList[activeTab].tcpc.ssl_client_key && socketList[activeTab].tcpc.ssl_client_key !== 'null'" class="file-name">
+                  {{ t('common.uploadedFile')}}: {{ socketList[activeTab].tcpc.ssl_client_key }}
                 </span>
               </div>
             </template>

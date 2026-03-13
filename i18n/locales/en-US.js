@@ -35,7 +35,8 @@ export default {
         saveSuccess: 'Saved successfully',
         saveFailed: 'Failed to save',
         uploadSuccess: 'Upload successful',
-        uploadFailed: 'Upload failed'
+        uploadFailed: 'Upload failed',
+        uploadedFile: 'Uploaded File',
     },
 
     // Top Navigation Bar
@@ -504,7 +505,7 @@ export default {
         upgradeTimeout: 'Upgrade timeout, please refresh manually',
         dontPowerOff: 'Do not power off or close this page during upgrade',
         uploading: 'Firmware uploading...',
-        upgradeComplete: 'Upgrade complete, refreshing...'
+        upgradeComplete: 'Upgrade complete, refreshing...',
     },
 
     // Network Configuration Page
