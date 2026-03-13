@@ -83,7 +83,19 @@ local function parse_multipart(body)
         content = nil
     }
     
-    -- 从 Content-Disposition 头中提取 filename
+    -- 1. 获取请求头中的 Content-Type 以提取真实的 boundary
+    local content_type = ngx.req.get_headers()["Content-Type"] or ngx.req.get_headers()["content-type"]
+    local boundary = nil
+    if content_type then
+        boundary = string.match(content_type, "boundary=([^;]+)")
+        if boundary then
+            -- 去除可能附带的双引号和首尾空格
+            boundary = string.gsub(boundary, '"', '')
+            boundary = string.gsub(boundary, '^%s*(.-)%s*$', '%1')
+        end
+    end
+
+    -- 2. 从 Content-Disposition 头中提取 filename
     -- 格式: Content-Disposition: form-data; name="c"; filename="SOCK0"
     local filename_pattern = 'filename="([^"]+)"'
     local filename = string.match(body, filename_pattern)
@@ -92,16 +104,40 @@ local function parse_multipart(body)
         ngx.log(ngx.ERR, "[DEBUG] Parsed filename: ", filename)
     end
     
-    -- 提取文件内容 (在两个空行之后，到下一个 boundary 之前)
+    -- 3. 提取文件内容 (在两个空行之后，到下一个 boundary 之前)
     -- multipart 格式: boundary\r\nheaders\r\n\r\ncontent\r\n--boundary
     local content_start = string.find(body, "\r\n\r\n")
     if content_start then
         local content = string.sub(body, content_start + 4)
-        -- 去除尾部的 boundary
-        local boundary_start = string.find(content, "\r\n%-%-")
-        if boundary_start then
-            content = string.sub(content, 1, boundary_start - 1)
+        
+        -- 4. 去除尾部的 boundary
+        if boundary and boundary ~= "" then
+            -- 真实 boundary 在 body 里是以 -- 开头的，例如 \r\n--boundary...
+            local full_boundary = "\r\n--" .. boundary
+            -- 第四个参数 true 表示禁用模式匹配，当作纯文本查找 (plain search)
+            local boundary_start = string.find(content, full_boundary, 1, true)
+            if boundary_start then
+                content = string.sub(content, 1, boundary_start - 1)
+            else
+                ngx.log(ngx.ERR, "[WARN] Could not find plain boundary: ", full_boundary)
+            end
+        else
+            -- 降级方案：如果没有在请求头拿到 boundary，为了防止误杀证书里中间的 \r\n--
+            -- 退回到从后往前找最后一个匹配
+            ngx.log(ngx.ERR, "[WARN] boundary not found in Content-Type, using fallback")
+            local last_match = nil
+            local start_idx = 1
+            while true do
+                local s, e = string.find(content, "\r\n%-%-", start_idx)
+                if not s then break end
+                last_match = s
+                start_idx = e + 1
+            end
+            if last_match then
+                content = string.sub(content, 1, last_match - 1)
+            end
         end
+        
         result.content = content
     else
         result.content = body
