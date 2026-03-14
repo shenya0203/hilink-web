@@ -422,6 +422,7 @@ export default {
         slaveAddressDuplicate: 'Slave address duplicate',
         slaveNameDuplicate: 'Slave name duplicate',
         pointsLimitReached: 'Points limit reached (1000), cannot add more points',
+        slavesLimitReached: 'Slaves limit reached (64), cannot add more slaves',
     },
 
     // System Settings Page

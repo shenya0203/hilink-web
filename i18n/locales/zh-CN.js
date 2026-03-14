@@ -442,6 +442,7 @@ export default {
         slaveAddressDuplicate: '从机地址重复',
         slaveNameDuplicate: '从机名称重复',
         pointsLimitReached: '点位数量已达上限(1000)，无法继续添加',
+        slavesLimitReached: '从机数量已达上限(64)，无法继续添加',
     },
 
     // 系统设置页面

@@ -137,7 +137,7 @@
 
       <!-- 按钮组 -->
       <div class="button-group">
-        <button class="btn-action" @click="showAddSlaveModal">{{ t('edge.addSlave') }}</button>
+        <button class="btn-action" @click="showAddSlaveModal" :disabled="isAddSlaveDisabled">{{ t('edge.addSlave') }}</button>
         <button class="btn-action" @click="showAddPointModal" :disabled="!currentSlave || currentSlave.isSystem">{{ t('edge.addDataPoint') }}</button>
         <button class="btn-save" @click="saveCurrentPage">{{ t('edge.saveCurrentPage') }}</button>
         <button class="btn-next" @click="nextTab">{{ t('edge.nextStep') }}</button>
@@ -2308,6 +2308,30 @@ const importCsv = async () => {
   }
   
   try {
+    const fileContent = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = (err) => reject(err)
+      reader.readAsText(selectedCsvFile.value)
+    })
+    
+    let slaveCount = 0
+    let pointCount = 0
+    const lines = fileContent.split(/\r?\n/)
+    lines.forEach(line => {
+      if (line.startsWith('SC,')) slaveCount++
+      if (line.startsWith('C,')) pointCount++
+    })
+    
+    if (slaveCount > 64) {
+      alert(t('edge.slavesLimitReached'))
+      return
+    }
+    if (pointCount > 1000) {
+      alert(t('edge.pointsLimitReached'))
+      return
+    }
+
     const formData = new FormData()
     formData.append('file', selectedCsvFile.value)
     
@@ -2375,8 +2399,22 @@ const exportToCloud = () => {
   }
 }
 
+// 从机禁用的计算属性
+const isAddSlaveDisabled = computed(() => {
+  return totalPoints.value >= 1000 || (slaveList.value.length - 1) >= 64
+})
+
 // 从机对话框操作
 const showAddSlaveModal = () => {
+  if (isAddSlaveDisabled.value) {
+    if ((slaveList.value.length - 1) >= 64) {
+      alert(t('edge.slavesLimitReached'))
+    } else {
+      alert(t('edge.pointsLimitReached'))
+    }
+    return
+  }
+  
   isEditingSlave.value = false
   editingSlaveIndex.value = -1
   
@@ -2480,6 +2518,7 @@ const showAddPointModal = () => {
   if (!currentSlave.value || currentSlave.value.isSystem) return
 
   if (totalPoints.value >= 1000) {
+
     alert(t('edge.pointsLimitReached'))
     return
   }
