@@ -1251,6 +1251,7 @@ end
 misc_config = {
     web_lang = 2,
     host_name = "N720",
+    productModel = "HLK-N720",
     websock_port = 6432,
     websocket_point = 9,
     web_port = 80,         -- 默认值，启动时会被 sync_nginx_settings 覆盖

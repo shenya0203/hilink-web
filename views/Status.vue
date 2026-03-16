@@ -17,7 +17,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.productModel') }}:</td>
-            <td>{{ miscInfo.host_name || '-' }}</td>
+            <td>{{ miscInfo.productModel || '-' }}</td>
           </tr>
           <tr>
             <td class="title">{{ t('status.firmwareVersion') }}:</td>
@@ -211,14 +211,6 @@ const miscInfo = ref({})
 const loading = ref(true)
 const error = ref(null)
 let refreshTimer = null
-
-// 辅助函数：从 SN 获取产品类型
-const getProductType = () => {
-  const sn = statusInfo.value.sn || ''
-  // 示例：根据 SN 的某些位判断产品类型
-  // 可根据实际需求修改
-  return '-C1'
-}
 
 // 辅助格式化 MAC 地址 D4AD20... -> D4:AD:20...
 const formatMac = (macStr) => {
