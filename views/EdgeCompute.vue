@@ -482,7 +482,7 @@
             <input v-model="reportGroupForm.errorMsg" type="text" placeholder="error" />
           </div>
           
-          <div class="form-group" v-if="reportGroupForm.channel === 'Cloud'">
+          <div class="form-group" v-if="reportGroupForm.channel === 'CLOUD'">
              <label>{{ t('edge.selectedPoints') }}:</label>
              <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
                <textarea 
@@ -493,7 +493,7 @@
                ></textarea>
              </div>
           </div>
-          <div class="form-group" style="align-items: flex-start;" v-if="reportGroupForm.channel !== 'Cloud'">
+          <div class="form-group" style="align-items: flex-start;" v-if="reportGroupForm.channel !== 'CLOUD'">
             <label style="margin-top: 5px;">{{ t('edge.reportTemplate') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <textarea v-model="reportGroupForm.template" rows="10" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 2px; font-family: monospace;"></textarea>
@@ -511,7 +511,7 @@
             {{ t('edge.save') }}
           </button>
           <button class="btn-cancel" @click="closeReportGroupModal">{{ t('edge.cancel') }}</button>
-          <button v-if="reportGroupForm.channel === 'Cloud'" class="btn-save" @click="openCloudPointModal">{{ t('edge.configPoints') }}</button>
+          <button v-if="reportGroupForm.channel === 'CLOUD'" class="btn-save" @click="openCloudPointModal">{{ t('edge.configPoints') }}</button>
         </div>
       </div>
     </div>
@@ -1165,7 +1165,7 @@ const computedEditingAddress = computed(() => {
 })
 
 // 数据上报相关数据
-const allChannels = ['MQTT1', 'MQTT2', 'SOCKA', 'SOCKB', 'Cloud']
+const allChannels = ['MQTT1', 'MQTT2', 'SOCKA', 'SOCKB', 'CLOUD']
 const reportGroups = ref([])
 
 const availableChannels = computed(() => {
@@ -2194,7 +2194,7 @@ const saveReportData = async () => {
   // 1. Save Group Config (group.json)
   const groupConfig = {
     group: reportGroups.value.map(g => {
-      const isCloud = g.channel === 'Cloud'
+      const isCloud = g.channel === 'CLOUD'
       
       // Construct ucld_node for Cloud
       let ucldNode = []
@@ -2262,7 +2262,7 @@ const saveReportData = async () => {
   // Format: GroupName:{...}\nGroupName:{...}
   let templateContent = ''
   reportGroups.value.forEach((g) => {
-    if (g.channel !== 'Cloud') {
+    if (g.channel !== 'CLOUD') {
        templateContent += `${g.name}:${g.template}\n`
     }
   })
@@ -2630,7 +2630,7 @@ const exportReportJson = () => {
   try {
     const data = {
       group: reportGroups.value.map(g => {
-        const isCloud = g.channel === 'Cloud'
+        const isCloud = g.channel === 'CLOUD'
         return {
           name: g.name,
           link: g.channel,

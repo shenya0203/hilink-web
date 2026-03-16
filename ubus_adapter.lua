@@ -219,7 +219,7 @@ local offline_cache_config = {
         { name = "SOCKB", enable = 0 },
         { name = "MQTT1", enable = 0 },
         { name = "MQTT2", enable = 0 },
-        { name = "Cloud", enable = 0 }
+        { name = "CLOUD", enable = 0 }
     }
 }
 

@@ -171,7 +171,7 @@
       </table>
     </form>
 
-    <!-- 第六部分：Cloud 连接状态 -->
+    <!-- 第六部分：CLOUD 连接状态 -->
     <form>
       <legend>{{ t('status.cloudStatus') }}</legend>
       <table>

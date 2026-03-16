@@ -18,8 +18,8 @@
         <div class="form-group">
           <label>{{ t('cloud.enable') }}:</label>
           <select v-model.number="cloudConfig.enable">
-            <option :value="0">{{ t('common.disable') }}</option>
-            <option :value="1">{{ t('common.enable') }}</option>
+            <option :value="0">{{ t('cloud.disable') }}</option>
+            <option :value="1">{{ t('cloud.enable') }}</option>
           </select>
         </div>
 
@@ -99,14 +99,15 @@ const loadData = async () => {
     console.log('CommTunnel:', commTunnel)
     console.log('OfflineCache:', offlineCache)
     
-    // 提取UCLOUD配置
-    if (commTunnel && commTunnel.UCLOUD) {
-      cloudConfig.value = commTunnel.UCLOUD
+    // 提取CLOUD配置
+    if (commTunnel && commTunnel.CLOUD) {
+      cloudConfig.value = commTunnel.CLOUD
+      console.log('Cloud配置:', cloudConfig.value.enable)
     } else {
       // 默认配置
       cloudConfig.value = {
         enable: 0,
-        name: "Cloud",
+        name: "CLOUD",
         pvt_deploy_enable: 0,
         server_ip: "",
         server_port: 0
@@ -116,7 +117,7 @@ const loadData = async () => {
     // 提取断网缓存配置
     offlineCacheData.value = offlineCache
     if (offlineCache && offlineCache.tunnel && Array.isArray(offlineCache.tunnel)) {
-      const cloudCache = offlineCache.tunnel.find(t => t.name === 'Cloud')
+      const cloudCache = offlineCache.tunnel.find(t => t.name === 'CLOUD')
       if (cloudCache) {
         offlineCacheEnable.value = cloudCache.enable
       }
@@ -137,14 +138,14 @@ const saveConfig = async () => {
     await apiClient.get('/update_nv.cgi', {
       params: {
         file: 'comm_tunnel',
-        'n_UCLOUD.enable': cloudConfig.value.enable
+        'n_CLOUD.enable': cloudConfig.value.enable
       }
     })
     
     // 查找Cloud在tunnel数组中的索引
     let cloudIndex = -1
     if (offlineCacheData.value && offlineCacheData.value.tunnel) {
-      cloudIndex = offlineCacheData.value.tunnel.findIndex(t => t.name === 'Cloud')
+      cloudIndex = offlineCacheData.value.tunnel.findIndex(t => t.name === 'CLOUD')
     }
     
     // 保存断网缓存配置

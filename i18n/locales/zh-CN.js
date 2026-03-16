@@ -250,7 +250,8 @@ export default {
     cloud: {
         title: '海凌科云',
         description: '海凌科云通信链路',
-        enable: 'Cloud使能',
+        enable: '使能',
+        disable: '禁用',
         deviceId: '设备ID',
         password: '设备密码',
         serverAddress: '服务器地址',

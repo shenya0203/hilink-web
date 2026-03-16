@@ -440,7 +440,7 @@ local function load_comm_tunnel_config_from_uci()
     local config = {
         SOCK = {},
         MQTT = {},
-        UCLOUD = nil
+        CLOUD = nil
     }
     
     -- 读取SOCK配置
@@ -528,12 +528,15 @@ local function load_comm_tunnel_config_from_uci()
         }
         table.insert(config.MQTT, mqtt_item)
     end)
+
+    log_info("GET CLOUD")
     
-    -- 读取Cloud配置
-    cursor:foreach("comm_tunnel", "cloud", function(section)
-        config.UCLOUD = {
+    -- 读取CLOUD配置
+    cursor:foreach("comm_tunnel", "CLOUD", function(section)
+        -- CLOUD配置只有一个，直接赋值而不是插入到数组
+        config.CLOUD = {
             enable = tonumber(section.enable) or 0,
-            name = section.name or "Cloud",
+            name = section.name or "CLOUD",
             pvt_deploy_enable = tonumber(section.pvt_deploy_enable) or 0,
             server_ip = section.server_ip or "",
             server_port = tonumber(section.server_port) or 1234
@@ -656,15 +659,15 @@ local function save_comm_tunnel_config_to_uci(config)
         end
     end
     
-    -- 写入UCLOUD配置
-    if config.UCLOUD then
-        local section_name = config.UCLOUD.name or "Cloud"
-        cursor:set("comm_tunnel", section_name, "cloud")
-        cursor:set("comm_tunnel", section_name, "enable", tostring(config.UCLOUD.enable or 0))
-        cursor:set("comm_tunnel", section_name, "name", config.UCLOUD.name or "Cloud")
-        cursor:set("comm_tunnel", section_name, "pvt_deploy_enable", tostring(config.UCLOUD.pvt_deploy_enable or 0))
-        cursor:set("comm_tunnel", section_name, "server_ip", config.UCLOUD.server_ip or "")
-        cursor:set("comm_tunnel", section_name, "server_port", tostring(config.UCLOUD.server_port or 1234))
+    -- 写入CLOUD配置
+    if config.CLOUD then
+        local section_name = config.CLOUD.name or "CLOUD"
+        cursor:set("comm_tunnel", section_name, "CLOUD")
+        cursor:set("comm_tunnel", section_name, "enable", tostring(config.CLOUD.enable or 0))
+        cursor:set("comm_tunnel", section_name, "name", config.CLOUD.name or "CLOUD")
+        cursor:set("comm_tunnel", section_name, "pvt_deploy_enable", tostring(config.CLOUD.pvt_deploy_enable or 0))
+        cursor:set("comm_tunnel", section_name, "server_ip", config.CLOUD.server_ip or "")
+        cursor:set("comm_tunnel", section_name, "server_port", tostring(config.CLOUD.server_port or 1234))
     end
     
     cursor:commit("comm_tunnel")
@@ -888,9 +891,9 @@ local misc_config = {
         option ssl_server_name 'test'           #MQTT SSL服务器证书文件名称
         option ssl_client_name 'test'           #MQTT SSL客户端证书文件名称
         option ssl_client_key 'test'            #MQTT SSL客户端密钥文件名称
-    config cloud 'Cloud'
+    config CLOUD 'CLOUD'
         option enable '0'                       #CLOUD 使能 0：禁用 1：启用
-        option name 'Cloud'                     #CLOUD 云的名字
+        option name 'CLOUD'                     #CLOUD 云的名字
         option pvt_deploy_enable '0'            #CLOUD 私有部署使能 0：禁用 1：启用
         option server_ip '192.168.0.201'        #CLOUD 私有云的IP地址
         option server_port '8234'               #CLOUD 私有云的端口
@@ -939,7 +942,7 @@ local comm_tunnel_config = {
             will_flag = 0, will = { topic = "/will", msg = "offline", qos = 0, retention = 0 }
         }
     },
-    UCLOUD = { enable = 0, name = "Cloud", pvt_deploy_enable = 0, server_ip = "", server_port = 1234 }
+    CLOUD = { enable = 0, name = "CLOUD", pvt_deploy_enable = 0, server_ip = "", server_port = 1234 }
 }
 
 -- 6. 串口配置
@@ -987,7 +990,7 @@ local offline_cache_config = {
         { name = "SOCKB", enable = 0 },
         { name = "MQTT1", enable = 0 },
         { name = "MQTT2", enable = 0 },
-        { name = "Cloud", enable = 0 }
+        { name = "CLOUD", enable = 0 }
     }
 }
 
@@ -1046,25 +1049,27 @@ local edge_points_csv = "V,V1.0,N7X0,;\nSC,Device1,1,2,1,100,0,0,192.168.0.21:21
 local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 
 local function get_communication_enable(tunnel)
-    -- log_info("查找目标: " .. tunnel)
+    log_info("查找目标: " .. tunnel)
     
-    -- 遍历第一层 (SOCK, MQTT, UCLOUD)
+    -- 遍历第一层 (SOCK, MQTT, CLOUD)
     for key, data in pairs(comm_tunnel_config) do
-        
+        log_info("key: " .. key.." data: "..tostring(data))
         -- 情况1: data 是一个列表/数组 (例如 SOCK, MQTT)
         -- 我们通过判断是否存在索引 [1] 来确定它是不是列表
         if type(data) == "table" and data[1] ~= nil then
             for _, item in ipairs(data) do
                 if item.name == tunnel then
-                    -- log_info("在列表 " .. key .. " 中找到: " .. item.name)
+                    log_info("在列表 " .. key .. " 中找到: " .. item.name)
                     return item.enable
                 end
             end
             
-        -- 情况2: data 是单个对象 (例如 UCLOUD)
+        -- 情况2: data 是单个对象 (例如 CLOUD)
         elseif type(data) == "table" and data.name == tunnel then
-            -- log_info("找到单项配置: " .. data.name)
+            log_info("找到单项配置: " .. data.name)
             return data.enable
+        else
+            log_info("未找到: " .. tunnel.." key: "..key)
         end
     end
 
@@ -1210,11 +1215,11 @@ local function set_comm_tunnel_config(args)
             log_info("MQTT[" .. (index-1) .. "]." .. key .. " = " .. tostring(v))
         end
         
-        -- 处理 UCLOUD 配置
-        local ucloud_key = string.match(k, "[ns]_UCLOUD%.(.+)")
-        if ucloud_key then
-            comm_tunnel_config.UCLOUD[ucloud_key] = tonumber(v) or v
-            log_info("UCLOUD." .. ucloud_key .. " = " .. tostring(v))
+        -- 处理 CLOUD 配置
+        local cloud_key = string.match(k, "[ns]_CLOUD%.(.+)")
+        if cloud_key then
+            comm_tunnel_config.CLOUD.enable = tonumber(v) or v
+            log_info("CLOUD." .. cloud_key .. " = " .. tostring(v))
         end
     end
     
@@ -1309,7 +1314,7 @@ local function sync_nginx_settings()
     local timing_reset_conf = load_timing_reset_config_from_uci()
     local loaded_config = load_comm_tunnel_config_from_uci()
     log_info("loaded comm tunnel config: "..cjson.encode(loaded_config))
-    if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.UCLOUD) then
+    if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.CLOUD) then
         comm_tunnel_config = loaded_config
         log_info("loaded comm tunnel config: "..comm_tunnel_config.SOCK[1].enable)
         comm_tunnel_config_loaded = true
@@ -1883,7 +1888,7 @@ local methods = {
                 -- 如果内存缓存为空，则从UCI配置文件读取
                 if not comm_tunnel_config_loaded then
                     local loaded_config = load_comm_tunnel_config_from_uci()
-                    if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.UCLOUD) then
+                    if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.CLOUD) then
                         comm_tunnel_config = loaded_config
                         comm_tunnel_config_loaded = true
                         log_info("Loaded comm_tunnel config from UCI: " .. cjson.encode(comm_tunnel_config))

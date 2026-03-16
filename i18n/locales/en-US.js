@@ -122,7 +122,7 @@ export default {
         mqtt2Status: 'MQTT2 Status',
         mqtt2Flag: 'MQTT2 Flag',
 
-        // Cloud Connection Status
+        // CLOUD Connection Status
         cloudStatus: 'Cloud Connection Status',
         cloudConnectionStatus: 'Cloud Status',
         cloudConnectionFlag: 'Cloud Flag'
@@ -237,7 +237,8 @@ export default {
     // Cloud Platform Configuration Page
     cloud: {
         title: 'USR Cloud Configuration',
-        enable: 'HiLink Cloud Enable',
+        enable: 'Enable',
+        disable: 'Disable',
         deviceId: 'Device ID',
         password: 'Device Password',
         serverAddress: 'Server Address',
