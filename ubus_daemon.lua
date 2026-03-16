@@ -683,7 +683,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.006",
+    soft_ver = "V1.007",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1085,6 +1085,27 @@ end
 -- ==========================================================
 local function get_communication_status(link)
     -- 假设状态文件存放在 /tmp/ 目录下，请根据实际情况修改
+    -- 先判断app是否存在
+    if link == "CLOUD" then
+        --判断cloud_app 进程是否存在
+        local ret = os.execute("pidof cloud_app >/dev/null 2>&1")
+        if ret ~= 0 then
+            return 0
+        end
+    elseif link == "MQTT1" or link == "MQTT2" then
+        --判断mqtt_app 进程是否存在
+        local ret = os.execute("pidof mqtt_app >/dev/null 2>&1")
+        if ret ~= 0 then
+            return 0
+        end
+    elseif link == "SOCKA" or link == "SOCKB" then
+        --判断sock_app 进程是否存在
+        local ret = os.execute("pidof socket >/dev/null 2>&1")
+        if ret ~= 0 then
+            return 0
+        end
+    end
+
     local status_dir = "/tmp/" 
     
     local prefix = "socket_" -- 默认为 socket
@@ -1114,6 +1135,8 @@ local function get_communication_status(link)
     if not content or content == "" then
         return 0
     end
+
+    --如果进程消失怎么办？？
     
     -- 3. 解析 JSON (使用 pcall 防止 JSON 格式错误导致崩溃)
     local ok, data = pcall(cjson.decode, content)
