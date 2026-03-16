@@ -680,7 +680,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.004",
+    soft_ver = "V1.006",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1759,6 +1759,52 @@ local function reply(req, data)
     conn:reply(req, data or {})
 end
 
+local function get_system_slave_data()
+    local ts = os.time()
+    local local_time = os.date("%Y-%m-%d %H:%M:%S", ts)
+    local utc_time = os.date("!%Y-%m-%d %H:%M:%S", ts)
+    local ts_ms = tostring(ts) .. "000"
+
+    local mac = get_system_mac() or ""
+    local sn = status_data.sn or get_system_sn() or ""
+    local ver = status_data.soft_ver or "V1.0.0"
+    local model = product_name or "HLK-N7X0"
+
+    local imei = ""
+    local iccid = ""
+    local csq = 0
+    local modem_info_str = read_file_content("/tmp/modem_info.json")
+    if modem_info_str then
+        local ok, info = pcall(cjson.decode, modem_info_str)
+        if ok then
+            imei = info.imei or ""
+            iccid = info.iccid or ""
+            if info.signal then
+                local dbm = tonumber(string.match(info.signal, "([-%d]+)"))
+                if dbm then
+                    csq = math.floor((dbm + 113) / 2)
+                    if csq < 0 then csq = 0 end
+                    if csq > 31 then csq = 31 end
+                end
+            end
+        end
+    end
+
+    return {
+        ["sys_local_time"] = tostring(local_time),
+        ["sys_timestamp"] = tostring(ts),
+        ["sys_timestamp_ms"] = ts_ms,
+        ["sys_mac"] = string.upper(tostring(mac)),
+        ["sys_imei"] = tostring(imei),
+        ["sys_sn"] = tostring(sn),
+        ["sys_iccid"] = tostring(iccid),
+        ["sys_ver"] = tostring(ver),
+        ["sys_csq"] = tostring(csq),
+        ["sys_utc_time"] = tostring(utc_time),
+        ["sys_model"] = tostring(model)
+    }
+end
+
 local methods = {
     ["hilink"] = {
         -- 获取状态信息
@@ -2180,11 +2226,17 @@ local methods = {
         -- 获取边缘计算实时数据 (从共享内存读取)
         get_edge_values = {
             function(req, msg)
+                log_info("##############get_edge_values")
                 local values = shm.read_values()
                 if values then
+                    log_info("value .......")
+                    -- 注入系统从机数据
+                    values["System_Sla..System"] = get_system_slave_data()
                     reply(req, { result = true, data = values })
                 else
-                    reply(req, { result = false, error = "Failed to read shared memory" })
+                    values = {}
+                    values["System_Sla..System"] = get_system_slave_data()
+                    reply(req, { result = true, data = values})
                 end
             end,
             {}
