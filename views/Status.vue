@@ -227,7 +227,7 @@ const getConnectionStatus = (status) => {
 
 // 辅助函数：获取信号强度描述
 const getSignalStrength = (csq) => {
-  if (!csq) return '-'
+  if (!csq || csq === 'N/A') return '-'
   const strength = parseInt(csq)
   if (strength === 0) return t('status.signalNone')
   if (strength <= 5) return t('status.signalVeryWeak')

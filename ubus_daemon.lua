@@ -683,7 +683,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.007",
+    soft_ver = "V1.008",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1704,19 +1704,37 @@ local function collect_network_status()
     if modem_info_str then
         log_info("modem_info_str: "..modem_info_str)
         local ok, info = pcall(cjson.decode, modem_info_str)
+        
         if ok then
-            net_status.lte.iccid = info.iccid
-            net_status.lte.imei = info.imei
-            net_status.lte.cimi = info.imsi
-            net_status.lte.mode = info.network_type
-            net_status.lte.oper = info.sim_operator
-            net_status.lte.lte_ip = info.local_ip
-            net_status.lte.lte_sta = info.connection_status
+            log_info("info: "..cjson.encode(info))
+            local is_ready = (info.sim_status == "ready")
+            local reg_status = (info.status == "Registered")
             net_status.lte.sim = info.sim_status == "ready" and "1" or "0"
+            net_status.lte.imei = info.imei
+            
+
+            if info.local_ip == "0.0.0.0" then
+                net_status.lte.lte_ip = ""
+            end
+
+            if is_ready then
+                net_status.lte.iccid = info.iccid
+                net_status.lte.cimi = info.imsi
+                net_status.lte.mode = info.network_type
+                net_status.lte.oper = info.sim_operator
+            else
+                net_status.lte.iccid = "N/A"
+                net_status.lte.cimi = "N/A"
+                net_status.lte.mode = "N/A"
+                net_status.lte.oper = "N/A"
+                net_status.lte.csq = "N/A"
+            end
+
+            net_status.lte.lte_sta = info.connection_status
+            
             log_info("net_status: "..cjson.encode(net_status))
 
-
-            if info.signal then
+            if is_ready and info.signal then
                 local dbm = tonumber(string.match(info.signal, "([-%d]+)"))
                 if dbm then
                     local csq = math.floor((dbm + 113) / 2)
@@ -1725,29 +1743,31 @@ local function collect_network_status()
                     net_status.lte.csq = csq
                 end
             end
-        end
-        -- 4. LTE Params via Ubus (Fill gaps)
-        local lte_status = conn:call("network.interface.lte", "status", {})
-        if lte_status then
-            if lte_status["ipv4-address"] and #lte_status["ipv4-address"] > 0 then
-                if net_status.lte.lte_ip == "" then
-                    net_status.lte.lte_ip = lte_status["ipv4-address"][1].address
+            -- 4. LTE Params via Ubus (Fill gaps)
+            if is_ready and reg_status then
+                local lte_status = conn:call("network.interface.lte", "status", {})
+                if lte_status then
+                    if lte_status["ipv4-address"] and #lte_status["ipv4-address"] > 0 then
+                        if net_status.lte.lte_ip == "" then
+                            net_status.lte.lte_ip = lte_status["ipv4-address"][1].address
+                        end
+                        local mask = lte_status["ipv4-address"][1].mask
+                        if type(mask) == "number" then
+                            local m = math.floor(2^(32) - 2^(32-mask))
+                            net_status.lte.lte_netmask = string.format("%d.%d.%d.%d",
+                                math.floor(m / 2^24) % 256,
+                                math.floor(m / 2^16) % 256,
+                                math.floor(m / 2^8) % 256,
+                                m % 256)
+                        else
+                            net_status.lte.lte_netmask = mask
+                        end
+                    end
+                    if lte_status["dns-server"] then
+                        net_status.lte.lte_dns = lte_status["dns-server"][1] or ""
+                        net_status.lte.lte_sdns = lte_status["dns-server"][2] or ""
+                    end
                 end
-                local mask = lte_status["ipv4-address"][1].mask
-                if type(mask) == "number" then
-                    local m = math.floor(2^(32) - 2^(32-mask))
-                    net_status.lte.lte_netmask = string.format("%d.%d.%d.%d",
-                        math.floor(m / 2^24) % 256,
-                        math.floor(m / 2^16) % 256,
-                        math.floor(m / 2^8) % 256,
-                        m % 256)
-                else
-                    net_status.lte.lte_netmask = mask
-                end
-            end
-            if lte_status["dns-server"] then
-                net_status.lte.lte_dns = lte_status["dns-server"][1] or ""
-                net_status.lte.lte_sdns = lte_status["dns-server"][2] or ""
             end
         end
     end
