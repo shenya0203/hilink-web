@@ -2284,7 +2284,6 @@ const handleRestart = async () => {
 
 const handleContinue = () => {
   showSuccessModal.value = false
-  nextTab()
 }
 
 // 文件选择处理
@@ -2772,7 +2771,6 @@ const saveCurrentPage = async () => {
     } else if (activeTab.value === 2) {
       // 保存数据上报配置
       await saveReportData()
-      showSuccessModal.value = true
       showSuccessModal.value = true
       return
     } else if (activeTab.value === 3) {
