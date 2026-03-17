@@ -255,7 +255,8 @@ export default {
         deviceId: '设备ID',
         password: '设备密码',
         serverAddress: '服务器地址',
-        serverPort: '服务器端口'
+        serverPort: '服务器端口',
+        hilinkcloud: "海凌科云"
     },
 
     // 边缘计算页面

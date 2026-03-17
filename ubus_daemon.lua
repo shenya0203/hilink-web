@@ -683,7 +683,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.008",
+    soft_ver = "V1.009",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2429,7 +2429,7 @@ local methods = {
                     "/etc/init.d/mqtt_app restart; " ..
                     "/etc/init.d/socket restart; " ..
                     "/etc/init.d/uart restart; " ..
-                    "/etc/init.d/hlk_cloud restart; " ..
+                    "/etc/init.d/cloud restart; " ..
                     "/etc/init.d/cron restart;" ..
                     "/etc/init.d/nginx_hlk restart" ..
                 " ) </dev/null >/dev/null 2>&1 &"

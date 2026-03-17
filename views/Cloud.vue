@@ -16,7 +16,7 @@
     <form v-if="cloudConfig">
       <div class="form-section">
         <div class="form-group">
-          <label>{{ t('cloud.enable') }}:</label>
+          <label>{{ t('cloud.hilinkcloud') }}:</label>
           <select v-model.number="cloudConfig.enable">
             <option :value="0">{{ t('cloud.disable') }}</option>
             <option :value="1">{{ t('cloud.enable') }}</option>
@@ -25,7 +25,7 @@
 
         <div class="form-group">
           <label>{{ t('socket.offlineCache') }}:</label>
-          <select v-model.number="offlineCacheEnable">
+          <select v-model.number="offlineCacheEnable" :disabled="!FEATURE_TF_CARD_ENABLED">
             <option :value="0">{{ t('common.disable') }}</option>
             <option :value="1">{{ t('common.enable') }}</option>
           </select>
@@ -70,6 +70,7 @@ import { getCommTunnel, getOfflineCache, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
+import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -119,7 +120,12 @@ const loadData = async () => {
     if (offlineCache && offlineCache.tunnel && Array.isArray(offlineCache.tunnel)) {
       const cloudCache = offlineCache.tunnel.find(t => t.name === 'CLOUD')
       if (cloudCache) {
-        offlineCacheEnable.value = cloudCache.enable
+        // 如果未开启TF卡功能，强制显示为禁用状态
+        if (!FEATURE_TF_CARD_ENABLED) {
+          offlineCacheEnable.value = 0
+        } else {
+          offlineCacheEnable.value = cloudCache.enable
+        }
       }
     }
     
@@ -150,10 +156,13 @@ const saveConfig = async () => {
     
     // 保存断网缓存配置
     if (cloudIndex >= 0) {
+      // 如果未开启TF卡功能，强制保存为禁用 (0)
+      const cacheValue = FEATURE_TF_CARD_ENABLED ? offlineCacheEnable.value : 0
+
       await apiClient.get('/update_nv.cgi', {
         params: {
           file: 'offline_cache',
-          [`n_tunnel[${cloudIndex}].enable`]: offlineCacheEnable.value
+          [`n_tunnel[${cloudIndex}].enable`]: cacheValue
         }
       })
     }

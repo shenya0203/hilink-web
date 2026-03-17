@@ -208,7 +208,7 @@
 
           <div class="form-group">
             <label>{{ t('mqtt.offlineCache') }}:</label>
-            <select v-model.number="mqttList[activeTab].offline_cache_enable">
+            <select v-model.number="mqttList[activeTab].offline_cache_enable" :disabled="!FEATURE_TF_CARD_ENABLED">
               <option :value="0">{{ t('common.disable') }}</option>
               <option :value="1">{{ t('common.enable') }}</option>
             </select>
@@ -322,6 +322,7 @@ import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidClientId } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
+import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -663,7 +664,11 @@ const loadData = async () => {
         mqttList.value.forEach(mqtt => {
           const cacheConfig = offlineCache.tunnel.find(t => t.name === mqtt.name)
           if (cacheConfig) {
-            mqtt.offline_cache_enable = cacheConfig.enable
+            if (!FEATURE_TF_CARD_ENABLED) {
+              mqtt.offline_cache_enable = 0
+            } else {
+              mqtt.offline_cache_enable = cacheConfig.enable
+            }
           } else {
             mqtt.offline_cache_enable = 0
           }
@@ -727,7 +732,8 @@ const saveConfig = async () => {
         // 查找对应的 tunnel 索引
         const tunnelIndex = offlineCacheData.value.tunnel.findIndex(t => t.name === mqtt.name)
         if (tunnelIndex >= 0) {
-          cacheParams.push(`n_tunnel[${tunnelIndex}].enable=${mqtt.offline_cache_enable || 0}`)
+          const cacheValue = FEATURE_TF_CARD_ENABLED ? (mqtt.offline_cache_enable || 0) : 0
+          cacheParams.push(`n_tunnel[${tunnelIndex}].enable=${cacheValue}`)
         }
       })
     }

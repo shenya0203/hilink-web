@@ -258,7 +258,7 @@
           <!-- 断网缓存 -->
           <div class="form-group">
             <label>{{ t('socket.offlineCache') }}:</label>
-            <select v-model.number="offlineCacheList[activeTab]">
+            <select v-model.number="offlineCacheList[activeTab]" :disabled="!FEATURE_TF_CARD_ENABLED">
               <option :value="0">{{ t('common.disable') }}</option>
               <option :value="1">{{ t('common.enable') }}</option>
             </select>
@@ -293,7 +293,7 @@
           </div>
           <div class="form-group">
             <label>{{ t('socket.offlineCache') }}:</label>
-            <select v-model.number="offlineCacheList[activeTab]">
+            <select v-model.number="offlineCacheList[activeTab]" :disabled="!FEATURE_TF_CARD_ENABLED">
               <option :value="0">{{ t('common.disable') }}</option>
               <option :value="1">{{ t('common.enable') }}</option>
             </select>
@@ -446,6 +446,7 @@ import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidCustomContent } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
+import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -660,7 +661,12 @@ const loadData = async () => {
     error.value = null
     const [socketConfig, cacheConfig] = await Promise.all([fetchSocketConfigData(), fetchOfflineCacheData()])
     if (socketConfig?.SOCK && Array.isArray(socketConfig.SOCK)) socketList.value = socketConfig.SOCK.slice(0, 2)
-    if (cacheConfig?.tunnel) offlineCacheList.value = [cacheConfig.tunnel[0]?.enable || 0, cacheConfig.tunnel[1]?.enable || 0]
+    if (cacheConfig?.tunnel) {
+      // 如果 TF 卡功能禁用，强制显示关闭状态
+      const t0 = FEATURE_TF_CARD_ENABLED ? (cacheConfig.tunnel[0]?.enable || 0) : 0
+      const t1 = FEATURE_TF_CARD_ENABLED ? (cacheConfig.tunnel[1]?.enable || 0) : 0
+      offlineCacheList.value = [t0, t1]
+    }
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
   } finally {
@@ -698,7 +704,8 @@ const saveConfig = async () => {
   try {
     const sockParams = []
     socketList.value.forEach((sock, i) => sockParams.push(...buildSocketParams(sock, i)))
-    const cacheParams = offlineCacheList.value.map((en, i) => `n_tunnel[${i}].enable=${en}`)
+    // 保存时，如果 TF 卡功能被禁用，强制保存为 0
+    const cacheParams = offlineCacheList.value.map((en, i) => `n_tunnel[${i}].enable=${FEATURE_TF_CARD_ENABLED ? en : 0}`)
     await Promise.all([updateConfig('comm_tunnel', sockParams.join('&')), updateConfig('offline_cache', cacheParams.join('&'))])
     showRestartModal.value = true
   } catch (err) { alert(t('common.saveFailed') + ': ' + err.message) }

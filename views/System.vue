@@ -36,6 +36,7 @@
         {{ t('system.tabDevice') }}
       </button>
       <button 
+        v-if="FEATURE_TF_CARD_ENABLED"
         class="tab-btn" 
         :class="{ active: activeTab === 3 }"
         @click="activeTab = 3"
@@ -188,7 +189,7 @@
     </div>
 
     <!-- TF卡管理 Tab -->
-    <div v-if="activeTab === 3" class="form-section">
+    <div v-if="activeTab === 3 && FEATURE_TF_CARD_ENABLED" class="form-section">
       <div class="form-group">
         <label>{{ t('system.spaceUsed') }}:</label>
         <span class="info-text">{{ tfInfo.usedSpace }} / {{ tfInfo.totalSpace }}</span>
@@ -314,6 +315,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
+import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -1200,10 +1202,12 @@ const loadData = async () => {
     loading.value = true
     error.value = null
     
-    await Promise.all([
-      loadMiscConfig(),
-      loadTfInfo()
-    ])
+    const promises = [loadMiscConfig()]
+    // 只有在开启TF卡功能时才加载TF卡信息
+    if (FEATURE_TF_CARD_ENABLED) {
+      promises.push(loadTfInfo())
+    }
+    await Promise.all(promises)
     
     console.log('=== 系统设置页面数据加载完成 ===')
     console.log('MiscConfig:', miscConfig.value)

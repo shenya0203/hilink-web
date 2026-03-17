@@ -242,7 +242,8 @@ export default {
         deviceId: 'Device ID',
         password: 'Device Password',
         serverAddress: 'Server Address',
-        serverPort: 'Server Port'
+        serverPort: 'Server Port',
+        hilinkcloud: "HiLink Cloud"
     },
 
     // Edge Computing Page
