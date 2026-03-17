@@ -1557,6 +1557,7 @@ end
 
 
 local function set_network_config_values(args)
+    -- 解析参数并更新内存缓存
     for k, v in pairs(args) do
         local key = string.match(k, "[ns]_(.+)")
         if key then
@@ -1565,7 +1566,6 @@ local function set_network_config_values(args)
                 for part in string.gmatch(key, "[^%.]+") do
                     table.insert(parts, part)
                 end
-                
                 local target = network_config
                 for i = 1, #parts - 1 do
                     if target[parts[i]] then
@@ -1579,6 +1579,87 @@ local function set_network_config_values(args)
             log_info("network." .. key .. " = " .. tostring(v))
         end
     end
+
+    -- 将解析后的参数直接写入 UCI（保证掌电保存）
+    local cursor = uci_lib.cursor()
+    local eth_mode, eth_ip, eth_mask, eth_gw = nil, nil, nil, nil
+    local eth_dns1, eth_dns2, eth_dns_mode = nil, nil, nil
+    local lte_simnum, lte_apn, lte_user, lte_pswd, lte_auth = nil, nil, nil, nil, nil
+    local lte_dns_mode, lte_dns, lte_sdns = nil, nil, nil
+    local net_select, keepalive_period, keepalive_addr1, keepalive_addr2 = nil, nil, nil, nil
+
+    for k, v in pairs(args) do
+        if k == "n_eth0.ip_mode"     then eth_mode         = tonumber(v) end
+        if k == "s_eth0.sip"         then eth_ip           = v end
+        if k == "s_eth0.mip"         then eth_mask         = v end
+        if k == "s_eth0.gip"         then eth_gw           = v end
+        if k == "s_eth0.dns_ip[0]"   then eth_dns1         = v end
+        if k == "s_eth0.dns_ip[1]"   then eth_dns2         = v end
+        if k == "n_eth0.dns_mode"    then eth_dns_mode     = tonumber(v) end
+        if k == "n_cell.sim_switch"  then lte_simnum       = tonumber(v) end
+        if k == "s_cell.apn.addr"    then lte_apn          = v end
+        if k == "s_cell.apn.user"    then lte_user         = v end
+        if k == "s_cell.apn.pswd"    then lte_pswd         = v end
+        if k == "n_cell.apn.auth"    then lte_auth         = tonumber(v) end
+        if k == "s_cell.dns_ip[0]"   then lte_dns          = v end
+        if k == "s_cell.dns_ip[1]"   then lte_sdns         = v end
+        if k == "n_cell.dns_mode"    then lte_dns_mode     = tonumber(v) end
+        if k == "n_net_select"       then net_select       = tonumber(v) end
+        if k == "n_keepalive_period" then keepalive_period = tonumber(v) end
+        if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end
+        if k == "s_keepalive_addr[1]" then keepalive_addr2 = v end
+    end
+
+    -- WAN/ETH UCI 写入
+    if eth_mode ~= nil then
+        if eth_mode == 1 then
+            cursor:set("network", "wan", "proto", "dhcp")
+        else
+            cursor:set("network", "wan", "proto", "static")
+            if eth_ip   then cursor:set("network", "wan", "ipaddr",  eth_ip)   end
+            if eth_mask then cursor:set("network", "wan", "netmask", eth_mask) end
+            if eth_gw   then cursor:set("network", "wan", "gateway", eth_gw)   end
+        end
+        cursor:set("network", "wan", "peerdns", tostring(eth_dns_mode or 0))
+        cursor:delete("network", "wan", "dns")
+    local dns_list = {}
+    if eth_dns1 and eth_dns1 ~= "" then table.insert(dns_list, eth_dns1) end
+    if eth_dns2 and eth_dns2 ~= "" then table.insert(dns_list, eth_dns2) end
+
+    if #dns_list > 0 then
+        cursor:set("network", "wan", "dns", dns_list)
+    end
+        cursor:commit("network")
+    end
+
+    -- LTE UCI 写入
+    if lte_simnum ~= nil then cursor:set("network", "lte", "modem_simnum", tostring(lte_simnum)) end
+    if lte_apn    then cursor:set("network", "lte", "modem_apn",    lte_apn)              end
+    if lte_user   then cursor:set("network", "lte", "modem_user",   lte_user)             end
+    if lte_pswd   then cursor:set("network", "lte", "modem_passwd", lte_pswd)             end
+    if lte_auth ~= nil then cursor:set("network", "lte", "modem_auth", tostring(lte_auth)) end
+    if lte_dns_mode ~= nil then
+        cursor:delete("network", "lte", "dns")
+        cursor:delete("network", "lte", "_dns")
+        if lte_dns_mode == 1 then
+            if lte_dns  and lte_dns  ~= "" then cursor:add_list("network", "lte", "_dns", lte_dns)  end
+            if lte_sdns and lte_sdns ~= "" then cursor:add_list("network", "lte", "_dns", lte_sdns) end
+        else
+            if lte_dns  and lte_dns  ~= "" then cursor:add_list("network", "lte", "dns", lte_dns)  end
+            if lte_sdns and lte_sdns ~= "" then cursor:add_list("network", "lte", "dns", lte_sdns) end
+        end
+        cursor:set("network", "lte", "peerdns", tostring(lte_dns_mode))
+    end
+    cursor:commit("network")
+
+    -- mwan3 UCI 写入
+    if net_select       ~= nil then cursor:set("mwan3", "globals", "net_select",       tostring(net_select))       end
+    if keepalive_period ~= nil then cursor:set("mwan3", "globals", "keepalive_period",  tostring(keepalive_period)) end
+    if keepalive_addr1  ~= nil then cursor:set("mwan3", "globals", "keepalive_ip1",    keepalive_addr1)            end
+    if keepalive_addr2  ~= nil then cursor:set("mwan3", "globals", "keepalive_ip2",    keepalive_addr2)            end
+    cursor:commit("mwan3")
+
+    log_info("Network config saved to UCI")
     return true
 end
 
@@ -1594,6 +1675,11 @@ local function set_edge_config_values(args)
             edge_config.poll_interval = tonumber(v) or 100
         end
     end
+    -- 将 edge enable 写入 UCI实现持久化
+    local cursor = uci_lib.cursor()
+    cursor:set("edge", "@edge[0]", "enable", tostring(edge_config.all_en))
+    cursor:commit("edge")
+    log_info("Edge config saved to UCI: all_en=" .. tostring(edge_config.all_en))
     return true
 end
 
@@ -1887,10 +1973,59 @@ local methods = {
             {}
         },
         
-        -- 获取网络配置
+        -- 获取网络配置（实时从 UCI 读取）
         get_network_config = {
             function(req, msg)
-                reply(req, deep_copy(network_config))
+                local cursor = uci_lib.cursor()
+                local wan_proto   = cursor:get("network", "wan", "proto") or "static"
+                local wan_ip      = cursor:get("network", "wan", "ipaddr")  or ""
+                local wan_mask    = cursor:get("network", "wan", "netmask") or ""
+                local wan_gw      = cursor:get("network", "wan", "gateway") or ""
+                local wan_dns_mode = tonumber(cursor:get("network", "wan", "peerdns")) or 1
+                local wan_dns_raw  = cursor:get("network", "wan", "dns")
+                local lte_dns_mode = tonumber(cursor:get("network", "lte", "peerdns")) or 1
+                local lte_apn  = cursor:get("network", "lte", "modem_apn")    or ""
+                local lte_user = cursor:get("network", "lte", "modem_user")   or ""
+                local lte_pswd = cursor:get("network", "lte", "modem_passwd") or ""
+                local lte_auth = cursor:get("network", "lte", "modem_auth")   or 0
+                local lte_simnum = cursor:get("network", "lte", "modem_simnum") or 0
+                local lte_dns_raw
+                if lte_dns_mode == 1 then
+                    lte_dns_raw = cursor:get("network", "lte", "_dns")
+                else
+                    lte_dns_raw = cursor:get("network", "lte", "dns")
+                end
+                local net_select       = cursor:get("mwan3", "globals", "net_select")       or 0
+                local keepalive_period = cursor:get("mwan3", "globals", "keepalive_period")  or 10
+                local keepalive_ip1    = cursor:get("mwan3", "globals", "keepalive_ip1")    or "223.5.5.5"
+                local keepalive_ip2    = cursor:get("mwan3", "globals", "keepalive_ip2")    or "223.6.6.6"
+                local function parse_dns(raw)
+                    if not raw then return {"", ""} end
+                    if type(raw) == "table" then return {raw[1] or "", raw[2] or ""} end
+                    return {raw, ""}
+                end
+                local wan_dns = parse_dns(wan_dns_raw)
+                local lte_dns = parse_dns(lte_dns_raw)
+                local cfg = {
+                    net_select       = tonumber(net_select) or 0,
+                    keepalive_period = tonumber(keepalive_period) or 10,
+                    keepalive_addr   = {keepalive_ip1, keepalive_ip2},
+                    eth0 = {
+                        ip_mode  = (wan_proto == "dhcp") and 1 or 0,
+                        sip      = wan_ip,
+                        gip      = wan_gw,
+                        mip      = wan_mask,
+                        dns_mode = wan_dns_mode,
+                        dns_ip   = wan_dns
+                    },
+                    cell = {
+                        sim_switch = tonumber(lte_simnum) or 0,
+                        apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = tonumber(lte_auth) or 0 },
+                        dns_mode = lte_dns_mode,
+                        dns_ip   = lte_dns
+                    }
+                }
+                reply(req, cfg)
             end,
             {}
         },
@@ -2086,10 +2221,17 @@ local methods = {
             { module = ubus.STRING }
         },
         
-        -- 获取边缘计算配置
+        -- 获取边缘计算配置（实时从 UCI 读取 enable）
         get_edge_config = {
             function(req, msg)
-                reply(req, deep_copy(edge_config))
+                local cursor = uci_lib.cursor()
+                local enable = tonumber(cursor:get("edge", "@edge[0]", "enable")) or edge_config.all_en
+                reply(req, {
+                    all_en           = enable,
+                    refresh_frequency = edge_config.refresh_frequency,
+                    calc_period       = edge_config.calc_period,
+                    poll_interval     = edge_config.poll_interval
+                })
             end,
             {}
         },
@@ -2122,19 +2264,46 @@ local methods = {
             {}
         },
         
-        -- 获取边缘计算协议转换配置
+        -- 获取边缘计算协议转换配置（从 JSON 文件读取）
         get_edge_access_config = {
             function(req, msg)
-                reply(req, deep_copy(edge_access_config))
+                local config = { group = {} }
+                local p = io.popen("ls /etc/config/device/edge_access/*.json 2>/dev/null")
+                if p then
+                    for file_path in p:lines() do
+                        local content = read_file_content(file_path)
+                        if content then
+                            local ok, g = pcall(cjson.decode, content)
+                            if ok and g then
+                                table.insert(config.group, g)
+                            end
+                        end
+                    end
+                    p:close()
+                end
+                -- 文件为空时返回内存默认值
+                if #config.group == 0 then
+                    config = deep_copy(edge_access_config)
+                else
+                    edge_access_config = config
+                end
+                reply(req, config)
             end,
             {}
         },
         
-        -- 设置边缘计算协议转换配置
+        -- 设置边缘计算协议转换配置（将 group 持久化到 JSON 文件）
         set_edge_access_config = {
             function(req, msg)
                 if msg.group then
                     edge_access_config.group = msg.group
+                    -- 将配置持久化到 JSON 文件
+                    os.execute("rm -f /etc/config/device/edge_access/*.json")
+                    os.execute("mkdir -p /etc/config/device/edge_access")
+                    for i, g in pairs(edge_access_config.group) do
+                        write_file_content("/etc/config/device/edge_access/" .. i .. ".json", cjson.encode(g))
+                    end
+                    log_info("Edge access config saved to files")
                 end
                 reply(req, {result = true})
             end,
@@ -2275,10 +2444,8 @@ local methods = {
         -- 获取边缘计算实时数据 (从共享内存读取)
         get_edge_values = {
             function(req, msg)
-                log_info("##############get_edge_values")
                 local values = shm.read_values()
                 if values then
-                    log_info("value .......")
                     -- 注入系统从机数据
                     values["System_Sla..System"] = get_system_slave_data()
                     reply(req, { result = true, data = values })

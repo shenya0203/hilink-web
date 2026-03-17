@@ -86,79 +86,16 @@ function _M.get_network_status()
 end
 
 -- 3. Network Config Data
--- 3. Network Config Data
 function _M.get_network_config()
-    -- Read WAN config from UCI
-    local wan_proto = get_uci("network.wan.proto")
-    local wan_ip = get_uci("network.wan.ipaddr") or ""
-    local wan_netmask = get_uci("network.wan.netmask") or ""
-    local wan_gateway = get_uci("network.wan.gateway") or ""
-    local wan_dns_enable = get_uci("network.wan.peerdns") or 1  --0 手动设置 1 自动获取
-
-    local lte_dns_enable = get_uci("network.lte.peerdns") or 1  --0 手动设置 1 自动获取
-    local lte_device = get_uci("network.lte.modem_device") or ""
-    local lte_apn = get_uci("network.lte.modem_apn") or ""
-    local lte_user = get_uci("network.lte.modem_user") or ""
-    local lte_pswd = get_uci("network.lte.modem_passwd") or ""
-    local lte_auth = get_uci("network.lte.modem_auth") or 0
-    local lte_simnum = get_uci("network.lte.modem_simnum") or 0
-
-    -- Read DNS
-    local wan_dns = {}
-    local f = io.popen("uci get network.wan.dns 2>/dev/null")
-    if f then
-        for line in f:lines() do
-            for dns in string.gmatch(line, "%S+") do
-                table.insert(wan_dns, dns)
-            end
-        end
-        f:close()
+    local result = ubus_call("hilink", "get_network_config", {})
+    if result then
+        return result
     end
-
-    local lte_dns = {}
-    local f = nil
-    if lte_dns_enable == 0 then
-        f = io.popen("uci get network.lte.dns 2>/dev/null")
-    else
-        f = io.popen("uci get network.lte._dns 2>/dev/null")
-    end
-    if f then
-        for line in f:lines() do
-            for dns in string.gmatch(line, "%S+") do
-                table.insert(lte_dns, dns)
-            end
-        end
-        f:close()
-    end
-    
-    local ip_mode = 0
-    if wan_proto == "dhcp" then
-        ip_mode = 1
-    end
-
-    local track_ip1 = get_uci("mwan3.globals.keepalive_ip1") or "223.5.5.5"
-    local track_ip2 = get_uci("mwan3.globals.keepalive_ip2") or "223.6.6.6"    
-    local track_period = get_uci("mwan3.globals.keepalive_period") or 10
-    local net_select = get_uci("mwan3.globals.net_select") or 0
-    
-    return {
-        net_select = net_select, keepalive_period = track_period,
-        keepalive_addr = {track_ip1, track_ip2},
-        eth0 = {
-            ip_mode = ip_mode, 
-            sip = wan_ip, 
-            gip = wan_gateway,
-            mip = wan_netmask, 
-            dns_mode = wan_dns_enable, 
-            dns_ip = {wan_dns[1] or "", wan_dns[2] or ""}
-        },
-        cell = {
-            sim_switch = lte_simnum,
-            apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
-            dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
-        }
-    }
+    ngx.log(ngx.WARN, "ubus call failed for get_network_config")
+    return nil
 end
+
+
 
 -- 4. Misc Config Data (完整配置)
 function _M.get_misc_config()
@@ -211,20 +148,14 @@ function _M.get_uart_config()
     return nil
 end
 
--- 7. Offline cache config
-local offline_cache_config = {
-    mgt = { rpt_time = 200, queue_type = 0 },
-    tunnel = {
-        { name = "SOCKA", enable = 0 },
-        { name = "SOCKB", enable = 0 },
-        { name = "MQTT1", enable = 0 },
-        { name = "MQTT2", enable = 0 },
-        { name = "CLOUD", enable = 0 }
-    }
-}
-
+-- 7. Offline cache config (状态由 ubus_daemon 管理)
 function _M.get_offline_cache_config()
-    return offline_cache_config
+    local result = ubus_call("hilink", "get_offline_cache_config", {})
+    if result then
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for get_offline_cache_config")
+    return nil
 end
 
 -- ==========================================================
@@ -244,10 +175,7 @@ local edge_report_config = {
     group = {}
 }
 
--- 14. Edge Access Config - 协议转换访问配置
-local edge_access_config = {
-    group = {}
-}
+-- 14. Edge Access Config - 协议转换访问配置 (状态由 ubus_daemon 管理)
 
 -- 15. Edge Link Control Config - 链路控制配置
 local edge_link_ctrl_config = {
@@ -339,16 +267,14 @@ function _M.set_config(module, args)
     end
     
     if module == "offline_cache" then
-        for k, v in pairs(args) do
-            local index, key = string.match(k, "n_tunnel%[(%d+)%]%.(.+)")
-            if index and key then
-                index = tonumber(index) + 1
-                if offline_cache_config.tunnel[index] then
-                    offline_cache_config.tunnel[index][key] = tonumber(v) or v
-                end
-            end
+        local result = ubus_call("hilink", "set_offline_cache_config", args)
+        if result and result.result then
+            ngx.log(ngx.INFO, "Successfully set offline_cache config via ubus")
+            return true
+        else
+            ngx.log(ngx.ERR, "Failed to set offline_cache config via ubus")
+            return false
         end
-        return true
     end
     
     if module == "misc" then
@@ -377,154 +303,54 @@ function _M.set_config(module, args)
     end
 
     if module == "edge_access" then
-        ngx.log(ngx.INFO, "Updating edge_access config...")
-        
-        -- Reset group config to ensure we only save what's currently submitted
-        edge_access_config.group = {}
-        
+        ngx.log(ngx.INFO, "Updating edge_access config via ubus...")
+
+        -- 在 adapter 侧完成参数解析，组装成结构化 group 数组传给 daemon
+        local group = {}
         for k, v in pairs(args) do
-            -- Parse n_group[i].key or s_group[i].key
             local type_prefix, index, key = string.match(k, "([ns])_group%[(%d+)%]%.(.+)")
             if index and key then
                 index = tonumber(index) + 1
-                if not edge_access_config.group[index] then
-                    edge_access_config.group[index] = { up = {}, down = {} }
+                if not group[index] then
+                    group[index] = { up = {}, down = {} }
                 end
-                
                 local val = v
                 if type_prefix == "n" then val = tonumber(v) or 0 end
-                
-                -- Handle nested keys like up.link, down.qos
                 local sub_key, sub_prop = string.match(key, "([^%.]+)%.([^%.]+)")
                 if sub_key and sub_prop then
-                    if not edge_access_config.group[index][sub_key] then
-                        edge_access_config.group[index][sub_key] = {}
+                    if not group[index][sub_key] then
+                        group[index][sub_key] = {}
                     end
-                    edge_access_config.group[index][sub_key][sub_prop] = val
+                    group[index][sub_key][sub_prop] = val
                 else
-                    edge_access_config.group[index][key] = val
+                    group[index][key] = val
                 end
             end
         end
-        
-        -- Save to files
-        os.execute("rm -f /etc/config/device/edge_access/*.json")
-        os.execute("mkdir -p /etc/config/device/edge_access")
-        
-        for i, g in pairs(edge_access_config.group) do
-            local f = io.open("/etc/config/device/edge_access/" .. i .. ".json", "w+")
-            if f then
-                f:write(cjson.encode(g))
-                f:close()
-            end
+
+        local result = ubus_call("hilink", "set_edge_access_config", { group = group })
+        if result and result.result then
+            ngx.log(ngx.INFO, "Successfully set edge_access config via ubus")
+            return true
+        else
+            ngx.log(ngx.ERR, "Failed to set edge_access config via ubus")
+            return false
         end
-        
-        return true
     end
     
     if module == "network" then
-        ngx.log(ngx.INFO, "Updating network config...")
-        
-        local eth_mode = nil
-        local eth_ip = nil
-        local eth_mask = nil
-        local eth_gw = nil
-        local eth_dns1 = nil
-        local eth_dns2 = nil
-        local eth_dns_mode = nil
-        
-        local lte_simnum = nil
-        local lte_apn = nil
-        local lte_user = nil
-        local lte_pswd = nil
-        local lte_auth = nil
-        local lte_dns_mode = nil
-        local lte_dns = nil
-        local lte_sdns = nil
-        local net_select = nil
-        local keepalive_period = nil
-        local keepalive_addr1 = nil
-        local keepalive_addr2 = nil
-        
-        
-        for k, v in pairs(args) do
-            if k == "n_eth0.ip_mode" then eth_mode = tonumber(v) end
-            if k == "s_eth0.sip" then eth_ip = v end
-            if k == "s_eth0.mip" then eth_mask = v end
-            if k == "s_eth0.gip" then eth_gw = v end
-            if k == "s_eth0.dns_ip[0]" then eth_dns1 = v end
-            if k == "s_eth0.dns_ip[1]" then eth_dns2 = v end
-            if k == "n_eth0.dns_mode" then eth_dns_mode = tonumber(v) end   
-            
-            if k == "n_cell.sim_switch" then lte_simnum = tonumber(v) end
-            if k == "s_cell.apn.addr" then lte_apn = v end
-            if k == "s_cell.apn.user" then lte_user = v end
-            if k == "s_cell.apn.pswd" then lte_pswd = v end
-            if k == "s_cell.dns_ip[0]" then lte_dns = v end
-            if k == "s_cell.dns_ip[1]" then lte_sdns = v end
-            if k == "n_cell.dns_mode" then lte_dns_mode = tonumber(v) end
-            if k == "n_cell.apn.auth" then lte_auth = tonumber(v) end
-            if k == "n_keepalive_period" then keepalive_period = tonumber(v) end
-            if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end  
-            if k == "s_keepalive_addr[1]" then keepalive_addr2 = v end
-            if k == "n_net_select" then net_select = tonumber(v) end
-        end
-        
-        if eth_mode ~= nil then
-            if eth_mode == 1 then
-                os.execute("uci set network.wan.proto=dhcp")
-            else
-                os.execute("uci set network.wan.proto=static")
-                if eth_ip then os.execute("uci set network.wan.ipaddr=" .. eth_ip) end
-                if eth_mask then os.execute("uci set network.wan.netmask=" .. eth_mask) end
-                if eth_gw then os.execute("uci set network.wan.gateway=" .. eth_gw) end
-                
-                os.execute("uci set network.wan.peerdns=" .. eth_dns_mode or 0)
-                -- DNS
-                os.execute("uci delete network.wan.dns")
-                if eth_dns1 and eth_dns1 ~= "" then 
-                    os.execute("uci add_list network.wan.dns=" .. eth_dns1) 
-                end
-                if eth_dns2 and eth_dns2 ~= "" then 
-                    os.execute("uci add_list network.wan.dns=" .. eth_dns2) 
-                end
-            end
-            os.execute("uci commit network")
-        end
-
-        os.execute("uci set network.lte.modem_simnum=" .. (lte_simnum or ""))
-
-        os.execute("uci set network.lte.modem_apn=" .. (lte_apn or ""))
-
-        os.execute("uci set network.lte.modem_user=" .. (lte_user or ""))
-
-        os.execute("uci set network.lte.modem_passwd=" .. (lte_pswd or ""))
-
-        os.execute("uci set network.lte.modem_auth=" .. (lte_auth or 0))
-
-        os.execute("uci delete network.lte.dns")
-        os.execute("uci delete network.lte._dns")
-        if lte_dns_mode == 1 then --自动获取
-            os.execute("uci add_list network.lte._dns=" .. (lte_dns or ""))   --配置为自动获取时 修改dns的option名称
-            os.execute("uci add_list network.lte._dns=" .. (lte_sdns or "")) 
+        ngx.log(ngx.INFO, "Updating network config via ubus...")
+        -- UCI 操作已迁移到 ubus_daemon 的 apply_network_config_to_uci 函数
+        local result = ubus_call("hilink", "set_network_config", args)
+        if result and result.result then
+            ngx.log(ngx.INFO, "Successfully set network config via ubus")
+            return true
         else
-            os.execute("uci add_list network.lte.dns=" .. (lte_dns or "")) 
-            os.execute("uci add_list network.lte.dns=" .. (lte_sdns or "")) 
+            ngx.log(ngx.ERR, "Failed to set network config via ubus")
+            return false
         end
-
-        os.execute("uci set network.lte.peerdns=" .. (lte_dns_mode or 0))
-
-
-        if net_select then os.execute("uci set mwan3.globals.net_select=" .. net_select) end
-
-        if keepalive_period then os.execute("uci set mwan3.globals.keepalive_period=" .. keepalive_period) end
-        if keepalive_addr1 then os.execute("uci set mwan3.globals.keepalive_ip1=" .. keepalive_addr1) end
-        if keepalive_addr2 then os.execute("uci set mwan3.globals.keepalive_ip2=" .. keepalive_addr2) end
-        os.execute("uci commit mwan3")
-        os.execute("uci commit network")
-        return true
     end
-    
+
     return true
 end
 
@@ -535,36 +361,24 @@ end
 -- 12. Edge Config - 边缘计算基本配置 (Moved to top)
 
 function _M.get_edge_config()
-    local enable = 0
-    local f = io.popen("uci get edge.@edge[0].enable 2>/dev/null")
-    if f then
-        local content = f:read("*a")
-        f:close()
-        if content then
-            enable = tonumber(content) or 0
-        end
+    -- UCI 读取已迁移到 ubus_daemon
+    local result = ubus_call("hilink", "get_edge_config", {})
+    if result then
+        return result
     end
-    return {
-        all_en = enable,
-        refresh_frequency = 100,
-        calc_period = 100,
-        poll_interval = 100
-    }
+    ngx.log(ngx.WARN, "ubus call failed for get_edge_config")
+    return nil
 end
 
 function _M.set_edge_config(args)
-    local enable = nil
-    for k, v in pairs(args) do
-        if k == "n_all_en" then
-            enable = tonumber(v)
-        end
+    -- UCI 写入已迁移到 ubus_daemon 的 set_edge_config_values
+    local result = ubus_call("hilink", "set_edge_config", args)
+    if result and result.result then
+        return true
+    else
+        ngx.log(ngx.ERR, "Failed to set edge config via ubus")
+        return false
     end
-    
-    if enable ~= nil then
-        os.execute("uci set edge.@edge[0].enable=" .. enable)
-        os.execute("uci commit edge")
-    end
-    return true
 end
 
 -- 13. Edge Report Config - 数据上报配置 (Moved to top)
@@ -602,34 +416,19 @@ end
 -- 14. Edge Access Config - 协议转换访问配置 (Moved to top)
 
 function _M.get_edge_access_config()
-    local config = { group = {} }
-    
-    -- Read from /etc/config/device/edge_access/
-    local p = io.popen("ls /etc/config/device/edge_access/*.json 2>/dev/null")
-    if p then
-        for file_path in p:lines() do
-            local content = read_file(file_path)
-            if content then
-                local ok, g = pcall(cjson.decode, content)
-                if ok then
-                    table.insert(config.group, g)
-                end
-            end
-        end
-        p:close()
+    -- 文件读取已迁移到 ubus_daemon
+    local result = ubus_call("hilink", "get_edge_access_config", {})
+    if result then
+        return result
     end
-    
-    -- Update local cache
-    edge_access_config = config
-    
-    return config
+    ngx.log(ngx.WARN, "ubus call failed for get_edge_access_config")
+    return nil
 end
 
 function _M.set_edge_access_config(data)
-    if data and data.group then
-        edge_access_config.group = data.group
-    end
-    return true
+    -- 此函数保留供直接调用，内部转发给 daemon
+    local result = ubus_call("hilink", "set_edge_access_config", data or {})
+    return result and result.result
 end
 
 
