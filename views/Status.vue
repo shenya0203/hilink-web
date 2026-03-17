@@ -78,8 +78,11 @@
 
     <!-- 第三部分：蜂窝网络 -->
     <form>
-      <legend>{{ t('status.cellular') }}</legend>
-      <table>
+      <legend class="collapsible" @click="toggleSection('cellular')">
+        {{ t('status.cellular') }}
+        <span class="toggle-icon">{{ showCellular ? '▼' : '▶' }}</span>
+      </legend>
+      <table v-show="showCellular">
         <tbody>
           <tr>
             <td class="title">{{ t('status.activeSim') }}:</td>
@@ -123,8 +126,11 @@
 
     <!-- 第四部分：TCP 连接状态 -->
     <form>
-      <legend>{{ t('status.tcpStatus') }}</legend>
-      <table>
+      <legend class="collapsible" @click="toggleSection('tcp')">
+        {{ t('status.tcpStatus') }}
+        <span class="toggle-icon">{{ showTcp ? '▼' : '▶' }}</span>
+      </legend>
+      <table v-show="showTcp">
         <tbody>
           <tr>
             <td class="title">{{ t('status.socket1Status') }}:</td>
@@ -148,8 +154,11 @@
 
     <!-- 第五部分：MQTT 连接状态 -->
     <form>
-      <legend>{{ t('status.mqttStatus') }}</legend>
-      <table>
+      <legend class="collapsible" @click="toggleSection('mqtt')">
+        {{ t('status.mqttStatus') }}
+        <span class="toggle-icon">{{ showMqtt ? '▼' : '▶' }}</span>
+      </legend>
+      <table v-show="showMqtt">
         <tbody>
           <tr>
             <td class="title">{{ t('status.mqtt1Status') }}:</td>
@@ -173,8 +182,11 @@
 
     <!-- 第六部分：CLOUD 连接状态 -->
     <form>
-      <legend>{{ t('status.cloudStatus') }}</legend>
-      <table>
+      <legend class="collapsible" @click="toggleSection('cloud')">
+        {{ t('status.cloudStatus') }}
+        <span class="toggle-icon">{{ showCloud ? '▼' : '▶' }}</span>
+      </legend>
+      <table v-show="showCloud">
         <tbody>
           <tr>
             <td class="title">{{ t('status.cloudConnectionStatus') }}:</td>
@@ -192,6 +204,38 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+
+// ---- 折叠面板：localStorage 持久化 ----
+const COLLAPSE_KEY = 'status_panel_collapse'
+
+// 从 localStorage 读取上次状态，默认均为 false（折叠）
+const loadCollapseState = () => {
+  try {
+    const saved = localStorage.getItem(COLLAPSE_KEY)
+    return saved ? JSON.parse(saved) : {}
+  } catch {
+    return {}
+  }
+}
+
+const savedState = loadCollapseState()
+const showCellular = ref(savedState.cellular ?? false)
+const showTcp      = ref(savedState.tcp      ?? false)
+const showMqtt     = ref(savedState.mqtt     ?? false)
+const showCloud    = ref(savedState.cloud    ?? false)
+
+// 切换折叠状态并同步写入 localStorage
+const toggleSection = (key) => {
+  const map = { cellular: showCellular, tcp: showTcp, mqtt: showMqtt, cloud: showCloud }
+  if (!map[key]) return
+  map[key].value = !map[key].value
+  try {
+    const current = loadCollapseState()
+    current[key] = map[key].value
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify(current))
+  } catch { /* ignore */ }
+}
+// ---- 折叠面板 END ----
 import { 
   fetchStatusData,
   fetchNetworkData,
@@ -338,3 +382,25 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
+
+<style scoped>
+/* 可折叠面板标题栏 */
+legend.collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+legend.collapsible:hover {
+  opacity: 0.85;
+}
+
+/* 折叠箭头图标 */
+.toggle-icon {
+  font-size: 0.75em;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+</style>
