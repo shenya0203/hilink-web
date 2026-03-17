@@ -158,6 +158,7 @@ local function get_current_run_net()
     if wan_online and not lte_online then
         return "EtherNet"
     elseif not wan_online and lte_online then
+        --判断是否有卡 是否注网Registered
         return "LTE"
     elseif not wan_online and not lte_online then
         return "None" -- 全部离线
@@ -1193,6 +1194,56 @@ local function set_uart_config(args)
     end
 end
 
+-- 新增：管理TCP Server防火墙规则
+local function manage_firewall_for_tcp_servers(config)
+    log_info("Managing firewall rules for TCP servers...")
+    local cursor = uci_lib.cursor()
+    local changes_made = false
+
+    -- 遍历所有SOCK配置
+    for i, sock_item in ipairs(config.SOCK or {}) do
+        -- 为每个SOCK通道定义一个唯一的、可预测的防火墙规则名称
+        local rule_name = "web_sock_" .. string.lower(sock_item.name or "sock"..i) .. "_rule"
+        log_info("Processing firewall for " .. (sock_item.name or "sock"..i) .. ", rule name: " .. rule_name)
+
+        -- 1. 无论如何，先尝试删除旧规则，以处理禁用、模式更改或端口更改的情况
+        -- 使用 pcall 来安全地处理 uci:get 返回的错误（当规则不存在时）
+        local ok, section = pcall(function() return cursor:get_all("firewall", rule_name) end)
+        if ok and section then
+            log_info("Deleting existing firewall rule: " .. rule_name)
+            cursor:delete("firewall", rule_name)
+            changes_made = true
+        end
+
+        -- 2. 检查当前配置是否为启用的TCP Server模式
+        if sock_item.enable == 1 and sock_item.mode == 1 then
+            local port = sock_item.tcps.local_port
+            if port and port > 0 and port < 65536 then
+                log_info("Adding firewall rule for " .. sock_item.name .. " on TCP port " .. port)
+                -- 3. 添加新规则
+                cursor:set("firewall", rule_name, "rule") -- 创建一个 rule 类型的节
+                cursor:set("firewall", rule_name, "name", "Allow-WAN-To-" .. sock_item.name)
+                cursor:set("firewall", rule_name, "src", "wan")
+                cursor:set("firewall", rule_name, "dest_port", tostring(port))
+                cursor:set("firewall", rule_name, "proto", "tcp")
+                cursor:set("firewall", rule_name, "target", "ACCEPT")
+                changes_made = true
+            else
+                log_error("Invalid port for " .. sock_item.name .. ": " .. tostring(port) .. ". Firewall rule not added.")
+            end
+        end
+    end
+
+    -- 4. 如果有任何更改，则提交
+    if changes_made then
+        log_info("Committing firewall changes.")
+        cursor:commit("firewall")
+    else
+        log_info("No firewall changes needed.")
+    end
+end
+
+
 local function set_comm_tunnel_config(args)
     for k, v in pairs(args) do
         -- 处理 SOCK 配置
@@ -1251,6 +1302,9 @@ local function set_comm_tunnel_config(args)
     if success then
         log_info("Updated comm_tunnel config and saved to UCI: " .. cjson.encode(comm_tunnel_config))
         comm_tunnel_config_loaded = true
+
+        -- 新增：调用防火墙管理函数
+        manage_firewall_for_tcp_servers(comm_tunnel_config)
     else
         log_error("Failed to save comm_tunnel config to UCI")
     end
@@ -1784,6 +1838,7 @@ local function collect_network_status()
     -- 3. LTE Info from /tmp/modem_info.json
     --net_status.lte.sim --改为表示sim状态 1 表示ready 其他值暂时表示Not ready
     net_status.lte.sim = "0"
+    net_status.lte.lte_sta = "Disconnected"
 
     local modem_info_str = read_file_content("/tmp/modem_info.json")
     
@@ -1814,6 +1869,9 @@ local function collect_network_status()
                 net_status.lte.mode = "N/A"
                 net_status.lte.oper = "N/A"
                 net_status.lte.csq = "N/A"
+                if net_status.netdev == "LTE" then
+                    net_status.netdev = "None"
+                end
             end
 
             net_status.lte.lte_sta = info.connection_status
@@ -1831,6 +1889,7 @@ local function collect_network_status()
             end
             -- 4. LTE Params via Ubus (Fill gaps)
             if is_ready and reg_status then
+                
                 local lte_status = conn:call("network.interface.lte", "status", {})
                 if lte_status then
                     if lte_status["ipv4-address"] and #lte_status["ipv4-address"] > 0 then
@@ -1854,7 +1913,19 @@ local function collect_network_status()
                         net_status.lte.lte_sdns = lte_status["dns-server"][2] or ""
                     end
                 end
+            else
+                if net_status.netdev == "LTE" then
+                    net_status.netdev = "None"
+                end
             end
+        else
+            if net_status.netdev == "LTE" then
+                net_status.netdev = "None"
+            end
+        end
+        local lte_online = check_is_online("lte")
+        if is_ready and reg_status and lte_online then
+            net_status.lte.lte_sta = "Connected"
         end
     end
     
@@ -1864,12 +1935,8 @@ local function collect_network_status()
 
     -- 6. Connection Status via mwan3
     local wan_online = check_is_online("wan")
-    local lte_online = check_is_online("lte")
     if wan_online then
         net_status.eth.link_sta = 1
-    end
-    if lte_online then
-        net_status.lte.lte_sta = "Connected"
     end
     --[[
     local f = io.popen("mwan3 status")
@@ -1886,6 +1953,7 @@ local function collect_network_status()
         end
     end
     ]]--
+    log_info("finally netdev : "..net_status.netdev)
 
     return net_status
 end
@@ -2431,6 +2499,8 @@ local methods = {
                     "/etc/init.d/uart restart; " ..
                     "/etc/init.d/cloud restart; " ..
                     "/etc/init.d/cron restart;" ..
+                    "/etc/init.d/firewall restart;" ..
+                    "/etc/init.d/firewall restart;" ..
                     "/etc/init.d/nginx_hlk restart" ..
                 " ) </dev/null >/dev/null 2>&1 &"
                 log_info("Executing restart command: " .. cmd)

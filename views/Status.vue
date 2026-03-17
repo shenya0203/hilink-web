@@ -49,7 +49,7 @@
           </tr>
           <tr>
             <td class="title">{{ t('status.currentNetwork') }}:</td>
-            <td>{{ statusInfo.netdev || '-' }}</td>
+            <td>{{ networkInfo.netdev || '-' }}</td>
           </tr>
         </tbody>
       </table>
