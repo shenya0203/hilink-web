@@ -485,6 +485,7 @@ export default {
         factoryReset: '恢复出厂',
         resetting: '恢复出厂中...',
         restart: '重新启动',
+        restarting: '设备重启中...',
         restartNow: '立即重启',
         serviceRestarting: '服务重启中，请稍候...',
         restartService: '重启服务',

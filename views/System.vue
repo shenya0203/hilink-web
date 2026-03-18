@@ -270,13 +270,18 @@
       </div>
     </div>
 
-    <!-- 恢复出厂等待弹窗 -->
-    <div v-if="isResetting" class="modal-overlay">
+    <!-- 通用重启/恢复出厂等待弹窗 -->
+    <div v-if="isRebooting" class="modal-overlay">
       <div class="modal">
-        <div class="modal-header"><h3>{{ t('system.factoryReset') }}</h3></div>
+        <div class="modal-header">
+          <h3>{{ isFactoryResetMode ? t('system.factoryReset') : t('system.restart') }}</h3>
+        </div>
         <div class="modal-body">
-          <div class="loading-spinner"></div>
-          <p style="margin-top: 15px;">{{ t('system.resetting') }}</p>
+          <p>{{ rebootStatus }}</p>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" :style="{ width: rebootProgress + '%' }"></div>
+            <span class="progress-text">{{ rebootProgress }}%</span>
+          </div>
           <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
         </div>
       </div>
@@ -327,10 +332,13 @@ const error = ref(null)
 const activeTab = ref(0)
 const showRestartModal = ref(false)
 const showUpgradeConfirmModal = ref(false)
-const showFactoryResetConfirmModal = ref(false)
-const upgradeResetFactory = ref(false)
+const showFactoryResetConfirmModal = ref(false) // 恢复：恢复出厂确认框
+const upgradeResetFactory = ref(false)         // 恢复：升级时是否恢复出厂
 const isResetting = ref(false)
-// const isServiceRestarting = ref(false) // Removed, using composable
+const isRebooting = ref(false) // 新增：设备重启/恢复出厂状态
+const rebootProgress = ref(0)   // 新增：重启进度
+const rebootStatus = ref('')     // 新增：当前状态文案
+const isFactoryResetMode = ref(false) // 新增：是否是恢复出厂模式
 
 // ... existing code ...
 
@@ -977,6 +985,101 @@ const checkDeviceOnline = async () => {
   }
 }
 
+// 重启/恢复出厂通用处理流程
+let rebootTimer = null
+const startRebootProcess = (totalTime, statusText, isFactory = false) => {
+  isRebooting.value = true
+  rebootStatus.value = statusText
+  rebootProgress.value = 0
+  isFactoryResetMode.value = isFactory
+  
+  const intervalTime = 1000
+  const startTime = Date.now()
+  let onlineCheckTriggered = false
+
+  if (rebootTimer) clearInterval(rebootTimer)
+
+  rebootTimer = setInterval(async () => {
+    const elapsedTime = Date.now() - startTime
+    let progress = Math.floor((elapsedTime / (totalTime * 1000)) * 100)
+    
+    // 限制进度条显示数值，留出探测余地
+    if (progress > 95) progress = 95
+    rebootProgress.value = progress
+
+    // 进度超过 40% (约40秒) 开始探测设备是否在线
+    if (progress >= 40 && !onlineCheckTriggered) {
+      const isOnline = await checkDeviceOnlineSilently()
+      if (isOnline) {
+        onlineCheckTriggered = true
+        clearInterval(rebootTimer)
+        finishReboot()
+      }
+    }
+
+    // 真正的硬超时处理
+    if (elapsedTime >= (totalTime + 30) * 1000) { // 额外给30秒缓冲
+      clearInterval(rebootTimer)
+      if (!onlineCheckTriggered) {
+        rebootStatus.value = t('system.upgradeTimeout')
+        setTimeout(() => {
+          window.location.replace(`/?t=${Date.now()}`)
+        }, 2000)
+      }
+    }
+  }, intervalTime)
+}
+
+// 静默探测设备在线状态
+const checkDeviceOnlineSilently = async () => {
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000)
+    
+    // 尝试请求静态资源
+    await fetch('/favicon.ico?t=' + Date.now(), { 
+      method: 'HEAD',
+      cache: 'no-store',
+      mode: 'no-cors',
+      signal: controller.signal
+    })
+    
+    clearTimeout(timeoutId)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// 完成重启流程，执行清理并跳转
+const finishReboot = async () => {
+  rebootProgress.value = 100
+  rebootStatus.value = t('system.upgradeComplete') // "重启成功，正在刷新..."
+
+  if (isFactoryResetMode.value) {
+    // 1. 清理应用相关的各类本地存储参数
+    localStorage.removeItem('status_panel_collapse')
+    // 如果有其他 auth 相关的 token 也应在此清除
+    // localStorage.removeItem('auth_token') 
+    
+    // 2. 尝试清除浏览器的 Basic Auth 凭证 (Trick: 通过 XMLHttpRequest 发送一个错误的凭证)
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', '/favicon.ico?logout=' + Date.now(), true, 'logout', 'logout');
+      xhr.send();
+    } catch (e) {
+      console.warn('Attempt to clear basic auth failed', e);
+    }
+  }
+
+  // 延迟后刷新，确保用户看到成功状态
+  setTimeout(() => {
+    const buster = Math.random().toString(36).substring(7);
+    // 恢复出厂或重启后，跳转回根目录（强制展示登录页）
+    window.location.replace(`/?t=${Date.now()}&v=${buster}#/`);
+  }, 2000)
+}
+
 // 恢复出厂设置
 const factoryReset = () => {
   showFactoryResetConfirmModal.value = true
@@ -985,17 +1088,13 @@ const factoryReset = () => {
 const executeFactoryReset = async () => {
   showFactoryResetConfirmModal.value = false
   try {
+    // 发送 API 前先锁定状态，防止重复点击
     await apiClient.get('/action_reset.cgi', {
       params: { act: 'factory' }
     })
     
-    // 显示等待弹窗
-    isResetting.value = true
-    
-    // 等待10秒刷新页面
-    setTimeout(() => {
-      window.location.reload()
-    }, 1000)
+    // 开始 90s 的等待流程
+    startRebootProcess(90, t('system.resetting'), true)
     
   } catch (err) {
     console.error('恢复出厂失败:', err)
@@ -1011,7 +1110,8 @@ const restartDevice = async () => {
 
   try {
     await apiClient.get('/action_restart.cgi')
-    alert(t('system.restartSuccess'))
+    // 开始 90s 的等待流程
+    startRebootProcess(90, t('system.restarting'), false)
   } catch (err) {
     console.error('重启设备失败:', err)
     alert(t('system.restartFailed') + ': ' + err.message)
@@ -1243,6 +1343,10 @@ onUnmounted(() => {
   if (upgradeTimer) {
     clearInterval(upgradeTimer)
     upgradeTimer = null
+  }
+  if (rebootTimer) {
+    clearInterval(rebootTimer)
+    rebootTimer = null
   }
 })
 </script>

@@ -465,6 +465,7 @@ export default {
         factoryReset: 'Factory Reset',
         resetting: 'Resetting factory settings...',
         restart: 'Restart',
+        restarting: 'Device is restarting...',
         restartNow: 'Restart Now',
         serviceRestarting: 'Service is restarting, please wait...',
         scheduledRestart: 'Scheduled Restart',
