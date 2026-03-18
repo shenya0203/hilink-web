@@ -253,7 +253,7 @@
             <div class="progress-bar-fill" :style="{ width: upgradeProgress + '%' }"></div>
             <span class="progress-text">{{ upgradeProgress }}%</span>
           </div>
-          <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
+          <p class="warning-text">{{ t('system.upgradeDontPowerOff') }}</p>
         </div>
       </div>
     </div>
@@ -265,7 +265,7 @@
         <div class="modal-body">
           <div class="loading-spinner"></div>
           <p style="margin-top: 15px;">{{ t('system.uploading') }}</p>
-          <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
+          <p class="warning-text">{{ t('system.upgradeDontPowerOff') }}</p>
         </div>
       </div>
     </div>
@@ -278,11 +278,15 @@
         </div>
         <div class="modal-body">
           <p>{{ rebootStatus }}</p>
-          <div class="progress-bar-container">
+          <div v-if="!showResetGuide" class="progress-bar-container">
             <div class="progress-bar-fill" :style="{ width: rebootProgress + '%' }"></div>
             <span class="progress-text">{{ rebootProgress }}%</span>
           </div>
-          <p class="warning-text">{{ t('system.dontPowerOff') }}</p>
+          <div v-if="showResetGuide" class="modal-actions" style="flex-direction: column; gap: 10px; margin-top: 20px;">
+            <button class="btn-restart" style="width: 100%;" @click="goToDefaultIp">{{ t('system.goToDefaultIp') }} ({{ DEFAULT_DEVICE_IP }})</button>
+            <button class="btn-continue" style="width: 100%;" @click="refreshCurrentPage">{{ t('system.refreshCurrent') }}</button>
+          </div>
+          <p v-if="!showResetGuide" class="warning-text">{{ t('system.dontPowerOff') }}</p>
         </div>
       </div>
     </div>
@@ -320,7 +324,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
-import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
+import { FEATURE_TF_CARD_ENABLED, DEFAULT_DEVICE_IP } from '../config/features.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -339,6 +343,7 @@ const isRebooting = ref(false) // 新增：设备重启/恢复出厂状态
 const rebootProgress = ref(0)   // 新增：重启进度
 const rebootStatus = ref('')     // 新增：当前状态文案
 const isFactoryResetMode = ref(false) // 新增：是否是恢复出厂模式
+const showResetGuide = ref(false)     // 新增：恢复出厂引导按钮
 
 // ... existing code ...
 
@@ -996,6 +1001,7 @@ const startRebootProcess = (totalTime, statusText, isFactory = false) => {
   const intervalTime = 1000
   const startTime = Date.now()
   let onlineCheckTriggered = false
+  showResetGuide.value = false // 重置引导显示状态
 
   if (rebootTimer) clearInterval(rebootTimer)
 
@@ -1021,13 +1027,33 @@ const startRebootProcess = (totalTime, statusText, isFactory = false) => {
     if (elapsedTime >= (totalTime + 30) * 1000) { // 额外给30秒缓冲
       clearInterval(rebootTimer)
       if (!onlineCheckTriggered) {
-        rebootStatus.value = t('system.upgradeTimeout')
-        setTimeout(() => {
-          window.location.replace(`/?t=${Date.now()}`)
-        }, 2000)
+        if (isFactoryResetMode.value) {
+            // 策略 B: 恢复出厂超时，显示手动引导
+            rebootProgress.value = 100
+            rebootStatus.value = t('system.resetCompleteCheckIp')
+            showResetGuide.value = true
+        } else {
+            rebootStatus.value = t('system.upgradeTimeout')
+            setTimeout(() => {
+              window.location.replace(`/?t=${Date.now()}`)
+            }, 2000)
+        }
       }
     }
   }, intervalTime)
+}
+
+// 跳转到默认 IP
+const goToDefaultIp = () => {
+  const protocol = window.location.protocol
+  const port = window.location.port ? `:${window.location.port}` : ''
+  // 注意：如果恢复出厂后端口也恢复了 80，这里可能需要处理
+  window.location.href = `${protocol}//${DEFAULT_DEVICE_IP}${port}/`
+}
+
+// 手动刷新当前页
+const refreshCurrentPage = () => {
+  window.location.reload()
 }
 
 // 静默探测设备在线状态

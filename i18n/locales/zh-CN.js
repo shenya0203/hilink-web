@@ -531,9 +531,13 @@ export default {
         continueConfig: '继续配置',
         upgrading: '正在升级中...',
         upgradeTimeout: '升级超时，请手动刷新页面',
-        dontPowerOff: '升级过程中请勿断电或关闭页面',
+        dontPowerOff: '在此过程中请勿断电或关闭页面',
+        upgradeDontPowerOff: '升级过程中请勿断电或关闭页面',
         uploading: '固件正在上传中...',
-        upgradeComplete: '升级成功，正在刷新...'
+        upgradeComplete: '升级成功，正在刷新...',
+        resetCompleteCheckIp: '恢复出厂已完成！如果无法自动进入管理页面，请注意管理 IP 可能已变更为默认值。',
+        goToDefaultIp: '尝试跳转到默认 IP',
+        refreshCurrent: '手动刷新当前页'
     },
 
     // 网络配置页面

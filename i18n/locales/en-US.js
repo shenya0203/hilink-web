@@ -511,9 +511,13 @@ export default {
         continueConfig: 'Continue Configuration',
         upgrading: 'Upgrading...',
         upgradeTimeout: 'Upgrade timeout, please refresh manually',
-        dontPowerOff: 'Do not power off or close this page during upgrade',
+        dontPowerOff: 'Do not power off or close this page during this process',
+        upgradeDontPowerOff: 'Do not power off or close this page during upgrade',
         uploading: 'Firmware uploading...',
         upgradeComplete: 'Upgrade complete, refreshing...',
+        resetCompleteCheckIp: 'Factory reset complete! If you cannot access the page, be aware the IP may have changed to default.',
+        goToDefaultIp: 'Go to Default IP',
+        refreshCurrent: 'Refresh current page'
     },
 
     // Network Configuration Page
