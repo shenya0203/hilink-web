@@ -895,36 +895,36 @@ const executeUpgrade = async () => {
 // 升级流程控制
 let upgradeTimer = null
 const startUpgradeProcess = () => {
-  let progress = 0
   const totalTime = 220 // 220秒超时
-  const intervalTime = 90 // 90ms更新一次
-  const steps = totalTime * 1000 / intervalTime
-  let currentStep = 0
+  const intervalTime = 1000 // 设置为1秒，因为后台标签页的定时器会被降频
+  const startTime = Date.now() // 记录升级开始的真实时间戳
   upgradeCompleteTriggered = false // 重置完成标志位
   
   if (upgradeTimer) clearInterval(upgradeTimer)
 
   upgradeTimer = setInterval(() => {
-    currentStep++
-    progress = Math.floor((currentStep / steps) * 100)
+    const elapsedTime = Date.now() - startTime;
+    let progress = Math.floor((elapsedTime / (totalTime * 1000)) * 100);
     
     // 限制进度条最大值，最后由ping成功来完成
     if (progress > 99) progress = 99
     
     upgradeProgress.value = progress
     
-    // 进度超过50%开始探测
+    // 进度超过50%开始探测设备是否在线
     if (progress >= 50) {
       checkDeviceOnline()
     }
     
-    // 超时处理
-    if (currentStep >= steps) {
+    // 超时处理 (基于真实流逝时间)
+    if (elapsedTime >= totalTime * 1000) {
       clearInterval(upgradeTimer)
-      upgradeTimer = null
-      isUpgrading.value = false
-      alert(t('system.upgradeTimeout'))
-      window.location.href = '/?t=' + Date.now()
+      upgradeTimer = n      // 再次确认设备是否真的离线，避免误报
+      if (!upgradeCompleteTriggered) {
+        isUpgrading.value = false
+        alert(t('system.upgradeTimeout'))
+        window.location.href = '/?t=' + Date.now()
+      }
     }
   }, intervalTime)
 }
