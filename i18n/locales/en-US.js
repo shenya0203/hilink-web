@@ -517,7 +517,13 @@ export default {
         upgradeComplete: 'Upgrade complete, refreshing...',
         resetCompleteCheckIp: 'Factory reset complete! If you cannot access the page, be aware the IP may have changed to default.',
         goToDefaultIp: 'Go to Default IP',
-        refreshCurrent: 'Refresh current page'
+        refreshCurrent: 'Refresh current page',
+        invalidHostName: 'Invalid Host Name format (Alphanumeric/hyphen, 1-32 chars)',
+        invalidUsername: 'Username must be 4-16 chars, no spaces or brackets',
+        invalidPassword: 'Password must be 5-16 chars, no spaces or brackets',
+        invalidPortRange: 'Port range must be 1-65535',
+        portConflict: 'Port is already in use',
+        portConflictWith: 'Port already in use by {service}'
     },
 
     // Network Configuration Page

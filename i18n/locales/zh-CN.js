@@ -537,7 +537,13 @@ export default {
         upgradeComplete: '升级成功，正在刷新...',
         resetCompleteCheckIp: '恢复出厂已完成！如果无法自动进入管理页面，请注意管理 IP 可能已变更为默认值。',
         goToDefaultIp: '尝试跳转到默认 IP',
-        refreshCurrent: '手动刷新当前页'
+        refreshCurrent: '手动刷新当前页',
+        invalidHostName: '主机名称格式错误 (英文字母/数字/横杠，1-32位)',
+        invalidUsername: '用户名长度须为 4-16 位，且不包含空格及括号',
+        invalidPassword: '密码长度须为 5-16 位，且不包含空格及括号',
+        invalidPortRange: '端口范围须为 1-65535',
+        portConflict: '端口已被占用',
+        portConflictWith: '端口已被冲突源 {service} 占用'
     },
 
     // 网络配置页面

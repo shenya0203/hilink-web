@@ -47,24 +47,36 @@
 
     <!-- 参数设置 Tab -->
     <div v-if="activeTab === 0" class="form-section">
-      <div class="form-group">
+      <div class="form-group" :class="{ 'has-error': hostNameError }">
         <label>{{ t('system.hostName') }}:</label>
-        <input v-model="miscConfig.host_name" type="text" />
+        <div class="input-wrapper">
+          <input v-model="miscConfig.host_name" type="text" :class="{ 'input-error': hostNameError }" />
+          <span v-if="hostNameError" class="field-error-text">{{ hostNameError }}</span>
+        </div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" :class="{ 'has-error': userNameError }">
         <label>{{ t('system.username') }}:</label>
-        <input v-model="miscConfig.web_user" type="text" />
+        <div class="input-wrapper">
+          <input v-model="miscConfig.web_user" type="text" :class="{ 'input-error': userNameError }" />
+          <span v-if="userNameError" class="field-error-text">{{ userNameError }}</span>
+        </div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" :class="{ 'has-error': passwordError }">
         <label>{{ t('system.password') }}:</label>
-        <input v-model="miscConfig.web_psw" type="password" />
+        <div class="input-wrapper">
+          <input v-model="miscConfig.web_psw" type="password" :class="{ 'input-error': passwordError }" />
+          <span v-if="passwordError" class="field-error-text">{{ passwordError }}</span>
+        </div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" :class="{ 'has-error': webPortError }">
         <label>{{ t('system.webPort') }}:</label>
-        <input v-model.number="miscConfig.web_port" type="number" />
+        <div class="input-wrapper">
+          <input v-model.number="miscConfig.web_port" type="number" :class="{ 'input-error': webPortError }" />
+          <span v-if="webPortError" class="field-error-text">{{ webPortError }}</span>
+        </div>
       </div>
 
       <div class="form-group">
@@ -82,7 +94,7 @@
 
       <!-- 应用保存按钮 -->
       <div class="button-group">
-        <button class="btn-save" @click="saveParamsConfig">{{ t('common.save') }}</button>
+        <button class="btn-save" @click="saveParamsConfig" :disabled="!isParamsConfigValid" :class="{ 'btn-disabled': !isParamsConfigValid }">{{ t('common.save') }}</button>
       </div>
     </div>
 
@@ -325,6 +337,7 @@ import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 import { FEATURE_TF_CARD_ENABLED, DEFAULT_DEVICE_IP } from '../config/features.js'
+import { isValidStringSafe } from '../utils/validation.js'
 
 // 使用 i18n
 const { t } = useI18n()
@@ -344,6 +357,9 @@ const rebootProgress = ref(0)   // 新增：重启进度
 const rebootStatus = ref('')     // 新增：当前状态文案
 const isFactoryResetMode = ref(false) // 新增：是否是恢复出厂模式
 const showResetGuide = ref(false)     // 新增：恢复出厂引导按钮
+
+// Socket 配置数据 (用于冲突检测)
+const socketConfig = ref([])
 
 // ... existing code ...
 
@@ -1322,13 +1338,95 @@ watch(() => miscConfig.value.timing_reset.ss, (val) => {
   if (val < 0) miscConfig.value.timing_reset.ss = 0
 })
 
+// 加载 Socket 配置用于冲突检测
+const loadSocketConfig = async () => {
+  try {
+    const response = await apiClient.get('/download_nv.cgi?name=comm_tunnel')
+    if (response.data && Array.isArray(response.data.SOCK)) {
+      socketConfig.value = response.data.SOCK
+    }
+  } catch (err) {
+    console.error('加载Socket配置失败:', err)
+  }
+}
+
+// 参数校验逻辑
+const hostNameError = computed(() => {
+  const val = miscConfig.value.host_name
+  if (!val) return ''
+  // 主机名验证规则：1-32字符，字母/数字/横杠，不能以横杠开头或结尾
+  const reg = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$|^[a-zA-Z0-9]$/
+  if (!reg.test(val) || val.length > 32) {
+    return t('system.invalidHostName')
+  }
+  return ''
+})
+
+const userNameError = computed(() => {
+  const val = miscConfig.value.web_user
+  if (!val) return ''
+  if (!isValidStringSafe(val, 4, 16)) {
+    return t('system.invalidUsername')
+  }
+  return ''
+})
+
+const passwordError = computed(() => {
+  const val = miscConfig.value.web_psw
+  if (!val) return ''
+  if (!isValidStringSafe(val, 5, 16)) {
+    return t('system.invalidPassword')
+  }
+  return ''
+})
+
+const webPortError = computed(() => {
+  const port = miscConfig.value.web_port
+  if (port === '' || port === undefined || port === null) return ''
+  const p = Number(port)
+  
+  // 范围校验
+  if (!Number.isInteger(p) || p < 1 || p > 65535) {
+    return t('system.invalidPortRange')
+  }
+  
+  // 冲突排查：Telnet 和 WebSocket
+  if (p === Number(miscConfig.value.telnet_port)) {
+    return t('system.portConflictWith', { service: 'Telnet' })
+  }
+  if (p === Number(miscConfig.value.websock_port)) {
+    return t('system.portConflictWith', { service: 'WebSocket' })
+  }
+  
+  // 冲突排查：TCP Server
+  for (let i = 0; i < socketConfig.value.length; i++) {
+    const s = socketConfig.value[i]
+    // mode 1 为 TCP Server (参考 Socket.vue)
+    if (s.enable === 1 && s.mode === 1) {
+      if (p === Number(s.tcps.local_port)) {
+        const serviceName = i === 0 ? 'TCP Server (SOCKA)' : 'TCP Server (SOCKB)'
+        return t('system.portConflictWith', { service: serviceName })
+      }
+    }
+  }
+  
+  return ''
+})
+
+const isParamsConfigValid = computed(() => {
+  return !hostNameError.value && !userNameError.value && !passwordError.value && !webPortError.value && 
+         miscConfig.value.host_name && miscConfig.value.web_user && 
+         miscConfig.value.web_psw && miscConfig.value.web_port
+})
+
 // 加载数据
 const loadData = async () => {
   try {
     loading.value = true
     error.value = null
     
-    const promises = [loadMiscConfig()]
+    // 同时加载常规配置和用于检测冲突的 Socket 配置
+    const promises = [loadMiscConfig(), loadSocketConfig()]
     // 只有在开启TF卡功能时才加载TF卡信息
     if (FEATURE_TF_CARD_ENABLED) {
       promises.push(loadTfInfo())
@@ -1337,7 +1435,7 @@ const loadData = async () => {
     
     console.log('=== 系统设置页面数据加载完成 ===')
     console.log('MiscConfig:', miscConfig.value)
-    console.log('TfInfo:', tfInfo.value)
+    console.log('SocketConfig:', socketConfig.value)
     
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
@@ -1505,6 +1603,32 @@ onUnmounted(() => {
 .form-group select:focus {
   outline: none;
   border-color: #0066cc;
+}
+
+/* 错误状态样式 */
+.input-wrapper {
+  flex: 1;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-error {
+  border-color: #ff4d4f !important;
+  background-color: #fff2f0;
+}
+
+.field-error-text {
+  color: #ff4d4f;
+  font-size: 11px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.btn-disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .datetime-input {
