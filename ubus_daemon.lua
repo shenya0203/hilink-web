@@ -1262,6 +1262,7 @@ end
 
 
 local function set_comm_tunnel_config(args)
+    log_info("set_comm_tunnel_config: " .. cjson.encode(args))
     for k, v in pairs(args) do
         -- 处理 SOCK 配置
         local prefix, index, key = string.match(k, "([ns])_SOCK%[(%d+)%]%.(.+)")
@@ -1307,9 +1308,10 @@ local function set_comm_tunnel_config(args)
         end
         
         -- 处理 CLOUD 配置
+        log_info("cloud_key: " .. k)
         local cloud_key = string.match(k, "[ns]_CLOUD%.(.+)")
         if cloud_key then
-            comm_tunnel_config.CLOUD.enable = tonumber(v) or v
+            comm_tunnel_config.CLOUD[cloud_key] = tonumber(v) or v
             log_info("CLOUD." .. cloud_key .. " = " .. tostring(v))
         end
     end
