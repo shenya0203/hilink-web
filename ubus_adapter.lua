@@ -510,5 +510,13 @@ function _M.restart_service()
         return false, (result and result.error) or "Unknown error"
     end
 end
+function _M.download_cert_bundle(service)
+    local result = ubus_call("hilink", "download_cert_bundle", { service = service })
+    if result then
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for download_cert_bundle")
+    return nil
+end
 
 return _M

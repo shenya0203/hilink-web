@@ -96,7 +96,6 @@ local function parse_multipart(body)
     end
 
     -- 2. 从 Content-Disposition 头中提取 filename
-    -- 格式: Content-Disposition: form-data; name="c"; filename="SOCK0"
     local filename_pattern = 'filename="([^"]+)"'
     local filename = string.match(body, filename_pattern)
     if filename then
@@ -208,6 +207,24 @@ end
 -- ==========================================================
 -- 2. 业务逻辑处理模块 (Controllers)
 -- ==========================================================
+
+-- 处理 /download_cert_bundle.cgi
+local function handle_download_cert_bundle(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_download_cert_bundle args: ", cjson.encode(args))
+    local service = args.service
+    if not service then
+        send_error("Missing service parameter")
+        return
+    end
+    
+    local response = ubus_adapter.download_cert_bundle(service)
+    if not response then
+        send_error("Failed to fetch cert bundle")
+        return
+    end
+    
+    send_json(response)
+end
 
 -- 处理 /download_nv.cgi (获取静态配置)
 local function handle_download_nv(args)
@@ -598,7 +615,10 @@ if next(args) then
 end
 
 -- 路由分发
-if uri == "/download_nv.cgi" then
+if uri == "/download_cert_bundle.cgi" then
+    handle_download_cert_bundle(args)
+
+elseif uri == "/download_nv.cgi" then
     handle_download_nv(args)
 
 elseif uri == "/download_flex.cgi" then

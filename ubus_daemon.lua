@@ -200,6 +200,23 @@ local function read_file_content(path)
     return content
 end
 
+local function base64_encode_file(path)
+    -- Check if file exists first
+    local f = io.open(path, "rb")
+    if not f then 
+        return nil 
+    end
+    f:close()
+
+    local cmd = string.format("openssl base64 -A -in %s", path)
+    local handle = io.popen(cmd, "r")
+    if not handle then return nil end
+    local result = handle:read("*a")
+    handle:close()
+    
+    return result
+end
+
 local function write_file_content(path, content)
     local file = io.open(path, "w")
     if not file then return false end
@@ -684,7 +701,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.010",
+    soft_ver = "V1.011",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2526,6 +2543,34 @@ local methods = {
                 end
             end,
             {}
+        },
+
+        -- 下载服务证书集合
+        download_cert_bundle = {
+            function(req, msg)
+                local service = msg.service
+                -- 白名单校验
+                local allowed = { SOCKA = true, SOCKB = true, MQTT1 = true, MQTT2 = true }
+                if not allowed[service] then
+                    reply(req, { status = "error", msg = "Invalid service name" })
+                    return
+                end
+
+                local base_path = "/etc/config/cert/" .. service .. "/"
+                local data = {
+                    server_cert = base64_encode_file(base_path .. "server_cert.pem"),
+                    client_cert = base64_encode_file(base_path .. "client_cert.pem"),
+                    client_key = base64_encode_file(base_path .. "client_key.pem")
+                }
+
+                reply(req, {
+                    status = "success",
+                    service = service,
+                    data = data,
+                    msg = "OK"
+                })
+            end,
+            { service = ubus.STRING }
         }
     }
 }

@@ -542,6 +542,42 @@ const exportParams = async () => {
        filePromises.push(Promise.resolve({ type: 'template', name: 'templates', data: {} }))
     }
 
+    // 4.1 [新增] 获取 Socket/MQTT 的 SSL 证书
+    // 解析 comm_tunnel 配置，识别需要导出证书的服务
+    const commTunnelRes = configResults.find(item => item.name === 'comm_tunnel')
+    if (commTunnelRes && commTunnelRes.data) {
+      const ct = commTunnelRes.data
+      // console.log('Checking for certificates in comm_tunnel:', ct) // 调试日志
+      const certServices = []
+      
+      // 检查 Socket (仅 TCP Client 模式且开启 SSL 需要证书)
+      if (Array.isArray(ct.SOCK)) {
+        ct.SOCK.forEach((s, i) => {
+          // 使用 == 进行宽松比较，兼容后端返回字符串 "1" 的情况
+          if (s.enable == 1 && s.mode == 0 && s.tcpc?.ssl_mode == 1) certServices.push(i === 0 ? 'SOCKA' : 'SOCKB')
+        })
+      }
+      // 检查 MQTT (开启 SSL 需要证书)
+      if (Array.isArray(ct.MQTT)) {
+        ct.MQTT.forEach((m, i) => {
+          // 使用 == 进行宽松比较
+          if (m.enable == 1 && m.ssl_mode == 1) certServices.push(i === 0 ? 'MQTT1' : 'MQTT2')
+        })
+      }
+
+      // 添加证书下载请求 (即使后端接口未就绪，catch 块也会保证导出流程不中断)
+      certServices.forEach(srv => {
+        filePromises.push(
+          apiClient.get(`/download_cert_bundle.cgi?service=${srv}`)
+            .then(res => ({ type: 'certificate', name: srv, data: res.data?.data }))
+            .catch(err => {
+              console.warn(`Certificate export skipped for ${srv}:`, err)
+              return { type: 'certificate', name: srv, data: null }
+            })
+        )
+      })
+    }
+
     const fileResults = await Promise.all(filePromises.map(p => p.catch(err => {
       console.warn('Failed to fetch file:', err)
       return { type: 'error', error: err.message }
@@ -558,7 +594,8 @@ const exportParams = async () => {
       },
       configs: {},
       files: {},
-      templates: {}
+      templates: {},
+      certificates: {}
     }
 
     results.forEach(item => {
@@ -570,6 +607,8 @@ const exportParams = async () => {
         fullConfig.files[item.name] = item.data
       } else if (item.type === 'template') {
         fullConfig.templates = item.data
+      } else if (item.type === 'certificate' && item.data) {
+        fullConfig.certificates[item.name] = item.data
       }
     })
 
@@ -698,6 +737,23 @@ const flattenConfig = (moduleName, data) => {
   return result
 }
 
+// Base64 转 Blob 辅助函数 (用于恢复证书)
+const base64ToBlob = (base64) => {
+  try {
+    // 移除可能存在的空白字符
+    const raw = window.atob(base64.replace(/\s/g, ''))
+    const rawLength = raw.length
+    const uInt8Array = new Uint8Array(rawLength)
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i)
+    }
+    return new Blob([uInt8Array], { type: 'application/octet-stream' })
+  } catch (e) {
+    console.error('Certificate decode failed:', e)
+    return null
+  }
+}
+
 // 导入参数
 const importParams = async () => {
   if (!importFile.value) {
@@ -800,6 +856,47 @@ const importParams = async () => {
             const formData = new FormData()
             formData.append('file', blob, 'templates.txt')
             await apiClient.post('/upload/template', formData)
+          }
+        }
+
+        // 5. [新增] 恢复 SSL 证书
+        if (fullConfig.certificates) {
+          console.log('Restoring SSL Certificates...')
+          // 服务名到上传文件名的映射表 (参考 entry.lua 的 dir_map)
+          const certServiceMap = {
+            'SOCKA': 'SOCK0',
+            'SOCKB': 'SOCK1',
+            'MQTT1': 'MQTT1',
+            'MQTT2': 'MQTT2'
+          }
+
+          const certPromises = []
+
+          for (const [serviceName, certData] of Object.entries(fullConfig.certificates)) {
+            const targetName = certServiceMap[serviceName]
+            if (!targetName || !certData) continue
+
+            // 定义通用的单文件上传函数
+            const pushUpload = (url, content) => {
+              if (!content) return
+              const blob = base64ToBlob(content)
+              if (!blob) return
+
+              const fd = new FormData()
+              // key必须为 'c', filename 用于后端路由 (如 SOCK0)
+              fd.append('c', blob, targetName) 
+              certPromises.push(apiClient.post(url, fd))
+            }
+
+            // 分别上传三种证书文件
+            pushUpload('/upload/scert', certData.server_cert) // 服务器公钥
+            pushUpload('/upload/ccert', certData.client_cert) // 客户端公钥
+            pushUpload('/upload/ckey',  certData.client_key)  // 客户端私钥
+          }
+
+          if (certPromises.length > 0) {
+            // 使用 Promise.allSettled 或 catch 确保个别证书失败不阻断整体流程
+            await Promise.all(certPromises.map(p => p.catch(e => console.warn('Cert restore warning:', e))))
           }
         }
         
