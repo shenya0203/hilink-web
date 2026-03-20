@@ -279,6 +279,40 @@ export const isValidTopic = (topic) => {
 };
 
 /**
+ * 验证 MQTT 主题 (发布端，如遗嘱主题)
+ * 规则：
+ * 1. 必填，长度 1-200 字节
+ * 2. 禁止空层级 (例如 //)
+ * 3. 仅限可见 ASCII 字符 (0x21-0x7E)，且禁止空格
+ * 4. 禁止使用通配符 (#, +) 和系统保留前缀 ($)
+ * 5. 层级限制在 7 层以内
+ */
+export const isValidMqttTopic = (topic) => {
+    if (!topic) return false;
+    
+    // 1. 长度校验 (ASCII 字符下字符码点范围即为字节数)
+    if (topic.length < 1 || topic.length > 200) return false;
+
+    // 2. 仅限可见 ASCII 字符 (0x21-0x7E)，排除 MQTT 特殊字符
+    // 排除 # (0x23), + (0x2B), $ (0x24)
+    // 允许 !, ", %, &, ', (, ), *, ,, -, ., /, 0-9, :, ;, <, =, >, ?, @, A-Z, [, \, ], ^, _, `, a-z, {, |, }, ~
+    const validCharsRegex = /^[\x21\x22\x25-\x2A\x2C-\x7E]+$/;
+    if (!validCharsRegex.test(topic)) return false;
+
+    // 3. 禁止以 $ 开头 (系统保留，虽然上面正则已拦截，此处做二次防护)
+    if (topic.startsWith('$')) return false;
+
+    // 4. 禁止空层级 //
+    if (topic.includes('//')) return false;
+
+    // 5. 层级限制 (建议 7 层以内)
+    const levels = topic.split('/');
+    if (levels.length > 7) return false;
+
+    return true;
+};
+
+/**
  * 验证自定义内容 (注册包/心跳包)
  * 规则：长度 1-128 字节，仅支持 'a'-'z', 'A'-'Z', '0'-'9', '-', '.', '@'
  */

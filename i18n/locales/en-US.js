@@ -228,7 +228,7 @@ export default {
         clientKey: 'Client Private Key',
         restartRequired: 'MQTT configuration requires a device restart to take effect.',
         continueConfig: 'Continue Configuration',
-        invalidWillTopic: 'Length limit 1-200 bytes',
+        invalidWillTopic: 'Invalid format (1-200 bytes ASCII, no space/#/+/$//, max 7 levels)',
         invalidWillMessage: 'Length limit 1-200 bytes',
         invalidUsername: 'Length limit 0-200 bytes',
         invalidPassword: 'Length limit 0-200 bytes'

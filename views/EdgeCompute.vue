@@ -1027,6 +1027,7 @@ import {
   isValidChangeRange, 
   isValidReportPeriod, 
   isValidTopic,
+  isValidMqttTopic,
   isValidTimeout
 } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
@@ -1092,14 +1093,14 @@ const hasProtocolConversionErrors = computed(() => {
 const validateProtocolTopics = () => {
   if (protocolConversionConfig.value.enable === 1 && 
       protocolConversionConfig.value.channel.startsWith('MQTT')) {
-    if (!isValidTopic(protocolConversionConfig.value.subTopic)) {
-      protocolSubTopicError.value = t('edge.invalidSubTopic')
+    if (!isValidMqttTopic(protocolConversionConfig.value.subTopic)) {
+      protocolSubTopicError.value = t('edge.invalidTopic')
     } else {
       protocolSubTopicError.value = ''
     }
     
-    if (!isValidTopic(protocolConversionConfig.value.pubTopic)) {
-      protocolPubTopicError.value = t('edge.invalidPubTopic')
+    if (!isValidMqttTopic(protocolConversionConfig.value.pubTopic)) {
+      protocolPubTopicError.value = t('edge.invalidTopic')
     } else {
       protocolPubTopicError.value = ''
     }
@@ -1113,8 +1114,8 @@ const validateProtocolTopics = () => {
 watch(() => protocolConversionConfig.value.subTopic, () => {
   if (protocolConversionConfig.value.enable === 1 && 
       protocolConversionConfig.value.channel.startsWith('MQTT')) {
-    if (!isValidTopic(protocolConversionConfig.value.subTopic)) {
-      protocolSubTopicError.value = t('edge.invalidSubTopic')
+    if (!isValidMqttTopic(protocolConversionConfig.value.subTopic)) {
+      protocolSubTopicError.value = t('edge.invalidTopic')
     } else {
       protocolSubTopicError.value = ''
     }
@@ -1124,8 +1125,8 @@ watch(() => protocolConversionConfig.value.subTopic, () => {
 watch(() => protocolConversionConfig.value.pubTopic, () => {
   if (protocolConversionConfig.value.enable === 1 && 
       protocolConversionConfig.value.channel.startsWith('MQTT')) {
-    if (!isValidTopic(protocolConversionConfig.value.pubTopic)) {
-      protocolPubTopicError.value = t('edge.invalidPubTopic')
+    if (!isValidMqttTopic(protocolConversionConfig.value.pubTopic)) {
+      protocolPubTopicError.value = t('edge.invalidTopic')
     } else {
       protocolPubTopicError.value = ''
     }
@@ -2142,7 +2143,7 @@ watch(() => reportGroupForm.value.periodic, () => {
 
 watch(() => reportGroupForm.value.topic, () => {
   if (showReportGroupModal.value && ['MQTT1', 'MQTT2'].includes(reportGroupForm.value.channel)) {
-    if (!isValidTopic(reportGroupForm.value.topic)) {
+    if (!isValidMqttTopic(reportGroupForm.value.topic)) {
       reportTopicError.value = t('edge.invalidTopic')
     } else {
       reportTopicError.value = ''
@@ -2153,7 +2154,7 @@ watch(() => reportGroupForm.value.topic, () => {
 watch(() => reportGroupForm.value.channel, () => {
   if (showReportGroupModal.value) {
     if (['MQTT1', 'MQTT2'].includes(reportGroupForm.value.channel)) {
-      if (!isValidTopic(reportGroupForm.value.topic)) {
+      if (!isValidMqttTopic(reportGroupForm.value.topic)) {
         reportTopicError.value = t('edge.invalidTopic')
       } else {
         reportTopicError.value = ''

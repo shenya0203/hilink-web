@@ -320,7 +320,7 @@ import { ref, onMounted, computed } from 'vue'
 import { getCommTunnel, getOfflineCache, updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
-import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidClientId } from '../utils/validation.js'
+import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidClientId, isValidMqttTopic } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
@@ -393,9 +393,8 @@ const mqttErrors = computed(() => {
 
     // Will Topic & Message Validation
     if (mqtt.will_flag === 1) {
-      const topicLen = getByteLen(mqtt.will?.topic)
-      if (topicLen < 1 || topicLen > 200) {
-        errors[`${index}_will_topic`] = t('mqtt.invalidWillTopic') || 'Length limit 1-200 bytes'
+      if (!isValidMqttTopic(mqtt.will?.topic)) {
+        errors[`${index}_will_topic`] = t('mqtt.invalidWillTopic')
       }
 
       const msgLen = getByteLen(mqtt.will?.msg)

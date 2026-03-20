@@ -240,7 +240,7 @@ export default {
         invalidPort: '端口号必须在 1024-65534 之间',
         invalidReconnectInterval: '重连间隔必须在 5-60 秒之间',
         invalidKeepalive: 'Keepalive值必须在 5-600 秒之间',
-        invalidWillTopic: '长度范围 1-200 字节',
+        invalidWillTopic: '格式错误 (1-200字节 ASCII, 无空格/#/+/$//, 最多7层)',
         invalidWillMessage: '长度范围 1-200 字节',
         invalidUsername: '长度范围 0-200 字节',
         invalidPassword: '长度范围 0-200 字节'
@@ -438,7 +438,7 @@ export default {
         invalidRegisterAddress: '寄存器地址必须在 1-65535 之间',
         invalidChangeRange: '变化范围必须为正整数',
         invalidReportPeriod: '上报周期必须在 5-86400 秒之间',
-        invalidTopic: '主题长度须1-32字节，禁止空格和括号',
+        invalidTopic: '格式错误 (1-200字节 ASCII, 无空格/#/+/$//, 最多7层)',
         invalidSubTopic: '订阅主题长度须1-32字节，禁止空格和括号',
         invalidPubTopic: '发布主题长度须1-32字节，禁止空格和括号',
         slaveAddressDuplicate: '从机地址重复',
