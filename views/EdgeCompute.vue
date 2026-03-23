@@ -2399,6 +2399,9 @@ const exportToCloud = () => {
   }
 }
 
+// 跨模块同步标志
+const edgeConfigDirty = ref(false)
+
 // 检查点位是否被引用
 const checkPointReference = (slaveName, pointName) => {
   let referenced = false
@@ -2435,8 +2438,8 @@ const checkPointReference = (slaveName, pointName) => {
   
   const fullPointName = `${slaveName}-${pointName}`
   reportGroups.value.forEach(g => {
-    if (g.channel === 'CLOUD' && g.selectedPointsText) {
-       const lines = g.selectedPointsText.split('\n')
+    if (g.selectedPointsText) {
+       const lines = g.selectedPointsText.split('\n').map(l => l.trim())
        if (lines.includes(fullPointName)) {
            referenced = true
            if (!refTypes.includes(t('edge.refCloudReport'))) refTypes.push(t('edge.refCloudReport'))
@@ -2484,11 +2487,12 @@ const cleanUpPointReference = (slaveName, pointName) => {
      })
    })
    
+   edgeConfigDirty.value = true
    const fullPointName = `${slaveName}-${pointName}`
    reportGroups.value.forEach(g => {
-      if (g.channel === 'CLOUD' && g.selectedPointsText) {
+      if (g.selectedPointsText) {
          let lines = g.selectedPointsText.split('\n')
-         lines = lines.filter(l => l !== fullPointName)
+         lines = lines.filter(l => l.trim() !== fullPointName)
          g.selectedPointsText = lines.join('\n')
       }
    })
@@ -2529,12 +2533,14 @@ const checkSlaveReference = (slaveName) => {
 }
 
 const syncSlaveNameChange = (oldName, newName) => {
+   edgeConfigDirty.value = true
    reportGroups.value.forEach(g => {
-      if (g.channel === 'CLOUD' && g.selectedPointsText) {
+      if (g.selectedPointsText) {
          let lines = g.selectedPointsText.split('\n')
          lines = lines.map(line => {
-            if (line.startsWith(`${oldName}-`)) {
-               return line.replace(`${oldName}-`, `${newName}-`)
+            const trimmedLine = line.trim()
+            if (trimmedLine.startsWith(`${oldName}-`)) {
+               return trimmedLine.replace(`${oldName}-`, `${newName}-`)
             }
             return line
          })
@@ -2670,9 +2676,20 @@ const deleteSlave = (index) => {
   }
 
   if (window.confirm(confirmMsg)) {
+    edgeConfigDirty.value = true
     slave.points.forEach(p => {
        cleanUpPointReference(slave.name, p.name)
     })
+    
+    const prefix = `${slave.name}-`
+    reportGroups.value.forEach(g => {
+       if (g.selectedPointsText) {
+          let lines = g.selectedPointsText.split('\n')
+          lines = lines.filter(l => !l.trim().startsWith(prefix))
+          g.selectedPointsText = lines.join('\n')
+       }
+    })
+
     for (let i = mappingPoints.value.length - 1; i >= 0; i--) {
        if (mappingPoints.value[i].slaveName === slave.name) {
           mappingPoints.value.splice(i, 1)
@@ -2960,6 +2977,18 @@ const saveCurrentPage = async () => {
       await apiClient.post('/upload/edge', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      
+      // 后台级联保存关联配置
+      if (edgeConfigDirty.value) {
+        try {
+          await saveReportData()
+          await saveProtoAccessData()
+          edgeConfigDirty.value = false
+        } catch (e) {
+          console.warn('Cross-module cascade save failed:', e)
+        }
+      }
+      
       showSuccessModal.value = true
       return
     } else if (activeTab.value === 2) {
@@ -2969,34 +2998,7 @@ const saveCurrentPage = async () => {
       return
     } else if (activeTab.value === 3) {
       // 保存协议转换配置
-      // 1. GET Request to update NVRAM
-      const params = {
-        file: 'edge_access',
-        'n_group[0].enable': protocolConversionConfig.value.enable,
-        'n_group[0].proto': protocolConversionConfig.value.protocol,
-        's_group[0].up.link': protocolConversionConfig.value.channel,
-        's_group[0].down.link': protocolConversionConfig.value.channel,
-      }
-
-      if (protocolConversionConfig.value.channel.startsWith('MQTT')) {
-        params['s_group[0].up.topic'] = protocolConversionConfig.value.pubTopic
-        params['n_group[0].up.qos'] = protocolConversionConfig.value.pubQos === 'QOS1' ? 1 : (protocolConversionConfig.value.pubQos === 'QOS2' ? 2 : 0)
-        params['n_group[0].up.retention'] = protocolConversionConfig.value.retain ? 1 : 0
-        params['s_group[0].down.topic'] = protocolConversionConfig.value.subTopic
-        params['n_group[0].down.qos'] = protocolConversionConfig.value.subQos === 'QOS1' ? 1 : (protocolConversionConfig.value.subQos === 'QOS2' ? 2 : 0)
-      }
-
-      await apiClient.get('/update_nv.cgi', { params })
-
-      // 2. POST Request to upload CSV
-      const csvContent = generateConversionCsv()
-      const blob = new Blob([csvContent], { type: 'application/octet-stream' }) // User specified octet-stream
-      const formData = new FormData()
-      formData.append('c', blob, 'conver_csv')
-      
-      await apiClient.post('/upload/conver_csv', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      await saveProtoAccessData()
       showSuccessModal.value = true
       return
     }
@@ -3006,6 +3008,37 @@ const saveCurrentPage = async () => {
     console.error('保存失败:', err)
     alert(t('edge.saveFailed') + ': ' + (err.response?.data?.msg || err.message))
   }
+}
+
+const saveProtoAccessData = async () => {
+  // 1. GET Request to update NVRAM
+  const params = {
+    file: 'edge_access',
+    'n_group[0].enable': protocolConversionConfig.value.enable,
+    'n_group[0].proto': protocolConversionConfig.value.protocol,
+    's_group[0].up.link': protocolConversionConfig.value.channel,
+    's_group[0].down.link': protocolConversionConfig.value.channel,
+  }
+
+  if (protocolConversionConfig.value.channel.startsWith('MQTT')) {
+    params['s_group[0].up.topic'] = protocolConversionConfig.value.pubTopic
+    params['n_group[0].up.qos'] = protocolConversionConfig.value.pubQos === 'QOS1' ? 1 : (protocolConversionConfig.value.pubQos === 'QOS2' ? 2 : 0)
+    params['n_group[0].up.retention'] = protocolConversionConfig.value.retain ? 1 : 0
+    params['s_group[0].down.topic'] = protocolConversionConfig.value.subTopic
+    params['n_group[0].down.qos'] = protocolConversionConfig.value.subQos === 'QOS1' ? 1 : (protocolConversionConfig.value.subQos === 'QOS2' ? 2 : 0)
+  }
+
+  await apiClient.get('/update_nv.cgi', { params })
+
+  // 2. POST Request to upload CSV
+  const csvContent = generateConversionCsv()
+  const blob = new Blob([csvContent], { type: 'application/octet-stream' }) // User specified octet-stream
+  const formData = new FormData()
+  formData.append('c', blob, 'conver_csv')
+  
+  await apiClient.post('/upload/conver_csv', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
 // 数据类型映射
@@ -3387,6 +3420,25 @@ const openPointSelectionModal = () => {
   showPointSelectionModal.value = true
 }
 
+watch(selectedMappingSlaveId, (newId) => {
+  if (newId) {
+    const slave = slaveList.value.find(s => s.id === newId)
+    if (slave) {
+      tempSelectedPoints.value = []
+      const alreadyMapped = mappingPoints.value.filter(m => m.slaveName === slave.name)
+      const pendingMapped = mappingForm.value.points.filter(p => p.slaveName === slave.name)
+      
+      slave.points.forEach(p => {
+        if (alreadyMapped.some(m => m.pointName === p.name) || pendingMapped.some(pm => pm.name === p.name)) {
+          tempSelectedPoints.value.push(p)
+        }
+      })
+    }
+  } else {
+    tempSelectedPoints.value = []
+  }
+})
+
 const closePointSelectionModal = () => {
   showPointSelectionModal.value = false
 }
@@ -3447,15 +3499,38 @@ const toggleSelectAll = () => {
 }
 
 const confirmPointSelection = () => {
-  // Add selected points to mappingForm.points (or directly to table in Add Modal)
-  // The Add Modal needs to show the selected points.
-  // We'll just store them in mappingForm.points
-  // We need to store slave info too
   const slave = slaveList.value.find(s => s.id === selectedMappingSlaveId.value)
+  if (!slave) {
+    closePointSelectionModal()
+    return
+  }
   
-  tempSelectedPoints.value.forEach(p => {
-     // Check if already added to avoid duplicates in the current batch?
-     // Or just allow it.
+  const alreadyMapped = mappingPoints.value.filter(m => m.slaveName === slave.name)
+  
+  // 1. Remove checked out old points from mappingPoints directly
+  const pointsToRemove = alreadyMapped.filter(m => !tempSelectedPoints.value.some(tp => tp.name === m.pointName))
+  pointsToRemove.forEach(rem => {
+     const idx = mappingPoints.value.findIndex(m => m.id === rem.id)
+     if (idx >= 0) mappingPoints.value.splice(idx, 1)
+  })
+
+  // 2. Remove unchecked pending points from mappingForm
+  for (let i = mappingForm.value.points.length - 1; i >= 0; i--) {
+     const p = mappingForm.value.points[i]
+     if (p.slaveName === slave.name) {
+        if (!tempSelectedPoints.value.some(tp => tp.name === p.name)) {
+           mappingForm.value.points.splice(i, 1)
+        }
+     }
+  }
+
+  // 3. Add newly checked points to mappingForm.points
+  const newPoints = tempSelectedPoints.value.filter(tp => 
+     !alreadyMapped.some(m => m.pointName === tp.name) &&
+     !mappingForm.value.points.some(p => p.name === tp.name && p.slaveName === slave.name)
+  )
+
+  newPoints.forEach(p => {
      mappingForm.value.points.push({
        ...p,
        slaveName: slave.name,
