@@ -2399,6 +2399,161 @@ const exportToCloud = () => {
   }
 }
 
+// 检查点位是否被引用
+const checkPointReference = (slaveName, pointName) => {
+  let referenced = false
+  let refTypes = []
+  
+  const regex = new RegExp(`\\b${pointName}\\b`)
+  
+  slaveList.value.forEach(s => {
+    s.points.forEach(p => {
+      if (s.name === slaveName && p.name === pointName) return
+      
+      let hasFormulaRef = false
+      if (p.collectFormula) {
+         const parts = p.collectFormula.split(',')
+         if (parts.length > 1) {
+            const paramsStr = parts.slice(1).join(',')
+            if (regex.test(paramsStr)) hasFormulaRef = true
+         }
+      }
+      if (p.controlFormula) {
+         const parts = p.controlFormula.split(',')
+         if (parts.length > 1) {
+            const paramsStr = parts.slice(1).join(',')
+            if (regex.test(paramsStr)) hasFormulaRef = true
+         }
+      }
+      
+      if (hasFormulaRef) {
+         referenced = true
+         if (!refTypes.includes(t('edge.refDataCalc'))) refTypes.push(t('edge.refDataCalc'))
+      }
+    })
+  })
+  
+  const fullPointName = `${slaveName}-${pointName}`
+  reportGroups.value.forEach(g => {
+    if (g.channel === 'CLOUD' && g.selectedPointsText) {
+       const lines = g.selectedPointsText.split('\n')
+       if (lines.includes(fullPointName)) {
+           referenced = true
+           if (!refTypes.includes(t('edge.refCloudReport'))) refTypes.push(t('edge.refCloudReport'))
+       }
+    }
+  })
+  
+  if (edgeLinkCtrl.value && edgeLinkCtrl.value.group) {
+     const linkStr = JSON.stringify(edgeLinkCtrl.value.group)
+     if (linkStr.includes(`"${pointName}"`)) { 
+       referenced = true
+       if (!refTypes.includes(t('edge.refLinkCtrl'))) refTypes.push(t('edge.refLinkCtrl'))
+     }
+  }
+
+  mappingPoints.value.forEach(m => {
+     if (m.slaveName === slaveName && m.pointName === pointName) {
+        referenced = true
+        if (!refTypes.includes(t('edge.refMapping'))) refTypes.push(t('edge.refMapping'))
+     }
+  })
+  
+  return { referenced, refTypes }
+}
+
+const cleanUpPointReference = (slaveName, pointName) => {
+   const regex = new RegExp(`\\b${pointName}\\b`)
+   slaveList.value.forEach(s => {
+     s.points.forEach(p => {
+       if (s.name === slaveName && p.name === pointName) return
+       if (p.collectFormula) {
+         const parts = p.collectFormula.split(',')
+         if (parts.length > 1) {
+            const paramsStr = parts.slice(1).join(',')
+            if (regex.test(paramsStr)) p.collectFormula = ''
+         }
+       }
+       if (p.controlFormula) {
+         const parts = p.controlFormula.split(',')
+         if (parts.length > 1) {
+            const paramsStr = parts.slice(1).join(',')
+            if (regex.test(paramsStr)) p.controlFormula = ''
+         }
+       }
+     })
+   })
+   
+   const fullPointName = `${slaveName}-${pointName}`
+   reportGroups.value.forEach(g => {
+      if (g.channel === 'CLOUD' && g.selectedPointsText) {
+         let lines = g.selectedPointsText.split('\n')
+         lines = lines.filter(l => l !== fullPointName)
+         g.selectedPointsText = lines.join('\n')
+      }
+   })
+   
+   for (let i = mappingPoints.value.length - 1; i >= 0; i--) {
+      const m = mappingPoints.value[i]
+      if (m.slaveName === slaveName && m.pointName === pointName) {
+         mappingPoints.value.splice(i, 1)
+      }
+   }
+}
+
+const checkSlaveReference = (slaveName) => {
+  let referenced = false
+  let refTypes = []
+  
+  const slave = slaveList.value.find(s => s.name === slaveName)
+  if (slave) {
+     slave.points.forEach(p => {
+        const { referenced: pRef, refTypes: pRefTypes } = checkPointReference(slaveName, p.name)
+        if (pRef) {
+           referenced = true
+           pRefTypes.forEach(t => {
+              if (!refTypes.includes(t)) refTypes.push(t)
+           })
+        }
+     })
+  }
+  
+  mappingPoints.value.forEach(m => {
+     if (m.slaveName === slaveName) {
+        referenced = true
+        if (!refTypes.includes(t('edge.refMapping'))) refTypes.push(t('edge.refMapping'))
+     }
+  })
+  
+  return { referenced, refTypes }
+}
+
+const syncSlaveNameChange = (oldName, newName) => {
+   reportGroups.value.forEach(g => {
+      if (g.channel === 'CLOUD' && g.selectedPointsText) {
+         let lines = g.selectedPointsText.split('\n')
+         lines = lines.map(line => {
+            if (line.startsWith(`${oldName}-`)) {
+               return line.replace(`${oldName}-`, `${newName}-`)
+            }
+            return line
+         })
+         g.selectedPointsText = lines.join('\n')
+      }
+   })
+   
+   mappingPoints.value.forEach(m => {
+      if (m.slaveName === oldName) {
+         m.slaveName = newName
+         if (m.source && m.source.includes(oldName)) {
+           // We keep the source label mostly the same unless it exactly matches or we just replace it visually
+           // Sometimes source is IP:Port though, in which case we don't change.
+           if (m.source === oldName) m.source = newName
+         }
+      }
+   })
+}
+
 // 从机禁用的计算属性
 const isAddSlaveDisabled = computed(() => {
   return totalPoints.value >= 1000 || (slaveList.value.length - 1) >= 64
@@ -2491,6 +2646,10 @@ const saveSlave = () => {
   }
   
   if (isEditingSlave.value) {
+    const oldName = slaveList.value[editingSlaveIndex.value].name
+    if (oldName !== slaveForm.value.name) {
+       syncSlaveNameChange(oldName, slaveForm.value.name)
+    }
     slaveList.value[editingSlaveIndex.value] = newSlave
   } else {
     slaveList.value.push(newSlave)
@@ -2504,7 +2663,21 @@ const deleteSlave = (index) => {
   const slave = slaveList.value[index]
   if (slave.isSystem) return
   
-  if (confirm(`${t('edge.confirmDeleteSlave')} "${slave.name}" 吗？`)) {
+  const { referenced, refTypes } = checkSlaveReference(slave.name)
+  let confirmMsg = `${t('edge.confirmSlaveDelete1')} "${slave.name}" ?\n${t('edge.confirmSlaveDelete2')}`
+  if (referenced) {
+     confirmMsg = `${t('edge.confirmSlaveDeleteWithRef1')} ${refTypes.join('、')} ${t('edge.confirmSlaveDeleteWithRef2')}\n${t('edge.confirmSlaveDeleteWithRef3')}`
+  }
+
+  if (window.confirm(confirmMsg)) {
+    slave.points.forEach(p => {
+       cleanUpPointReference(slave.name, p.name)
+    })
+    for (let i = mappingPoints.value.length - 1; i >= 0; i--) {
+       if (mappingPoints.value[i].slaveName === slave.name) {
+          mappingPoints.value.splice(i, 1)
+       }
+    }
     slaveList.value.splice(index, 1)
     if (selectedSlaveIndex.value >= slaveList.value.length) {
       selectedSlaveIndex.value = slaveList.value.length - 1
@@ -2595,6 +2768,16 @@ const savePoint = () => {
   }
   
   if (isEditingPoint.value) {
+    const oldName = currentSlave.value.points[editingPointIndex.value].name
+    if (oldName !== pointForm.value.name) {
+       const { referenced } = checkPointReference(currentSlave.value.name, oldName)
+       if (referenced) {
+          if (!window.confirm(t('edge.pointRenameRefWarning'))) {
+             return
+          }
+          cleanUpPointReference(currentSlave.value.name, oldName)
+       }
+    }
     currentSlave.value.points[editingPointIndex.value] = newPoint
   } else {
     currentSlave.value.points.push(newPoint)
@@ -2607,7 +2790,17 @@ const deletePoint = (index) => {
   if (!currentSlave.value || currentSlave.value.isSystem) return
   
   const point = currentSlave.value.points[index]
-  if (confirm(`${t('edge.confirmDeletePoint')} "${point.name}" 吗？`)) {
+  
+  const { referenced, refTypes } = checkPointReference(currentSlave.value.name, point.name)
+  let confirmMsg = `${t('edge.confirmDeletePoint')} "${point.name}" 吗？`
+  if (referenced) {
+     confirmMsg = `${t('edge.confirmPointDeleteWithRef1')} ${refTypes.join('、')} ${t('edge.confirmPointDeleteWithRef2')}\n${t('edge.confirmPointDeleteWithRef3')}`
+  }
+
+  if (window.confirm(confirmMsg)) {
+    if (referenced) {
+       cleanUpPointReference(currentSlave.value.name, point.name)
+    }
     currentSlave.value.points.splice(index, 1)
   }
 }
