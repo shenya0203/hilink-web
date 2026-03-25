@@ -414,7 +414,7 @@ export default {
         invalidPollInterval: 'Poll interval must be between 200-5000 ms',
         invalidTimeout: 'Timeout must be between 200-10000 ms',
         invalidSlaveAddress: 'Slave address must be between 1-247',
-        invalidRegisterAddress: 'Register address must be between 1-65535',
+        invalidRegisterAddress: 'Register address must be between 1-65536',
         invalidChangeRange: 'Change range must be a positive integer',
         invalidReportPeriod: 'Report period must be between 5-86400 seconds',
         invalidTopic: 'Topic must be 1-32 bytes, no spaces or brackets',

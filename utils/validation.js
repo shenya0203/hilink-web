@@ -240,7 +240,7 @@ export const isValidSlaveAddress = (address) => {
 export const isValidRegisterAddress = (address) => {
     if (address === '' || address === null || address === undefined) return false;
     const a = Number(address);
-    return Number.isInteger(a) && a >= 1 && a <= 65535;
+    return Number.isInteger(a) && a >= 1 && a <= 65536;
 };
 
 /**
@@ -289,7 +289,7 @@ export const isValidTopic = (topic) => {
  */
 export const isValidMqttTopic = (topic) => {
     if (!topic) return false;
-    
+
     // 1. 长度校验 (ASCII 字符下字符码点范围即为字节数)
     if (topic.length < 1 || topic.length > 200) return false;
 

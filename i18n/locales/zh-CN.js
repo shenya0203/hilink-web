@@ -435,7 +435,7 @@ export default {
         invalidPollInterval: '轮询间隔必须在 200-5000 ms 之间',
         invalidTimeout: '超时时间必须在 200-10000 ms 之间',
         invalidSlaveAddress: '从机地址必须在 1-247 之间',
-        invalidRegisterAddress: '寄存器地址必须在 1-65535 之间',
+        invalidRegisterAddress: '寄存器地址必须在 1-65536 之间',
         invalidChangeRange: '变化范围必须为正整数',
         invalidReportPeriod: '上报周期必须在 5-86400 秒之间',
         invalidTopic: '格式错误 (1-200字节 ASCII, 无空格/#/+/$//, 最多7层)',
