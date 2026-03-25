@@ -1,204 +1,211 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
+    <div v-if="loading" class="loading-container">
+      <div class="loading-wrapper">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">{{ t('common.loading') }}</div>
+      </div>
+    </div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
-    <!-- 第一部分：当前状态 -->
-    <form>
-      <legend>{{ t('status.system') }}</legend>
-      <table>
-        <tbody>
-          <tr>
-            <td class="title">{{ t('status.deviceName') }}:</td>
-            <td>{{ miscInfo.host_name || '-' }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.productModel') }}:</td>
-            <td>{{ miscInfo.productModel || '-' }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.firmwareVersion') }}:</td>
-            <td>{{ statusInfo.soft_ver || '-' }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.productType') }}:</td>
-            <td>{{ statusInfo.product_type || '-' }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.runtime') }}:</td>
-            <td>{{ formatSeconds(statusInfo.runtime) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.os') }}:</td>
-            <td>{{statusInfo.os}}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.mac') }}:</td>
-            <td>{{ statusInfo.mac}}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.sn') }}:</td>
-            <td>{{ statusInfo.sn || '-' }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.systemTime') }}:</td>
-            <td>{{ formatTimestamp(statusInfo.systime) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.currentNetwork') }}:</td>
-            <td>{{ networkInfo.netdev || '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </form>
+    <div v-if="!loading">
+      <!-- 第一部分：当前状态 -->
+      <form>
+        <legend>{{ t('status.system') }}</legend>
+        <table>
+          <tbody>
+            <tr>
+              <td class="title">{{ t('status.deviceName') }}:</td>
+              <td>{{ miscInfo.host_name || '-' }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.productModel') }}:</td>
+              <td>{{ miscInfo.productModel || '-' }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.firmwareVersion') }}:</td>
+              <td>{{ statusInfo.soft_ver || '-' }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.productType') }}:</td>
+              <td>{{ statusInfo.product_type || '-' }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.runtime') }}:</td>
+              <td>{{ formatSeconds(statusInfo.runtime) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.os') }}:</td>
+              <td>{{statusInfo.os}}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.mac') }}:</td>
+              <td>{{ statusInfo.mac}}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.sn') }}:</td>
+              <td>{{ statusInfo.sn || '-' }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.systemTime') }}:</td>
+              <td>{{ formatTimestamp(statusInfo.systime) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.currentNetwork') }}:</td>
+              <td>{{ networkInfo.netdev || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
 
-    <!-- 第二部分：以太网 -->
-    <form>
-      <legend>{{ t('status.ethernet') }}</legend>
-      <table>
-        <tbody>
-          <tr>
-            <td class="title">{{ t('status.connectionStatus') }}:</td>
-            <td>{{ networkInfo.eth?.link_sta === 1 ? t('status.pluggedIn') : t('status.unplugged') }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.networkType') }}:</td>
-            <td>{{ networkInfo.eth?.ip_mode === 0 ? 'Static IP' : 'DHCP' }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.localIP') }}:</td>
-            <td>{{ networkInfo.eth?.ip }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </form>
+      <!-- 第二部分：以太网 -->
+      <form>
+        <legend>{{ t('status.ethernet') }}</legend>
+        <table>
+          <tbody>
+            <tr>
+              <td class="title">{{ t('status.connectionStatus') }}:</td>
+              <td>{{ networkInfo.eth?.link_sta === 1 ? t('status.pluggedIn') : t('status.unplugged') }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.networkType') }}:</td>
+              <td>{{ networkInfo.eth?.ip_mode === 0 ? 'Static IP' : 'DHCP' }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.localIP') }}:</td>
+              <td>{{ networkInfo.eth?.ip }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
 
-    <!-- 第三部分：蜂窝网络 -->
-    <form>
-      <legend class="collapsible" @click="toggleSection('cellular')">
-        {{ t('status.cellular') }}
-        <span class="toggle-icon">{{ showCellular ? '▼' : '▶' }}</span>
-      </legend>
-      <table v-show="showCellular">
-        <tbody>
-          <tr>
-            <td class="title">{{ t('status.activeSim') }}:</td>
-            <td>{{ networkInfo.lte?.sim === '1' ? t('status.sim_ready') : t('status.sim_absent') }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.imei') }}:</td>
-            <td>{{ networkInfo.lte?.imei }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.iccid') }}:</td>
-            <td>{{ networkInfo.lte?.iccid }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.cimi') }}:</td>
-            <td>{{ networkInfo.lte?.cimi }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.signalValue') }}:</td>
-            <td>{{ networkInfo.lte?.csq }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.signalStrength') }}:</td>
-            <td>{{ getSignalStrength(networkInfo.lte?.csq) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.localIP') }}:</td>
-            <td>{{ networkInfo.lte?.lte_ip }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.netmask') }}:</td>
-            <td>{{ networkInfo.lte?.lte_netmask }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.connectionStatus') }}:</td>
-            <td>{{ networkInfo.lte?.lte_sta || '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </form>
+      <!-- 第三部分：蜂窝网络 -->
+      <form>
+        <legend class="collapsible" @click="toggleSection('cellular')">
+          {{ t('status.cellular') }}
+          <span class="toggle-icon">{{ showCellular ? '▼' : '▶' }}</span>
+        </legend>
+        <table v-show="showCellular">
+          <tbody>
+            <tr>
+              <td class="title">{{ t('status.activeSim') }}:</td>
+              <td>{{ networkInfo.lte?.sim === '1' ? t('status.sim_ready') : t('status.sim_absent') }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.imei') }}:</td>
+              <td>{{ networkInfo.lte?.imei }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.iccid') }}:</td>
+              <td>{{ networkInfo.lte?.iccid }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.cimi') }}:</td>
+              <td>{{ networkInfo.lte?.cimi }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.signalValue') }}:</td>
+              <td>{{ networkInfo.lte?.csq }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.signalStrength') }}:</td>
+              <td>{{ getSignalStrength(networkInfo.lte?.csq) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.localIP') }}:</td>
+              <td>{{ networkInfo.lte?.lte_ip }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.netmask') }}:</td>
+              <td>{{ networkInfo.lte?.lte_netmask }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.connectionStatus') }}:</td>
+              <td>{{ networkInfo.lte?.lte_sta || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
 
-    <!-- 第四部分：TCP 连接状态 -->
-    <form>
-      <legend class="collapsible" @click="toggleSection('tcp')">
-        {{ t('status.tcpStatus') }}
-        <span class="toggle-icon">{{ showTcp ? '▼' : '▶' }}</span>
-      </legend>
-      <table v-show="showTcp">
-        <tbody>
-          <tr>
-            <td class="title">{{ t('status.socket1Status') }}:</td>
-            <td>{{ getConnectionStatus(statusInfo.socketa_sta) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.socket1Flag') }}:</td>
-            <td>{{ statusInfo.socketa_enable === 0 ? t('common.off') : t('common.on') }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.socket2Status') }}:</td>
-            <td>{{ getConnectionStatus(statusInfo.socketb_sta) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.socket2Flag') }}:</td>
-            <td>{{ statusInfo.socketb_enable === 0 ? t('common.off') : t('common.on') }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </form>
+      <!-- 第四部分：TCP 连接状态 -->
+      <form>
+        <legend class="collapsible" @click="toggleSection('tcp')">
+          {{ t('status.tcpStatus') }}
+          <span class="toggle-icon">{{ showTcp ? '▼' : '▶' }}</span>
+        </legend>
+        <table v-show="showTcp">
+          <tbody>
+            <tr>
+              <td class="title">{{ t('status.socket1Status') }}:</td>
+              <td>{{ getConnectionStatus(statusInfo.socketa_sta) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.socket1Flag') }}:</td>
+              <td>{{ statusInfo.socketa_enable === 0 ? t('common.off') : t('common.on') }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.socket2Status') }}:</td>
+              <td>{{ getConnectionStatus(statusInfo.socketb_sta) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.socket2Flag') }}:</td>
+              <td>{{ statusInfo.socketb_enable === 0 ? t('common.off') : t('common.on') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
 
-    <!-- 第五部分：MQTT 连接状态 -->
-    <form>
-      <legend class="collapsible" @click="toggleSection('mqtt')">
-        {{ t('status.mqttStatus') }}
-        <span class="toggle-icon">{{ showMqtt ? '▼' : '▶' }}</span>
-      </legend>
-      <table v-show="showMqtt">
-        <tbody>
-          <tr>
-            <td class="title">{{ t('status.mqtt1Status') }}:</td>
-            <td>{{ getConnectionStatus(statusInfo.mqtt1_sta) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.mqtt1Flag') }}:</td>
-            <td>{{ statusInfo.mqtt1_enable === 0 ? t('common.off') : t('common.on') }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.mqtt2Status') }}:</td>
-            <td>{{ getConnectionStatus(statusInfo.mqtt2_sta) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.mqtt2Flag') }}:</td>
-            <td>{{ statusInfo.mqtt2_enable === 0 ? t('common.off') : t('common.on') }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </form>
+      <!-- 第五部分：MQTT 连接状态 -->
+      <form>
+        <legend class="collapsible" @click="toggleSection('mqtt')">
+          {{ t('status.mqttStatus') }}
+          <span class="toggle-icon">{{ showMqtt ? '▼' : '▶' }}</span>
+        </legend>
+        <table v-show="showMqtt">
+          <tbody>
+            <tr>
+              <td class="title">{{ t('status.mqtt1Status') }}:</td>
+              <td>{{ getConnectionStatus(statusInfo.mqtt1_sta) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.mqtt1Flag') }}:</td>
+              <td>{{ statusInfo.mqtt1_enable === 0 ? t('common.off') : t('common.on') }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.mqtt2Status') }}:</td>
+              <td>{{ getConnectionStatus(statusInfo.mqtt2_sta) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.mqtt2Flag') }}:</td>
+              <td>{{ statusInfo.mqtt2_enable === 0 ? t('common.off') : t('common.on') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
 
-    <!-- 第六部分：CLOUD 连接状态 -->
-    <form>
-      <legend class="collapsible" @click="toggleSection('cloud')">
-        {{ t('status.cloudStatus') }}
-        <span class="toggle-icon">{{ showCloud ? '▼' : '▶' }}</span>
-      </legend>
-      <table v-show="showCloud">
-        <tbody>
-          <tr>
-            <td class="title">{{ t('status.cloudConnectionStatus') }}:</td>
-            <td>{{ getConnectionStatus(statusInfo.cloud_sta) }}</td>
-          </tr>
-          <tr>
-            <td class="title">{{ t('status.cloudConnectionFlag') }}:</td>
-            <td>{{ statusInfo.cloud_enable === 0 ? t('common.off') : t('common.on') }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </form>
+      <!-- 第六部分：CLOUD 连接状态 -->
+      <form>
+        <legend class="collapsible" @click="toggleSection('cloud')">
+          {{ t('status.cloudStatus') }}
+          <span class="toggle-icon">{{ showCloud ? '▼' : '▶' }}</span>
+        </legend>
+        <table v-show="showCloud">
+          <tbody>
+            <tr>
+              <td class="title">{{ t('status.cloudConnectionStatus') }}:</td>
+              <td>{{ getConnectionStatus(statusInfo.cloud_sta) }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.cloudConnectionFlag') }}:</td>
+              <td>{{ statusInfo.cloud_enable === 0 ? t('common.off') : t('common.on') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
+    </div>
   </div>
 </template>
 
@@ -402,5 +409,57 @@ legend.collapsible:hover {
   font-size: 0.75em;
   margin-left: 8px;
   flex-shrink: 0;
+}
+
+/* 加载动画样式 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  width: 100%;
+}
+
+.loading-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.loading-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0066cc;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  color: #666;
+  font-size: 14px;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  font-size: 14px;
+}
+
+.error {
+  background-color: #ffebee;
+  border: 1px solid #ffcdd2;
+  color: #c62828;
+  padding: 12px 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

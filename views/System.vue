@@ -1,225 +1,232 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
+    <div v-if="loading" class="loading-container">
+      <div class="loading-wrapper">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">{{ t('common.loading') }}</div>
+      </div>
+    </div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
-    <!-- 系统设置标题 -->
-    <div class="description-box">
-      <div class="desc-title">{{ t('system.title') }}</div>
-    </div>
-    <div class="desc-content">{{ t('system.description') }}</div>
+    <div v-if="!loading">
+      <!-- 系统设置标题 -->
+      <div class="description-box">
+        <div class="desc-title">{{ t('system.title') }}</div>
+      </div>
+      <div class="desc-content">{{ t('system.description') }}</div>
 
-    <!-- 标签页选择 -->
-    <div class="tabs">
-      <button 
-        class="tab-btn" 
-        :class="{ active: activeTab === 0 }"
-        @click="activeTab = 0"
-      >
-        {{ t('system.tabParams') }}
-      </button>
-      <button 
-        class="tab-btn" 
-        :class="{ active: activeTab === 1 }"
-        @click="activeTab = 1"
-      >
-        {{ t('system.tabTime') }}
-      </button>
-      <button 
-        class="tab-btn" 
-        :class="{ active: activeTab === 2 }"
-        @click="activeTab = 2"
-      >
-        {{ t('system.tabDevice') }}
-      </button>
-      <button 
-        v-if="FEATURE_TF_CARD_ENABLED"
-        class="tab-btn" 
-        :class="{ active: activeTab === 3 }"
-        @click="activeTab = 3"
-      >
-        {{ t('system.tabTfCard') }}
-      </button>
-    </div>
-
-    <!-- 参数设置 Tab -->
-    <div v-if="activeTab === 0" class="form-section">
-      <div class="form-group" :class="{ 'has-error': hostNameError }">
-        <label>{{ t('system.hostName') }}:</label>
-        <div class="input-wrapper">
-          <input v-model="miscConfig.host_name" type="text" :class="{ 'input-error': hostNameError }" />
-          <span v-if="hostNameError" class="field-error-text">{{ hostNameError }}</span>
-        </div>
+      <!-- 标签页选择 -->
+      <div class="tabs">
+        <button 
+          class="tab-btn" 
+          :class="{ active: activeTab === 0 }"
+          @click="activeTab = 0"
+        >
+          {{ t('system.tabParams') }}
+        </button>
+        <button 
+          class="tab-btn" 
+          :class="{ active: activeTab === 1 }"
+          @click="activeTab = 1"
+        >
+          {{ t('system.tabTime') }}
+        </button>
+        <button 
+          class="tab-btn" 
+          :class="{ active: activeTab === 2 }"
+          @click="activeTab = 2"
+        >
+          {{ t('system.tabDevice') }}
+        </button>
+        <button 
+          v-if="FEATURE_TF_CARD_ENABLED"
+          class="tab-btn" 
+          :class="{ active: activeTab === 3 }"
+          @click="activeTab = 3"
+        >
+          {{ t('system.tabTfCard') }}
+        </button>
       </div>
 
-      <div class="form-group" :class="{ 'has-error': userNameError }">
-        <label>{{ t('system.username') }}:</label>
-        <div class="input-wrapper">
-          <input v-model="miscConfig.web_user" type="text" :class="{ 'input-error': userNameError }" />
-          <span v-if="userNameError" class="field-error-text">{{ userNameError }}</span>
-        </div>
-      </div>
-
-      <div class="form-group" :class="{ 'has-error': passwordError }">
-        <label>{{ t('system.password') }}:</label>
-        <div class="input-wrapper">
-          <input v-model="miscConfig.web_psw" type="password" :class="{ 'input-error': passwordError }" />
-          <span v-if="passwordError" class="field-error-text">{{ passwordError }}</span>
-        </div>
-      </div>
-
-      <div class="form-group" :class="{ 'has-error': webPortError }">
-        <label>{{ t('system.webPort') }}:</label>
-        <div class="input-wrapper">
-          <input v-model.number="miscConfig.web_port" type="number" :class="{ 'input-error': webPortError }" />
-          <span v-if="webPortError" class="field-error-text">{{ webPortError }}</span>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.exportParams') }}:</label>
-        <button type="button" class="btn-action" @click="exportParams">{{ t('common.export') }}</button>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.importParams') }}:</label>
-        <input type="file" ref="importFileInput" @change="handleImportFileSelect" accept=".json" style="display:none" />
-        <button type="button" class="btn-action" @click="triggerImportFile">{{ t('common.selectFile') }}</button>
-        <button type="button" class="btn-action" @click="importParams" :disabled="!importFile">{{ t('common.import') }}</button>
-        <span v-if="importFile" class="file-name">{{ t('common.selectedFile') }}: {{ importFile.name }}</span>
-      </div>
-
-      <!-- 应用保存按钮 -->
-      <div class="button-group">
-        <button class="btn-save" @click="saveParamsConfig" :disabled="!isParamsConfigValid" :class="{ 'btn-disabled': !isParamsConfigValid }">{{ t('common.save') }}</button>
-      </div>
-    </div>
-
-    <!-- 系统时间 Tab -->
-    <div v-if="activeTab === 1" class="form-section">
-      <div class="form-group">
-        <label>{{ t('system.timezone') }}:</label>
-        <select v-model.number="miscConfig.ntp_utc">
-          <option v-for="tz in timezoneOptions" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.ntpEnable') }}:</label>
-        <select v-model.number="miscConfig.ntp_sync_en">
-          <option :value="0">{{ t('common.disable') }}</option>
-          <option :value="1">{{ t('common.enable') }}</option>
-        </select>
-      </div>
-
-      <template v-if="miscConfig.ntp_sync_en === 1">
-        <div class="form-group">
-          <label>{{ t('system.ntpServer') }}:</label>
-          <input v-model="miscConfig.ntp_url[0]" type="text" />
-        </div>
-
-        <div class="form-group">
-          <label>{{ t('system.ntpServer2') }}:</label>
-          <input v-model="miscConfig.ntp_url[1]" type="text" />
-        </div>
-
-        <div class="form-group">
-          <label>{{ t('system.ntpServer3') }}:</label>
-          <input v-model="miscConfig.ntp_url[2]" type="text" />
-        </div>
-
-        <div class="form-group">
-          <label>{{ t('system.ntpServer4') }}:</label>
-          <input v-model="miscConfig.ntp_url[3]" type="text" />
-        </div>
-      </template>
-
-      <div class="form-group">
-        <label>{{ t('system.currentTime') }}:</label>
-        <span class="time-display">{{ currentTime }}</span>
-        <button type="button" class="btn-action" @click="syncBrowserTime">{{ t('system.sync') }}</button>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.timeSettings') }}:</label>
-        <input type="datetime-local" v-model="manualTime" class="datetime-input" />
-        <button type="button" class="btn-action" @click="setManualTime">{{ t('system.setTime') }}</button>
-      </div>
-
-      <!-- 应用保存按钮 -->
-      <div class="button-group">
-        <button class="btn-save" @click="saveTimeConfig">{{ t('common.save') }}</button>
-      </div>
-    </div>
-
-    <!-- 设备管理 Tab -->
-    <div v-if="activeTab === 2" class="form-section">
-      <div class="form-group">
-        <label>{{ t('system.firmwareUpgrade') }}:</label>
-        <input type="file" ref="firmwareFileInput" @change="handleFirmwareFileSelect" accept=".bin,.img,.fw" style="display:none" />
-        <button type="button" class="btn-action" @click="triggerFirmwareFile">{{ t('common.selectFile') }}</button>
-        <button type="button" class="btn-action" @click="upgradeFirmware" :disabled="!firmwareFile">{{ t('system.flashFirmware') }}</button>
-        <span v-if="firmwareFile" class="file-name">{{ t('common.selectedFile') }}: {{ firmwareFile.name }}</span>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.factoryReset') }}:</label>
-        <button type="button" class="btn-action btn-danger" @click="factoryReset">{{ t('system.factoryReset') }}</button>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.restart') }}:</label>
-        <button type="button" class="btn-action" @click="restartDevice">{{ t('system.restartNow') }}</button>
-      </div>
-
-      <div class="form-group">
-        <label>{{ t('system.scheduledRestart') }}:</label>
-        <select v-model.number="miscConfig.timing_reset.enable">
-          <option :value="0">{{ t('common.disable') }}</option>
-          <option :value="1">{{ t('common.enable') }}</option>
-        </select>
-      </div>
-
-      <template v-if="miscConfig.timing_reset.enable === 1">
-        <div class="form-group">
-          <label>{{ t('system.timeSelect') }}:</label>
-          <div class="time-picker">
-            <input type="number" v-model.number="miscConfig.timing_reset.hh" min="0" max="23" class="time-input" placeholder="时" /> :
-            <input type="number" v-model.number="miscConfig.timing_reset.mm" min="0" max="59" class="time-input" placeholder="分" /> :
-            <input type="number" v-model.number="miscConfig.timing_reset.ss" min="0" max="59" class="time-input" placeholder="秒" />
+      <!-- 参数设置 Tab -->
+      <div v-if="activeTab === 0" class="form-section">
+        <div class="form-group" :class="{ 'has-error': hostNameError }">
+          <label>{{ t('system.hostName') }}:</label>
+          <div class="input-wrapper">
+            <input v-model="miscConfig.host_name" type="text" :class="{ 'input-error': hostNameError }" />
+            <span v-if="hostNameError" class="field-error-text">{{ hostNameError }}</span>
           </div>
         </div>
-      </template>
 
-      <!-- 应用保存按钮 -->
-      <div class="button-group">
-        <button class="btn-save" @click="saveDeviceConfig">{{ t('common.save') }}</button>
-      </div>
-    </div>
+        <div class="form-group" :class="{ 'has-error': userNameError }">
+          <label>{{ t('system.username') }}:</label>
+          <div class="input-wrapper">
+            <input v-model="miscConfig.web_user" type="text" :class="{ 'input-error': userNameError }" />
+            <span v-if="userNameError" class="field-error-text">{{ userNameError }}</span>
+          </div>
+        </div>
 
-    <!-- TF卡管理 Tab -->
-    <div v-if="activeTab === 3 && FEATURE_TF_CARD_ENABLED" class="form-section">
-      <div class="form-group">
-        <label>{{ t('system.spaceUsed') }}:</label>
-        <span class="info-text">{{ tfInfo.usedSpace }} / {{ tfInfo.totalSpace }}</span>
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: tfInfo.usagePercent + '%' }"></div>
+        <div class="form-group" :class="{ 'has-error': passwordError }">
+          <label>{{ t('system.password') }}:</label>
+          <div class="input-wrapper">
+            <input v-model="miscConfig.web_psw" type="password" :class="{ 'input-error': passwordError }" />
+            <span v-if="passwordError" class="field-error-text">{{ passwordError }}</span>
+          </div>
+        </div>
+
+        <div class="form-group" :class="{ 'has-error': webPortError }">
+          <label>{{ t('system.webPort') }}:</label>
+          <div class="input-wrapper">
+            <input v-model.number="miscConfig.web_port" type="number" :class="{ 'input-error': webPortError }" />
+            <span v-if="webPortError" class="field-error-text">{{ webPortError }}</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.exportParams') }}:</label>
+          <button type="button" class="btn-action" @click="exportParams">{{ t('common.export') }}</button>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.importParams') }}:</label>
+          <input type="file" ref="importFileInput" @change="handleImportFileSelect" accept=".json" style="display:none" />
+          <button type="button" class="btn-action" @click="triggerImportFile">{{ t('common.selectFile') }}</button>
+          <button type="button" class="btn-action" @click="importParams" :disabled="!importFile">{{ t('common.import') }}</button>
+          <span v-if="importFile" class="file-name">{{ t('common.selectedFile') }}: {{ importFile.name }}</span>
+        </div>
+
+        <!-- 应用保存按钮 -->
+        <div class="button-group">
+          <button class="btn-save" @click="saveParamsConfig" :disabled="!isParamsConfigValid" :class="{ 'btn-disabled': !isParamsConfigValid }">{{ t('common.save') }}</button>
         </div>
       </div>
 
-      <div class="form-group">
-        <label>{{ t('system.tfStatus') }}:</label>
-        <span :class="['status-badge', tfInfo.status === 1 ? 'status-ok' : 'status-error']">
-          {{ tfInfo.status === 1 ? t('system.inserted') : t('system.notInserted') }}
-        </span>
+      <!-- 系统时间 Tab -->
+      <div v-if="activeTab === 1" class="form-section">
+        <div class="form-group">
+          <label>{{ t('system.timezone') }}:</label>
+          <select v-model.number="miscConfig.ntp_utc">
+            <option v-for="tz in timezoneOptions" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.ntpEnable') }}:</label>
+          <select v-model.number="miscConfig.ntp_sync_en">
+            <option :value="0">{{ t('common.disable') }}</option>
+            <option :value="1">{{ t('common.enable') }}</option>
+          </select>
+        </div>
+
+        <template v-if="miscConfig.ntp_sync_en === 1">
+          <div class="form-group">
+            <label>{{ t('system.ntpServer') }}:</label>
+            <input v-model="miscConfig.ntp_url[0]" type="text" />
+          </div>
+
+          <div class="form-group">
+            <label>{{ t('system.ntpServer2') }}:</label>
+            <input v-model="miscConfig.ntp_url[1]" type="text" />
+          </div>
+
+          <div class="form-group">
+            <label>{{ t('system.ntpServer3') }}:</label>
+            <input v-model="miscConfig.ntp_url[2]" type="text" />
+          </div>
+
+          <div class="form-group">
+            <label>{{ t('system.ntpServer4') }}:</label>
+            <input v-model="miscConfig.ntp_url[3]" type="text" />
+          </div>
+        </template>
+
+        <div class="form-group">
+          <label>{{ t('system.currentTime') }}:</label>
+          <span class="time-display">{{ currentTime }}</span>
+          <button type="button" class="btn-action" @click="syncBrowserTime">{{ t('system.sync') }}</button>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.timeSettings') }}:</label>
+          <input type="datetime-local" v-model="manualTime" class="datetime-input" />
+          <button type="button" class="btn-action" @click="setManualTime">{{ t('system.setTime') }}</button>
+        </div>
+
+        <!-- 应用保存按钮 -->
+        <div class="button-group">
+          <button class="btn-save" @click="saveTimeConfig">{{ t('common.save') }}</button>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label>{{ t('system.formatTf') }}:</label>
-        <button type="button" class="btn-action btn-danger" @click="formatTfCard" :disabled="tfInfo.status !== 1">{{ t('system.format') }}</button>
+      <!-- 设备管理 Tab -->
+      <div v-if="activeTab === 2" class="form-section">
+        <div class="form-group">
+          <label>{{ t('system.firmwareUpgrade') }}:</label>
+          <input type="file" ref="firmwareFileInput" @change="handleFirmwareFileSelect" accept=".bin,.img,.fw" style="display:none" />
+          <button type="button" class="btn-action" @click="triggerFirmwareFile">{{ t('common.selectFile') }}</button>
+          <button type="button" class="btn-action" @click="upgradeFirmware" :disabled="!firmwareFile">{{ t('system.flashFirmware') }}</button>
+          <span v-if="firmwareFile" class="file-name">{{ t('common.selectedFile') }}: {{ firmwareFile.name }}</span>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.factoryReset') }}:</label>
+          <button type="button" class="btn-action btn-danger" @click="factoryReset">{{ t('system.factoryReset') }}</button>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.restart') }}:</label>
+          <button type="button" class="btn-action" @click="restartDevice">{{ t('system.restartNow') }}</button>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.scheduledRestart') }}:</label>
+          <select v-model.number="miscConfig.timing_reset.enable">
+            <option :value="0">{{ t('common.disable') }}</option>
+            <option :value="1">{{ t('common.enable') }}</option>
+          </select>
+        </div>
+
+        <template v-if="miscConfig.timing_reset.enable === 1">
+          <div class="form-group">
+            <label>{{ t('system.timeSelect') }}:</label>
+            <div class="time-picker">
+              <input type="number" v-model.number="miscConfig.timing_reset.hh" min="0" max="23" class="time-input" placeholder="时" /> :
+              <input type="number" v-model.number="miscConfig.timing_reset.mm" min="0" max="59" class="time-input" placeholder="分" /> :
+              <input type="number" v-model.number="miscConfig.timing_reset.ss" min="0" max="59" class="time-input" placeholder="秒" />
+            </div>
+          </div>
+        </template>
+
+        <!-- 应用保存按钮 -->
+        <div class="button-group">
+          <button class="btn-save" @click="saveDeviceConfig">{{ t('common.save') }}</button>
+        </div>
+      </div>
+
+      <!-- TF卡管理 Tab -->
+      <div v-if="activeTab === 3 && FEATURE_TF_CARD_ENABLED" class="form-section">
+        <div class="form-group">
+          <label>{{ t('system.spaceUsed') }}:</label>
+          <span class="info-text">{{ tfInfo.usedSpace }} / {{ tfInfo.totalSpace }}</span>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: tfInfo.usagePercent + '%' }"></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.tfStatus') }}:</label>
+          <span :class="['status-badge', tfInfo.status === 1 ? 'status-ok' : 'status-error']">
+            {{ tfInfo.status === 1 ? t('system.inserted') : t('system.notInserted') }}
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('system.formatTf') }}:</label>
+          <button type="button" class="btn-action btn-danger" @click="formatTfCard" :disabled="tfInfo.status !== 1">{{ t('system.format') }}</button>
+        </div>
       </div>
     </div>
     <!-- 重启确认弹窗 -->
@@ -1937,9 +1944,29 @@ onUnmounted(() => {
   color: #721c24;
 }
 
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  width: 100%;
+}
+
+.loading-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
 .loading {
   text-align: center;
   padding: 40px 20px;
+  color: #666;
+  font-size: 14px;
+}
+
+.loading-text {
   color: #666;
   font-size: 14px;
 }

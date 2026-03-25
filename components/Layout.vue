@@ -11,7 +11,7 @@
         <h4>{{ t('navbar.subtitle') }}</h4>
       </div>
       <div class="logo_right">
-        <div class="right_top">N720</div>
+        <div class="right_top">{{ APP_DEVICE_MODEL }}</div>
         <div class="right_bottom language-switcher">
           <span 
             :class="{ active: locale === 'zh-CN' }" 
@@ -84,6 +84,7 @@
 import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from '../i18n/useI18n.js';
+import { APP_DEVICE_MODEL } from '../config/features.js';
 
 const router = useRouter();
 const route = useRoute();

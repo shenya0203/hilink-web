@@ -1,299 +1,306 @@
 <template>
   <div>
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
+    <div v-if="loading" class="loading-container">
+      <div class="loading-wrapper">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">{{ t('common.loading') }}</div>
+      </div>
+    </div>
     
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
-    <!-- 网络配置标题 -->
-    <form>
-      <legend>{{ t('network.title') }}</legend>
-      <div class="config-subtitle">{{ t('network.description') }}</div>
-    </form>
+    <div v-if="!loading">
+      <!-- 网络配置标题 -->
+      <form>
+        <legend>{{ t('network.title') }}</legend>
+        <div class="config-subtitle">{{ t('network.description') }}</div>
+      </form>
 
-    <!-- 标签页选择 -->
-    <div class="tabs">
-      <button 
-        class="tab-btn" 
-        :class="{ active: activeTab === 'ethernet', 'has-error': hasTabError('ethernet') }"
-        @click="activeTab = 'ethernet'"
-      >
-        {{ t('network.tabPriority') }}
-      </button>
-      <button 
-        class="tab-btn" 
-        :class="{ active: activeTab === 'lte', 'has-error': hasTabError('lte') }"
-        @click="activeTab = 'lte'"
-      >
-        {{ t('network.tabEthernet') }}
-      </button>
-      <button 
-        v-if="config.net_select !== '2'"
-        class="tab-btn" 
-        :class="{ active: activeTab === 'ltecat', 'has-error': hasTabError('ltecat') }"
-        @click="activeTab = 'ltecat'"
-      >
-        {{ t('network.tabLte') }}
-      </button>
-    </div>
-
-    <!-- 网络优先选择部分 -->
-    <form v-if="activeTab === 'ethernet'">
-      <legend>{{ t('network.prioritySelect') }}</legend>
-      <div class="form-section">
-        <div class="form-group">
-          <label>{{ t('network.networkPriority') }}:</label>
-          <select v-model="config.net_select">
-            <option value="0">{{ t('network.ethernetFirst') }}</option>
-            <option value="1">{{ t('network.cellularFirst') }}</option>
-            <option value="2">{{ t('network.ethernetOnly') }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.probePeriod') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.probe_period" 
-              type="text" 
-              placeholder="-" 
-              :class="{ 'input-error': getFieldError('probe_period') }"
-            />
-            <span v-if="getFieldError('probe_period')" class="field-error-text">
-              {{ getFieldError('probe_period') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.probeServer1') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.probe_server1" 
-              type="text" 
-              placeholder="-" 
-              :class="{ 'input-error': getFieldError('probe_server1') }"
-            />
-            <span v-if="getFieldError('probe_server1')" class="field-error-text">
-              {{ getFieldError('probe_server1') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.probeServer2') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.probe_server2" 
-              type="text" 
-              placeholder="-" 
-              :class="{ 'input-error': getFieldError('probe_server2') }"
-            />
-            <span v-if="getFieldError('probe_server2')" class="field-error-text">
-              {{ getFieldError('probe_server2') }}
-            </span>
-          </div>
-        </div>
+      <!-- 标签页选择 -->
+      <div class="tabs">
+        <button 
+          class="tab-btn" 
+          :class="{ active: activeTab === 'ethernet', 'has-error': hasTabError('ethernet') }"
+          @click="activeTab = 'ethernet'"
+        >
+          {{ t('network.tabPriority') }}
+        </button>
+        <button 
+          class="tab-btn" 
+          :class="{ active: activeTab === 'lte', 'has-error': hasTabError('lte') }"
+          @click="activeTab = 'lte'"
+        >
+          {{ t('network.tabEthernet') }}
+        </button>
+        <button 
+          v-if="config.net_select !== '2'"
+          class="tab-btn" 
+          :class="{ active: activeTab === 'ltecat', 'has-error': hasTabError('ltecat') }"
+          @click="activeTab = 'ltecat'"
+        >
+          {{ t('network.tabLte') }}
+        </button>
       </div>
-    </form>
 
-    <!-- 以太网配置部分 -->
-    <form v-if="activeTab === 'lte'" style="margin-top: 20px;">
-      <legend>{{ t('network.ethernet') }}</legend>
-      <div class="form-section">
-        <div class="form-group">
-          <label>{{ t('network.workMode') }}:</label>
-          <select v-model="config.eth_mode">
-            <option value="0">{{ t('network.staticMode') }}</option>
-            <option value="1">{{ t('network.dhcpMode') }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.dnsMode') }}:</label>
-          <select v-model="config.eth_dns_mode">
-            <option value="0">{{ t('network.manualDns') }}</option>
-            <option value="1">{{ t('network.autoDns') }}</option>
-          </select>
-        </div>
-        <div v-if="config.eth_mode === '0'" class="form-group">
-          <label>{{ t('network.lanIp') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.eth_ip" 
-              type="text" 
-              placeholder="" 
-              :class="{ 'input-error': getFieldError('eth_ip') }"
-            />
-            <span v-if="getFieldError('eth_ip')" class="field-error-text">
-              {{ getFieldError('eth_ip') }}
-            </span>
+      <!-- 网络优先选择部分 -->
+      <form v-if="activeTab === 'ethernet'">
+        <legend>{{ t('network.prioritySelect') }}</legend>
+        <div class="form-section">
+          <div class="form-group">
+            <label>{{ t('network.networkPriority') }}:</label>
+            <select v-model="config.net_select">
+              <option value="0">{{ t('network.ethernetFirst') }}</option>
+              <option value="1">{{ t('network.cellularFirst') }}</option>
+              <option value="2">{{ t('network.ethernetOnly') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.probePeriod') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.probe_period" 
+                type="text" 
+                placeholder="-" 
+                :class="{ 'input-error': getFieldError('probe_period') }"
+              />
+              <span v-if="getFieldError('probe_period')" class="field-error-text">
+                {{ getFieldError('probe_period') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.probeServer1') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.probe_server1" 
+                type="text" 
+                placeholder="-" 
+                :class="{ 'input-error': getFieldError('probe_server1') }"
+              />
+              <span v-if="getFieldError('probe_server1')" class="field-error-text">
+                {{ getFieldError('probe_server1') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.probeServer2') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.probe_server2" 
+                type="text" 
+                placeholder="-" 
+                :class="{ 'input-error': getFieldError('probe_server2') }"
+              />
+              <span v-if="getFieldError('probe_server2')" class="field-error-text">
+                {{ getFieldError('probe_server2') }}
+              </span>
+            </div>
           </div>
         </div>
-        <div v-if="config.eth_mode === '0'" class="form-group">
-          <label>{{ t('network.subnetMask') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.eth_netmask" 
-              type="text" 
-              placeholder="" 
-              :class="{ 'input-error': getFieldError('eth_netmask') }"
-            />
-            <span v-if="getFieldError('eth_netmask')" class="field-error-text">
-              {{ getFieldError('eth_netmask') }}
-            </span>
+      </form>
+
+      <!-- 以太网配置部分 -->
+      <form v-if="activeTab === 'lte'" style="margin-top: 20px;">
+        <legend>{{ t('network.ethernet') }}</legend>
+        <div class="form-section">
+          <div class="form-group">
+            <label>{{ t('network.workMode') }}:</label>
+            <select v-model="config.eth_mode">
+              <option value="0">{{ t('network.staticMode') }}</option>
+              <option value="1">{{ t('network.dhcpMode') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.dnsMode') }}:</label>
+            <select v-model="config.eth_dns_mode">
+              <option value="0">{{ t('network.manualDns') }}</option>
+              <option value="1">{{ t('network.autoDns') }}</option>
+            </select>
+          </div>
+          <div v-if="config.eth_mode === '0'" class="form-group">
+            <label>{{ t('network.lanIp') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.eth_ip" 
+                type="text" 
+                placeholder="" 
+                :class="{ 'input-error': getFieldError('eth_ip') }"
+              />
+              <span v-if="getFieldError('eth_ip')" class="field-error-text">
+                {{ getFieldError('eth_ip') }}
+              </span>
+            </div>
+          </div>
+          <div v-if="config.eth_mode === '0'" class="form-group">
+            <label>{{ t('network.subnetMask') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.eth_netmask" 
+                type="text" 
+                placeholder="" 
+                :class="{ 'input-error': getFieldError('eth_netmask') }"
+              />
+              <span v-if="getFieldError('eth_netmask')" class="field-error-text">
+                {{ getFieldError('eth_netmask') }}
+              </span>
+            </div>
+          </div>
+          <div v-if="config.eth_mode === '0'" class="form-group">
+            <label>{{ t('network.gatewayAddress') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.eth_gw" 
+                type="text" 
+                placeholder="" 
+                :class="{ 'input-error': getFieldError('eth_gw') }"
+              />
+              <span v-if="getFieldError('eth_gw')" class="field-error-text">
+                {{ getFieldError('eth_gw') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.primaryDns') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.eth_dns" 
+                type="text" 
+                placeholder="" 
+                :disabled="config.eth_dns_mode === '1'" 
+                :class="{ 'input-error': getFieldError('eth_dns') }"
+              />
+              <span v-if="getFieldError('eth_dns')" class="field-error-text">
+                {{ getFieldError('eth_dns') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.backupDns') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.eth_sdns" 
+                type="text" 
+                placeholder="" 
+                :disabled="config.eth_dns_mode === '1'" 
+                :class="{ 'input-error': getFieldError('eth_sdns') }"
+              />
+              <span v-if="getFieldError('eth_sdns')" class="field-error-text">
+                {{ getFieldError('eth_sdns') }}
+              </span>
+            </div>
           </div>
         </div>
-        <div v-if="config.eth_mode === '0'" class="form-group">
-          <label>{{ t('network.gatewayAddress') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.eth_gw" 
-              type="text" 
-              placeholder="" 
-              :class="{ 'input-error': getFieldError('eth_gw') }"
-            />
-            <span v-if="getFieldError('eth_gw')" class="field-error-text">
-              {{ getFieldError('eth_gw') }}
-            </span>
+      </form>
+
+      <!-- LTE/CAT1 配置部分 -->
+      <form v-if="activeTab === 'ltecat' && config.net_select !== '2'" style="margin-top: 20px;">
+        <legend>{{ t('network.tabLte') }}</legend>
+        <div class="form-section">
+          <div class="form-group">
+            <label>{{ t('network.simSwitch') }}:</label>
+            <select v-model="config.lte_sim">
+              <option value="0">{{ t('network.externalSimFirst') }}</option>
+              <option value="1">{{ t('network.internalSimOnly') }}</option>
+              <option value="2">{{ t('network.externalSimOnly') }}</option>
+              <option value="3">{{ t('network.dualSimBackup') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apnName') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.lte_apn" 
+                type="text" 
+                placeholder="" 
+                :class="{ 'input-error': getFieldError('lte_apn') }"
+              />
+              <span v-if="getFieldError('lte_apn')" class="field-error-text">
+                {{ getFieldError('lte_apn') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.username') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.lte_user" 
+                type="text" 
+                placeholder="" 
+                :class="{ 'input-error': getFieldError('lte_user') }"
+              />
+              <span v-if="getFieldError('lte_user')" class="field-error-text">
+                {{ getFieldError('lte_user') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.password') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.lte_pwd" 
+                type="password" 
+                placeholder="" 
+                :class="{ 'input-error': getFieldError('lte_pwd') }"
+              />
+              <span v-if="getFieldError('lte_pwd')" class="field-error-text">
+                {{ getFieldError('lte_pwd') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.authMethod') }}:</label>
+            <select v-model="config.lte_auth">
+              <option value="0">NONE</option>
+              <option value="1">PAP</option>
+              <option value="2">CHAP</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.dnsMode') }}:</label>
+            <select v-model="config.lte_dns_mode">
+              <option value="0">{{ t('network.manualDns') }}</option>
+              <option value="1">{{ t('network.autoDns') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.primaryDns') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.lte_dns" 
+                type="text" 
+                placeholder="" 
+                :disabled="config.lte_dns_mode === '1'" 
+                :class="{ 'input-error': getFieldError('lte_dns') }"
+              />
+              <span v-if="getFieldError('lte_dns')" class="field-error-text">
+                {{ getFieldError('lte_dns') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.backupDns') }}:</label>
+            <div class="input-wrapper">
+              <input 
+                v-model="config.lte_sdns" 
+                type="text" 
+                placeholder="" 
+                :disabled="config.lte_dns_mode === '1'" 
+                :class="{ 'input-error': getFieldError('lte_sdns') }"
+              />
+              <span v-if="getFieldError('lte_sdns')" class="field-error-text">
+                {{ getFieldError('lte_sdns') }}
+              </span>
+            </div>
           </div>
         </div>
-        <div class="form-group">
-          <label>{{ t('network.primaryDns') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.eth_dns" 
-              type="text" 
-              placeholder="" 
-              :disabled="config.eth_dns_mode === '1'" 
-              :class="{ 'input-error': getFieldError('eth_dns') }"
-            />
-            <span v-if="getFieldError('eth_dns')" class="field-error-text">
-              {{ getFieldError('eth_dns') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.backupDns') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.eth_sdns" 
-              type="text" 
-              placeholder="" 
-              :disabled="config.eth_dns_mode === '1'" 
-              :class="{ 'input-error': getFieldError('eth_sdns') }"
-            />
-            <span v-if="getFieldError('eth_sdns')" class="field-error-text">
-              {{ getFieldError('eth_sdns') }}
-            </span>
-          </div>
-        </div>
+      </form>
+
+      <!-- 应用保存按钮 -->
+      <div class="button-group">
+        <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
       </div>
-    </form>
-
-    <!-- LTE/CAT1 配置部分 -->
-    <form v-if="activeTab === 'ltecat' && config.net_select !== '2'" style="margin-top: 20px;">
-      <legend>{{ t('network.tabLte') }}</legend>
-      <div class="form-section">
-        <div class="form-group">
-          <label>{{ t('network.simSwitch') }}:</label>
-          <select v-model="config.lte_sim">
-            <option value="0">{{ t('network.externalSimFirst') }}</option>
-            <option value="1">{{ t('network.internalSimOnly') }}</option>
-            <option value="2">{{ t('network.externalSimOnly') }}</option>
-            <option value="3">{{ t('network.dualSimBackup') }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.apnName') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.lte_apn" 
-              type="text" 
-              placeholder="" 
-              :class="{ 'input-error': getFieldError('lte_apn') }"
-            />
-            <span v-if="getFieldError('lte_apn')" class="field-error-text">
-              {{ getFieldError('lte_apn') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.username') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.lte_user" 
-              type="text" 
-              placeholder="" 
-              :class="{ 'input-error': getFieldError('lte_user') }"
-            />
-            <span v-if="getFieldError('lte_user')" class="field-error-text">
-              {{ getFieldError('lte_user') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.password') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.lte_pwd" 
-              type="password" 
-              placeholder="" 
-              :class="{ 'input-error': getFieldError('lte_pwd') }"
-            />
-            <span v-if="getFieldError('lte_pwd')" class="field-error-text">
-              {{ getFieldError('lte_pwd') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.authMethod') }}:</label>
-          <select v-model="config.lte_auth">
-            <option value="0">NONE</option>
-            <option value="1">PAP</option>
-            <option value="2">CHAP</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.dnsMode') }}:</label>
-          <select v-model="config.lte_dns_mode">
-            <option value="0">{{ t('network.manualDns') }}</option>
-            <option value="1">{{ t('network.autoDns') }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.primaryDns') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.lte_dns" 
-              type="text" 
-              placeholder="" 
-              :disabled="config.lte_dns_mode === '1'" 
-              :class="{ 'input-error': getFieldError('lte_dns') }"
-            />
-            <span v-if="getFieldError('lte_dns')" class="field-error-text">
-              {{ getFieldError('lte_dns') }}
-            </span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>{{ t('network.backupDns') }}:</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="config.lte_sdns" 
-              type="text" 
-              placeholder="" 
-              :disabled="config.lte_dns_mode === '1'" 
-              :class="{ 'input-error': getFieldError('lte_sdns') }"
-            />
-            <span v-if="getFieldError('lte_sdns')" class="field-error-text">
-              {{ getFieldError('lte_sdns') }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </form>
-
-    <!-- 应用保存按钮 -->
-    <div class="button-group">
-      <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
     </div>
 
     <!-- 重启确认弹窗 -->
@@ -712,6 +719,40 @@ onUnmounted(() => {
 .btn-disabled {
   background-color: #ccc !important;
   cursor: not-allowed;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  width: 100%;
+}
+
+.loading-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0066cc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  color: #666;
+  font-size: 14px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .loading {
