@@ -578,16 +578,32 @@
                  <option value="4">4</option>
                </select>
                <span>、</span>
-               <input v-model.number="editingMappingPoint.regAddr" type="number" style="width: 100px;" />
+               <input 
+                 v-model.number="editingMappingPoint.regAddr" 
+                 type="number" 
+                 style="width: 100px;" 
+                 @keypress="onlyAllowDigits"
+                 :style="{ color: mappingRegAddrError ? 'red' : '', borderColor: mappingRegAddrError ? 'red' : '' }"
+               />
+
              </div>
            </div>
            <div class="form-group">
               <label style="width: 80px;"></label>
-              <span style="color: red;">{{ computedEditingAddress }}</span>
+              <span style="color: red;">{{ mappingRegAddrError || computedEditingAddress }}</span>
+
            </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="saveEditedMapping">{{ t('edge.save') }}</button>
+          <button 
+            class="btn-save" 
+            @click="saveEditedMapping"
+            :disabled="!!mappingRegAddrError"
+            :style="{ opacity: mappingRegAddrError ? 0.6 : 1, cursor: mappingRegAddrError ? 'not-allowed' : 'pointer' }"
+          >
+            {{ t('edge.save') }}
+          </button>
+
           <button class="btn-cancel" @click="closeEditMappingModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
@@ -857,8 +873,17 @@
                   <option value="3X">3X</option>
                   <option value="4X">4X</option>
                 </select>
-                <input v-model.number="mappingForm.startAddressValue" type="number" placeholder="1" style="width: 100px;" />
+                <input 
+                  v-model.number="mappingForm.startAddressValue" 
+                  type="number" 
+                  placeholder="1" 
+                  style="width: 100px;" 
+                  @keypress="onlyAllowDigits"
+                  :style="{ color: mappingFormAddrError ? 'red' : '', borderColor: mappingFormAddrError ? 'red' : '' }"
+                />
              </div>
+             <span v-if="mappingFormAddrError" style="color: red; font-size: 12px; margin-left: 20px;">{{ mappingFormAddrError }}</span>
+
              <label style="width: auto; margin-left: 20px;">{{ t('edge.pointSelection') }}:</label>
              <button class="btn-outline" @click="openPointSelectionModal">{{ t('edge.addPoint') }}</button>
           </div>
@@ -890,7 +915,15 @@
           </div>
         </div>
         <div class="modal-buttons">
-          <button class="btn-save" @click="saveMapping">{{ t('edge.confirm') }}</button>
+           <button 
+             class="btn-save" 
+             @click="saveMapping" 
+             :disabled="!!mappingFormAddrError"
+             :style="{ opacity: mappingFormAddrError ? 0.6 : 1, cursor: mappingFormAddrError ? 'not-allowed' : 'pointer' }"
+           >
+             {{ t('edge.confirm') }}
+           </button>
+
           <button class="btn-cancel" @click="closeMappingModal">{{ t('edge.cancel') }}</button>
         </div>
       </div>
@@ -1149,6 +1182,8 @@ const mappingForm = ref({
   startAddressValue: 1,
   points: []
 })
+const mappingFormAddrError = ref('')
+
 const selectedMappingSlaveId = ref('')
 const mappingSearchQuery = ref('')
 const tempSelectedPoints = ref([]) // Points selected in the selection modal
@@ -1161,9 +1196,44 @@ const editingMappingPoint = ref({
   regAddr: 1
 })
 
+const mappingRegAddrError = ref('')
+
+
 const computedEditingAddress = computed(() => {
-   return editingMappingPoint.value.regType + String(editingMappingPoint.value.regAddr).padStart(5, '0')
+   const addr = editingMappingPoint.value.regAddr
+   if (addr === null || addr === undefined || addr === '') return ''
+   const addrStr = typeof addr === 'number' ? addr.toFixed(0) : String(addr)
+   return editingMappingPoint.value.regType + addrStr.padStart(5, '0')
 })
+
+watch(() => editingMappingPoint.value.regAddr, (newVal) => {
+  if (showEditMappingModal.value) {
+    if (!isValidRegisterAddress(newVal)) {
+      mappingRegAddrError.value = t('edge.invalidRegisterAddress')
+    } else {
+      mappingRegAddrError.value = ''
+    }
+  }
+})
+
+watch(() => mappingForm.value.startAddressValue, (newVal) => {
+  if (showMappingModal.value) {
+    if (!isValidRegisterAddress(newVal)) {
+      mappingFormAddrError.value = t('edge.invalidRegisterAddress')
+    } else {
+      mappingFormAddrError.value = ''
+    }
+  }
+})
+
+
+const onlyAllowDigits = (event) => {
+  const charCode = event.which ? event.which : event.keyCode
+  if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+    event.preventDefault()
+  }
+}
+
 
 // 数据上报相关数据
 const allChannels = ['MQTT1', 'MQTT2', 'SOCKA', 'SOCKB', 'CLOUD']
@@ -3402,8 +3472,10 @@ const showAddMappingModal = () => {
     points: [] // Will store selected points temporarily
   }
   tempSelectedPoints.value = []
+  mappingFormAddrError.value = ''
   showMappingModal.value = true
 }
+
 
 const closeMappingModal = () => {
   showMappingModal.value = false
@@ -3542,7 +3614,9 @@ const confirmPointSelection = () => {
 }
 
 const saveMapping = () => {
+  if (mappingFormAddrError.value) return
   // Calculate mapping addresses and add to main list
+
   let currentAddr = parseInt(mappingForm.value.startAddressValue) || 1
   const typePrefix = mappingForm.value.startAddressType.substring(0, 1) // '4' from '4X'
   
@@ -3581,8 +3655,9 @@ const getCalculatedAddress = (index) => {
     currentAddr += size
   }
   
-  return typePrefix + String(currentAddr).padStart(5, '0')
+  return typePrefix + String(currentAddr.toFixed(0)).padStart(5, '0')
 }
+
 
 const editMapping = (index) => {
   const point = mappingPoints.value[index]
@@ -3597,18 +3672,22 @@ const editMapping = (index) => {
     regType: type,
     regAddr: addr
   }
+  mappingRegAddrError.value = ''
   showEditMappingModal.value = true
 }
+
 
 const closeEditMappingModal = () => {
   showEditMappingModal.value = false
 }
 
 const saveEditedMapping = () => {
+  if (mappingRegAddrError.value) return
   const idx = editingMappingPoint.value.index
   if (idx >= 0 && idx < mappingPoints.value.length) {
     mappingPoints.value[idx].mappingAddress = computedEditingAddress.value
   }
+
   closeEditMappingModal()
 }
 
