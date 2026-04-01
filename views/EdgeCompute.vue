@@ -1206,25 +1206,66 @@ const computedEditingAddress = computed(() => {
    return editingMappingPoint.value.regType + addrStr.padStart(5, '0')
 })
 
-watch(() => editingMappingPoint.value.regAddr, (newVal) => {
-  if (showEditMappingModal.value) {
-    if (!isValidRegisterAddress(newVal)) {
-      mappingRegAddrError.value = t('edge.invalidRegisterAddress')
-    } else {
-      mappingRegAddrError.value = ''
-    }
+const validateEditingMappingAddress = () => {
+  if (!showEditMappingModal.value) return
+  const addr = editingMappingPoint.value.regAddr
+  if (!isValidRegisterAddress(addr)) {
+    mappingRegAddrError.value = t('edge.invalidRegisterAddress')
+    return
   }
+  
+  const fullAddr = computedEditingAddress.value
+  const duplicate = mappingPoints.value.some((p, index) => {
+    if (index === editingMappingPoint.value.index) return false
+    return p.mappingAddress === fullAddr
+  })
+  
+  if (duplicate) {
+    mappingRegAddrError.value = t('edge.addressExists')
+  } else {
+    mappingRegAddrError.value = ''
+  }
+}
+
+watch(() => [editingMappingPoint.value.regAddr, editingMappingPoint.value.regType], () => {
+  validateEditingMappingAddress()
 })
 
-watch(() => mappingForm.value.startAddressValue, (newVal) => {
-  if (showMappingModal.value) {
-    if (!isValidRegisterAddress(newVal)) {
-      mappingFormAddrError.value = t('edge.invalidRegisterAddress')
-    } else {
-      mappingFormAddrError.value = ''
-    }
+const validateMappingFormAddress = () => {
+  if (!showMappingModal.value) return
+  const startVal = mappingForm.value.startAddressValue
+  if (!isValidRegisterAddress(startVal)) {
+    mappingFormAddrError.value = t('edge.invalidRegisterAddress')
+    return
   }
-})
+
+  let currentAddr = parseInt(startVal) || 1
+  const typePrefix = mappingForm.value.startAddressType.substring(0, 1)
+  let hasDuplicate = false
+
+  for (let i = 0; i < mappingForm.value.points.length; i++) {
+    const p = mappingForm.value.points[i]
+    let size = 1
+    if (p.dataType.includes('32 Bit') || p.dataType === 'Float') size = 2
+    
+    const fullAddr = typePrefix + String(currentAddr).padStart(5, '0')
+    if (mappingPoints.value.some(mp => mp.mappingAddress === fullAddr)) {
+      hasDuplicate = true
+      break
+    }
+    currentAddr += size
+  }
+
+  if (hasDuplicate) {
+    mappingFormAddrError.value = t('edge.addressExists')
+  } else {
+    mappingFormAddrError.value = ''
+  }
+}
+
+watch(() => [mappingForm.value.startAddressValue, mappingForm.value.startAddressType, mappingForm.value.points], () => {
+  validateMappingFormAddress()
+}, { deep: true })
 
 
 const onlyAllowDigits = (event) => {
@@ -3616,9 +3657,10 @@ const confirmPointSelection = () => {
 }
 
 const saveMapping = () => {
+  validateMappingFormAddress()
   if (mappingFormAddrError.value) return
+  
   // Calculate mapping addresses and add to main list
-
   let currentAddr = parseInt(mappingForm.value.startAddressValue) || 1
   const typePrefix = mappingForm.value.startAddressType.substring(0, 1) // '4' from '4X'
   
@@ -3684,6 +3726,7 @@ const closeEditMappingModal = () => {
 }
 
 const saveEditedMapping = () => {
+  validateEditingMappingAddress()
   if (mappingRegAddrError.value) return
   const idx = editingMappingPoint.value.index
   if (idx >= 0 && idx < mappingPoints.value.length) {
