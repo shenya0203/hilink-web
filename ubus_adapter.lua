@@ -85,10 +85,26 @@ function _M.get_network_status()
     return nil
 end
 
--- 3. Network Config Data
+-- 3. Network Config Data (WAN/LTE)
 function _M.get_network_config()
+    ngx.log(ngx.ERR, "-------------------- get_network_config (WAN/LTE) ")
+    -- 通过ubus接口从后端daemon获取WAN/LTE网络配置
+    local result = ubus_call("hilink", "get_network_config_wan", {})
+    if result then
+        ngx.log(ngx.ERR, "-------------------- get_network_config_wan result: " .. cjson.encode(result))
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for get_network_config_wan")
+    return nil
+end
+
+-- 3.1 Network LAN Config Data (LAN + DHCP)
+function _M.get_network_lan_config()
+    ngx.log(ngx.ERR, "-------------------- get_network_lan_config (LAN + DHCP) ")
+    -- 通过ubus接口从后端daemon获取LAN + DHCP网络配置
     local result = ubus_call("hilink", "get_network_config", {})
     if result then
+        ngx.log(ngx.ERR, "-------------------- get_network_config result: " .. cjson.encode(result))
         return result
     end
     ngx.log(ngx.WARN, "ubus call failed for get_network_config")
@@ -516,6 +532,18 @@ function _M.download_cert_bundle(service)
         return result
     end
     ngx.log(ngx.WARN, "ubus call failed for download_cert_bundle")
+    return nil
+end
+
+-- 22. WiFi Scan
+function _M.wifi_scan(action)
+    ngx.log(ngx.ERR, "-------------------- wifi_scan action: ", action)
+    local result = ubus_call("hilink", "wifi_scan", { act = action })
+    if result then
+        ngx.log(ngx.ERR, "-------------------- wifi_scan result: ", cjson.encode(result))
+        return result
+    end
+    ngx.log(ngx.WARN, "ubus call failed for wifi_scan")
     return nil
 end
 

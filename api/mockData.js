@@ -1,5 +1,5 @@
 // src/api/mockData.js
-import { getStatus, getNetwork, getMisc, getNetworkConfig, getUartConfig, getCommTunnel, getOfflineCache } from './services'
+import { getStatus, getNetwork, getMisc, getNetworkConfig, getNetworkLanConfig, getUartConfig, getCommTunnel, getOfflineCache } from './services'
 
 // 获取状态数据
 export async function fetchStatusData() {
@@ -34,6 +34,18 @@ export async function fetchNetworkConfigData() {
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=network:', error)
+        return null
+    }
+}
+
+// 获取网络 LAN 配置数据（nv 版本）
+export async function fetchNetworkLanConfigData() {
+    try {
+        const data = await getNetworkLanConfig()
+        console.log('✓ 获取成功 - GET /download_nv.cgi?name=network_lan:', data)
+        return data
+    } catch (error) {
+        console.error('✗ 获取失败 - GET /download_nv.cgi?name=network_lan:', error)
         return null
     }
 }

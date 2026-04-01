@@ -10,6 +10,14 @@ local cjson = require "cjson"
 local shm = require "shm_reader"
 
 -- ==========================================================
+-- WiFi扫描全局配置
+-- ==========================================================
+local WIFI_IFACE = "wlan0"             -- 扫描接口
+local SCAN_TIMEOUT = 5                 -- 超时时间(秒)
+local SCAN_RESULT_FILE = "/tmp/wifi_scan.txt" -- 结果临时文件
+local SCAN_LOCK_FILE = "/tmp/wifi_scan.lock"  -- 锁文件
+
+-- ==========================================================
 -- 配置数据存储 (实际应用中应该从文件或数据库读取)
 -- ==========================================================
 
@@ -17,6 +25,20 @@ product_name = "HLK_N720"
 
 -- UCI 配置文件操作封装
 local uci_lib = require("uci")
+
+-- UCI Helper
+local function get_uci(key)
+    local f = io.popen("uci get " .. key .. " 2>/dev/null")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content and content ~= "" then
+            local res = string.gsub(content, "\n", "")
+            if res ~= "" then return res end
+        end
+    end
+    return nil
+end
 
 local mac = nil
 
@@ -1701,110 +1723,306 @@ function set_misc_config_values(msg)
 end
 
 
+-- 计算 DHCP start 偏移量和 limit
+local function calculate_dhcp_range(lan_ip, dhcp_start_ip, dhcp_end_ip)
+    -- 解析 LAN IP 的前三段
+    local lan_parts = {}
+    for part in string.gmatch(lan_ip, "([^%.]+)") do
+        table.insert(lan_parts, part)
+    end
+
+    if #lan_parts < 4 then
+        log_error("Invalid LAN IP format: " .. lan_ip)
+        return nil, nil
+    end
+
+    -- 解析 DHCP 起始 IP
+    local start_parts = {}
+    for part in string.gmatch(dhcp_start_ip, "([^%.]+)") do
+        table.insert(start_parts, part)
+    end
+
+    -- 解析 DHCP 结束 IP
+    local end_parts = {}
+    for part in string.gmatch(dhcp_end_ip, "([^%.]+)") do
+        table.insert(end_parts, part)
+    end
+
+    if #start_parts < 4 or #end_parts < 4 then
+        log_error("Invalid DHCP IP format: start=" .. dhcp_start_ip .. ", end=" .. dhcp_end_ip)
+        return nil, nil
+    end
+
+    -- 检查前三段是否匹配 LAN IP
+    if lan_parts[1] ~= start_parts[1] or lan_parts[2] ~= start_parts[2] or lan_parts[3] ~= start_parts[3] or
+       lan_parts[1] ~= end_parts[1] or lan_parts[2] ~= end_parts[2] or lan_parts[3] ~= end_parts[3] then
+        log_error("DHCP IP range must be in the same subnet as LAN IP")
+        return nil, nil
+    end
+
+    -- 计算 start 偏移量 (相对于 LAN IP 的第四段)
+    local start_offset = tonumber(start_parts[4])
+    local end_offset = tonumber(end_parts[4])
+
+    if not start_offset or not end_offset then
+        log_error("Invalid DHCP IP offset values")
+        return nil, nil
+    end
+
+    -- 计算 limit (结束IP - 起始IP + 1)
+    local limit = end_offset - start_offset + 1
+
+    if limit <= 0 then
+        log_error("Invalid DHCP range: start=" .. start_offset .. ", end=" .. end_offset)
+        return nil, nil
+    end
+
+    log_info("Calculated DHCP range: start=" .. start_offset .. ", limit=" .. limit)
+    return start_offset, limit
+end
+
 local function set_network_config_values(args)
-    -- 解析参数并更新内存缓存
-    for k, v in pairs(args) do
-        local key = string.match(k, "[ns]_(.+)")
-        if key then
-            if string.find(key, "%.") then
-                local parts = {}
-                for part in string.gmatch(key, "[^%.]+") do
-                    table.insert(parts, part)
-                end
-                local target = network_config
-                for i = 1, #parts - 1 do
-                    if target[parts[i]] then
-                        target = target[parts[i]]
-                    end
-                end
-                target[parts[#parts]] = tonumber(v) or v
-            else
-                network_config[key] = tonumber(v) or v
-            end
-            log_info("network." .. key .. " = " .. tostring(v))
-        end
-    end
-
-    -- 将解析后的参数直接写入 UCI（保证掌电保存）
     local cursor = uci_lib.cursor()
-    local eth_mode, eth_ip, eth_mask, eth_gw = nil, nil, nil, nil
-    local eth_dns1, eth_dns2, eth_dns_mode = nil, nil, nil
-    local lte_simnum, lte_apn, lte_user, lte_pswd, lte_auth = nil, nil, nil, nil, nil
-    local lte_dns_mode, lte_dns, lte_sdns = nil, nil, nil
-    local net_select, keepalive_period, keepalive_addr1, keepalive_addr2 = nil, nil, nil, nil
+    log_info("Setting network config: " .. cjson.encode(args))
 
-    for k, v in pairs(args) do
-        if k == "n_eth0.ip_mode"     then eth_mode         = tonumber(v) end
-        if k == "s_eth0.sip"         then eth_ip           = v end
-        if k == "s_eth0.mip"         then eth_mask         = v end
-        if k == "s_eth0.gip"         then eth_gw           = v end
-        if k == "s_eth0.dns_ip[0]"   then eth_dns1         = v end
-        if k == "s_eth0.dns_ip[1]"   then eth_dns2         = v end
-        if k == "n_eth0.dns_mode"    then eth_dns_mode     = tonumber(v) end
-        if k == "n_cell.sim_switch"  then lte_simnum       = tonumber(v) end
-        if k == "s_cell.apn.addr"    then lte_apn          = v end
-        if k == "s_cell.apn.user"    then lte_user         = v end
-        if k == "s_cell.apn.pswd"    then lte_pswd         = v end
-        if k == "n_cell.apn.auth"    then lte_auth         = tonumber(v) end
-        if k == "s_cell.dns_ip[0]"   then lte_dns          = v end
-        if k == "s_cell.dns_ip[1]"   then lte_sdns         = v end
-        if k == "n_cell.dns_mode"    then lte_dns_mode     = tonumber(v) end
-        if k == "n_net_select"       then net_select       = tonumber(v) end
-        if k == "n_keepalive_period" then keepalive_period = tonumber(v) end
-        if k == "s_keepalive_addr[0]" then keepalive_addr1 = v end
-        if k == "s_keepalive_addr[1]" then keepalive_addr2 = v end
-    end
 
-    -- WAN/ETH UCI 写入
+    -- 处理 WAN 参数
+    local eth_mode = args["n_eth0.ip_mode"] and tonumber(args["n_eth0.ip_mode"])
+    local eth_ip = args["s_eth0.sip"]
+    local eth_mask = args["s_eth0.mip"]
+    local eth_gw = args["s_eth0.gip"]
+    local eth_dns_mode = args["n_eth0.dns_mode"] and tonumber(args["n_eth0.dns_mode"])
+    local eth_dns1 = args["s_eth0.dns_ip[0]"]
+    local eth_dns2 = args["s_eth0.dns_ip[1]"]
+
+    -- 设置 WAN 接口配置
     if eth_mode ~= nil then
         if eth_mode == 1 then
             cursor:set("network", "wan", "proto", "dhcp")
+            log_info("Set network.wan.proto = dhcp")
         else
             cursor:set("network", "wan", "proto", "static")
-            if eth_ip   then cursor:set("network", "wan", "ipaddr",  eth_ip)   end
-            if eth_mask then cursor:set("network", "wan", "netmask", eth_mask) end
-            if eth_gw   then cursor:set("network", "wan", "gateway", eth_gw)   end
+            log_info("Set network.wan.proto = static")
+            if eth_ip then
+                cursor:set("network", "wan", "ipaddr", eth_ip)
+                log_info("Set network.wan.ipaddr = " .. eth_ip)
+            end
+            if eth_mask then
+                cursor:set("network", "wan", "netmask", eth_mask)
+                log_info("Set network.wan.netmask = " .. eth_mask)
+            end
+            if eth_gw then
+                cursor:set("network", "wan", "gateway", eth_gw)
+                log_info("Set network.wan.gateway = " .. eth_gw)
+            end
         end
-        cursor:set("network", "wan", "peerdns", tostring(eth_dns_mode or 0))
-        cursor:delete("network", "wan", "dns")
-    local dns_list = {}
-    if eth_dns1 and eth_dns1 ~= "" then table.insert(dns_list, eth_dns1) end
-    if eth_dns2 and eth_dns2 ~= "" then table.insert(dns_list, eth_dns2) end
 
-    if #dns_list > 0 then
-        cursor:set("network", "wan", "dns", dns_list)
-    end
-        cursor:commit("network")
+        -- 设置 DNS 模式
+        if eth_dns_mode ~= nil then
+            cursor:set("network", "wan", "peerdns", eth_dns_mode)
+            log_info("Set network.wan.peerdns = " .. eth_dns_mode)
+        end
+
+        -- 设置 DNS 服务器（仅 static 模式）
+        if eth_mode == 0 then
+            local dns_list = {}
+            if eth_dns1 and eth_dns1 ~= "" then
+                table.insert(dns_list, eth_dns1)
+            end
+            if eth_dns2 and eth_dns2 ~= "" then
+                table.insert(dns_list, eth_dns2)
+            end
+            if #dns_list > 0 then
+                cursor:set("network", "wan", "dns", dns_list)
+                log_info("Set network.wan.dns = " .. table.concat(dns_list, " "))
+            end
+        end
     end
 
-    -- LTE UCI 写入
-    if lte_simnum ~= nil then cursor:set("network", "lte", "modem_simnum", tostring(lte_simnum)) end
-    if lte_apn    then cursor:set("network", "lte", "modem_apn",    lte_apn)              end
-    if lte_user   then cursor:set("network", "lte", "modem_user",   lte_user)             end
-    if lte_pswd   then cursor:set("network", "lte", "modem_passwd", lte_pswd)             end
-    if lte_auth ~= nil then cursor:set("network", "lte", "modem_auth", tostring(lte_auth)) end
+    -- 处理 LTE 参数
+    local lte_simnum = args["n_cell.sim_switch"] and tonumber(args["n_cell.sim_switch"])
+    local lte_apn = args["s_cell.apn.addr"]
+    local lte_user = args["s_cell.apn.user"]
+    local lte_pswd = args["s_cell.apn.pswd"]
+    local lte_auth = args["n_cell.apn.auth"] and tonumber(args["n_cell.apn.auth"])
+    local lte_dns_mode = args["n_cell.dns_mode"] and tonumber(args["n_cell.dns_mode"])
+    local lte_dns = args["s_cell.dns_ip[0]"]
+    local lte_sdns = args["s_cell.dns_ip[1]"]
+
+    -- 设置 LTE 接口配置
+    if lte_simnum ~= nil then
+        cursor:set("network", "lte", "modem_simnum", lte_simnum)
+        log_info("Set network.lte.modem_simnum = " .. lte_simnum)
+    end
+    if lte_apn then
+        cursor:set("network", "lte", "modem_apn", lte_apn)
+        log_info("Set network.lte.modem_apn = " .. lte_apn)
+    end
+    if lte_user then
+        cursor:set("network", "lte", "modem_user", lte_user)
+        log_info("Set network.lte.modem_user = " .. lte_user)
+    end
+    if lte_pswd then
+        cursor:set("network", "lte", "modem_passwd", lte_pswd)
+        log_info("Set network.lte.modem_passwd = " .. lte_pswd)
+    end
+    if lte_auth ~= nil then
+        cursor:set("network", "lte", "modem_auth", lte_auth)
+        log_info("Set network.lte.modem_auth = " .. lte_auth)
+    end
+
+    -- 设置 LTE DNS
     if lte_dns_mode ~= nil then
+        cursor:set("network", "lte", "peerdns", lte_dns_mode)
+        log_info("Set network.lte.peerdns = " .. lte_dns_mode)
+
         cursor:delete("network", "lte", "dns")
         cursor:delete("network", "lte", "_dns")
+
         if lte_dns_mode == 1 then
-            if lte_dns  and lte_dns  ~= "" then cursor:add_list("network", "lte", "_dns", lte_dns)  end
-            if lte_sdns and lte_sdns ~= "" then cursor:add_list("network", "lte", "_dns", lte_sdns) end
+            -- 自动获取 DNS
+            local dns_list = {}
+            if lte_dns and lte_dns ~= "" then
+                table.insert(dns_list, lte_dns)
+            end
+            if lte_sdns and lte_sdns ~= "" then
+                table.insert(dns_list, lte_sdns)
+            end
+            if #dns_list > 0 then
+                cursor:set("network", "lte", "_dns", dns_list)
+                log_info("Set network.lte._dns = " .. table.concat(dns_list, " "))
+            end
         else
-            if lte_dns  and lte_dns  ~= "" then cursor:add_list("network", "lte", "dns", lte_dns)  end
-            if lte_sdns and lte_sdns ~= "" then cursor:add_list("network", "lte", "dns", lte_sdns) end
+            -- 手动 DNS
+            local dns_list = {}
+            if lte_dns and lte_dns ~= "" then
+                table.insert(dns_list, lte_dns)
+            end
+            if lte_sdns and lte_sdns ~= "" then
+                table.insert(dns_list, lte_sdns)
+            end
+            if #dns_list > 0 then
+                cursor:set("network", "lte", "dns", dns_list)
+                log_info("Set network.lte.dns = " .. table.concat(dns_list, " "))
+            end
         end
-        cursor:set("network", "lte", "peerdns", tostring(lte_dns_mode))
     end
+
+    -- 处理 MWAN3 参数
+    local net_select = args["n_net_select"] and tonumber(args["n_net_select"])
+    local keepalive_period = args["n_keepalive_period"] and tonumber(args["n_keepalive_period"])
+    local keepalive_addr1 = args["s_keepalive_addr[0]"]
+    local keepalive_addr2 = args["s_keepalive_addr[1]"]
+
+    -- 设置 MWAN3 配置
+    if net_select ~= nil then
+        cursor:set("mwan3", "globals", "net_select", net_select)
+        log_info("Set mwan3.globals.net_select = " .. net_select)
+    end
+    if keepalive_period ~= nil then
+        cursor:set("mwan3", "globals", "keepalive_period", keepalive_period)
+        log_info("Set mwan3.globals.keepalive_period = " .. keepalive_period)
+    end
+    if keepalive_addr1 then
+        cursor:set("mwan3", "globals", "keepalive_ip1", keepalive_addr1)
+        log_info("Set mwan3.globals.keepalive_ip1 = " .. keepalive_addr1)
+    end
+    if keepalive_addr2 then
+        cursor:set("mwan3", "globals", "keepalive_ip2", keepalive_addr2)
+        log_info("Set mwan3.globals.keepalive_ip2 = " .. keepalive_addr2)
+    end
+
+    -- 处理 LAN 和 DHCP 参数
+    local lan_ip = args["s_lan.ip"]
+    local lan_netmask = args["s_lan.netmask"]
+    local dhcp_enable = args["n_lan.dhcp_enable"]
+    local dhcp_start_ip = args["s_lan.dhcp_start"]
+    local dhcp_end_ip = args["s_lan.dhcp_end"]
+    local dhcp_lease = args["n_lan.dhcp_lease"]
+
+    -- 设置 LAN 接口配置
+    if lan_ip or lan_netmask then
+        if lan_ip then
+            cursor:set("network", "lan", "ipaddr", lan_ip)
+            log_info("Set network.lan.ipaddr = " .. lan_ip)
+        end
+        if lan_netmask then
+            cursor:set("network", "lan", "netmask", lan_netmask)
+            log_info("Set network.lan.netmask = " .. lan_netmask)
+        end
+    end
+
+    -- 设置 DHCP 配置
+    if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
+        -- DHCP 开关设置
+        if dhcp_enable ~= nil then
+            local ignore = (dhcp_enable == 1) and "0" or "1"
+            cursor:set("dhcp", "lan", "ignore", ignore)
+            log_info("Set dhcp.lan.ignore = " .. ignore)
+        end
+
+        -- DHCP 租期设置
+        if dhcp_lease then
+            local leasetime = tostring(dhcp_lease) .. "h"
+            cursor:set("dhcp", "lan", "leasetime", leasetime)
+            log_info("Set dhcp.lan.leasetime = " .. leasetime)
+        end
+
+        -- 计算 DHCP start 和 limit
+        if dhcp_start_ip and dhcp_end_ip and lan_ip then
+            local start_offset, limit = calculate_dhcp_range(lan_ip, dhcp_start_ip, dhcp_end_ip)
+            if start_offset and limit then
+                cursor:set("dhcp", "lan", "start", tostring(start_offset))
+                cursor:set("dhcp", "lan", "limit", tostring(limit))
+                log_info("Set dhcp.lan.start = " .. start_offset .. ", limit = " .. limit)
+            end
+        end
+    end
+
+    -- 提交配置
     cursor:commit("network")
-
-    -- mwan3 UCI 写入
-    if net_select       ~= nil then cursor:set("mwan3", "globals", "net_select",       tostring(net_select))       end
-    if keepalive_period ~= nil then cursor:set("mwan3", "globals", "keepalive_period",  tostring(keepalive_period)) end
-    if keepalive_addr1  ~= nil then cursor:set("mwan3", "globals", "keepalive_ip1",    keepalive_addr1)            end
-    if keepalive_addr2  ~= nil then cursor:set("mwan3", "globals", "keepalive_ip2",    keepalive_addr2)            end
     cursor:commit("mwan3")
+    log_info("Committed network and mwan3 configurations")
 
-    log_info("Network config saved to UCI")
+    if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
+        cursor:commit("dhcp")
+        log_info("Committed dhcp configuration")
+    end
+
+    -- 处理其他网络参数（保持原有逻辑）
+    for k, v in pairs(args) do
+        -- 跳过已经处理的网络参数
+        if k ~= "s_lan.ip" and k ~= "s_lan.netmask" and k ~= "n_lan.dhcp_enable" and
+           k ~= "s_lan.dhcp_start" and k ~= "s_lan.dhcp_end" and k ~= "n_lan.dhcp_lease" and
+           k ~= "n_eth0.ip_mode" and k ~= "s_eth0.sip" and k ~= "s_eth0.mip" and k ~= "s_eth0.gip" and
+           k ~= "n_eth0.dns_mode" and k ~= "s_eth0.dns_ip[0]" and k ~= "s_eth0.dns_ip[1]" and
+           k ~= "n_cell.sim_switch" and k ~= "s_cell.apn.addr" and k ~= "s_cell.apn.user" and
+           k ~= "s_cell.apn.pswd" and k ~= "n_cell.apn.auth" and k ~= "n_cell.dns_mode" and
+           k ~= "s_cell.dns_ip[0]" and k ~= "s_cell.dns_ip[1]" and
+           k ~= "n_net_select" and k ~= "n_keepalive_period" and
+           k ~= "s_keepalive_addr[0]" and k ~= "s_keepalive_addr[1]" then
+            local key = string.match(k, "[ns]_(.+)")
+            if key then
+                if string.find(key, "%.") then
+                    local parts = {}
+                    for part in string.gmatch(key, "[^%.]+") do
+                        table.insert(parts, part)
+                    end
+
+                    local target = network_config
+                    for i = 1, #parts - 1 do
+                        if target[parts[i]] then
+                            target = target[parts[i]]
+                        end
+                    end
+                    target[parts[#parts]] = tonumber(v) or v
+                else
+                    network_config[key] = tonumber(v) or v
+                end
+                log_info("network." .. key .. " = " .. tostring(v))
+            end
+        end
+    end
     return true
 end
 
@@ -2132,65 +2350,179 @@ local methods = {
             {}
         },
         
-        -- 获取网络配置（实时从 UCI 读取）
+        -- 获取网络配置 (LAN + DHCP)
         get_network_config = {
             function(req, msg)
                 local cursor = uci_lib.cursor()
-                local wan_proto   = cursor:get("network", "wan", "proto") or "static"
-                local wan_ip      = cursor:get("network", "wan", "ipaddr")  or ""
-                local wan_mask    = cursor:get("network", "wan", "netmask") or ""
-                local wan_gw      = cursor:get("network", "wan", "gateway") or ""
-                local wan_dns_mode = tonumber(cursor:get("network", "wan", "peerdns")) or 1
-                local wan_dns_raw  = cursor:get("network", "wan", "dns")
-                local lte_dns_mode = tonumber(cursor:get("network", "lte", "peerdns")) or 1
-                local lte_apn  = cursor:get("network", "lte", "modem_apn")    or ""
-                local lte_user = cursor:get("network", "lte", "modem_user")   or ""
-                local lte_pswd = cursor:get("network", "lte", "modem_passwd") or ""
-                local lte_auth = cursor:get("network", "lte", "modem_auth")   or 0
-                local lte_simnum = cursor:get("network", "lte", "modem_simnum") or 0
-                local lte_dns_raw
-                if lte_dns_mode == 1 then
-                    lte_dns_raw = cursor:get("network", "lte", "_dns")
-                else
-                    lte_dns_raw = cursor:get("network", "lte", "dns")
+
+                -- 读取 LAN 接口配置
+                local lan_ip = ""
+                local lan_netmask = ""
+
+                cursor:foreach("network", "interface", function(section)
+                    if section[".name"] == "lan" then
+                        lan_ip = section.ipaddr or ""
+                        lan_netmask = section.netmask or ""
+                    end
+                end)
+
+                -- 读取 DHCP 配置
+                local dhcp_start = 100  -- 默认值
+                local dhcp_limit = 150  -- 默认值
+                local dhcp_leasetime = "12h"  -- 默认值
+                local dhcp_ignore = "0"  -- 默认值，表示启用
+
+                cursor:foreach("dhcp", "dhcp", function(section)
+                    if section.interface == "lan" then
+                        dhcp_start = tonumber(section.start) or 100
+                        dhcp_limit = tonumber(section.limit) or 150
+                        dhcp_leasetime = section.leasetime or "12h"
+                        dhcp_ignore = section.ignore or "0"
+                    end
+                end)
+
+                -- 计算 DHCP IP 范围
+                local dhcp_start_ip = ""
+                local dhcp_end_ip = ""
+
+                if lan_ip ~= "" then
+                    -- 提取 IP 前三段 (例如 192.168.18.254 -> 192.168.18)
+                    local ip_parts = {}
+                    for part in string.gmatch(lan_ip, "([^%.]+)") do
+                        table.insert(ip_parts, part)
+                    end
+
+                    if #ip_parts >= 3 then
+                        local base_ip = ip_parts[1] .. "." .. ip_parts[2] .. "." .. ip_parts[3]
+
+                        -- 计算起始 IP
+                        dhcp_start_ip = base_ip .. "." .. tostring(dhcp_start)
+
+                        -- 计算结束 IP: start + limit - 1
+                        local end_offset = dhcp_start + dhcp_limit - 1
+                        dhcp_end_ip = base_ip .. "." .. tostring(end_offset)
+                    end
                 end
-                local net_select       = cursor:get("mwan3", "globals", "net_select")       or 0
-                local keepalive_period = cursor:get("mwan3", "globals", "keepalive_period")  or 10
-                local keepalive_ip1    = cursor:get("mwan3", "globals", "keepalive_ip1")    or "223.5.5.5"
-                local keepalive_ip2    = cursor:get("mwan3", "globals", "keepalive_ip2")    or "223.6.6.6"
-                local function parse_dns(raw)
-                    if not raw then return {"", ""} end
-                    if type(raw) == "table" then return {raw[1] or "", raw[2] or ""} end
-                    return {raw, ""}
+
+                -- 解析租期 (去掉 'h' 后缀)
+                local dhcp_lease = 12  -- 默认值
+                if dhcp_leasetime then
+                    local num_str = string.match(dhcp_leasetime, "(%d+)")
+                    if num_str then
+                        dhcp_lease = tonumber(num_str) or 12
+                    end
                 end
-                local wan_dns = parse_dns(wan_dns_raw)
-                local lte_dns = parse_dns(lte_dns_raw)
-                local cfg = {
-                    net_select       = tonumber(net_select) or 0,
-                    keepalive_period = tonumber(keepalive_period) or 10,
-                    keepalive_addr   = {keepalive_ip1, keepalive_ip2},
-                    eth0 = {
-                        ip_mode  = (wan_proto == "dhcp") and 1 or 0,
-                        sip      = wan_ip,
-                        gip      = wan_gw,
-                        mip      = wan_mask,
-                        dns_mode = wan_dns_mode,
-                        dns_ip   = wan_dns
+
+                -- DHCP 开关: ignore='1' 表示关闭，否则开启
+                local dhcp_enable = (dhcp_ignore ~= "1") and 1 or 0
+
+                -- 返回前端所需的 JSON 结构
+                local result = {
+                    s_lan = {
+                        ip = lan_ip,
+                        netmask = lan_netmask,
+                        dhcp_start = dhcp_start_ip,
+                        dhcp_end = dhcp_end_ip
                     },
-                    cell = {
-                        sim_switch = tonumber(lte_simnum) or 0,
-                        apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = tonumber(lte_auth) or 0 },
-                        dns_mode = lte_dns_mode,
-                        dns_ip   = lte_dns
+                    n_lan = {
+                        dhcp_enable = dhcp_enable,
+                        dhcp_lease = dhcp_lease
                     }
                 }
-                reply(req, cfg)
+
+                reply(req, result)
+            end,
+            {}
+        },
+
+        -- 获取网络配置 (WAN/LTE - 从ubus_adapter迁移)
+        get_network_config_wan = {
+            function(req, msg)
+                -- Read WAN config from UCI
+                local wan_proto = get_uci("network.wan.proto")
+                local wan_ip = get_uci("network.wan.ipaddr") or ""
+                local wan_netmask = get_uci("network.wan.netmask") or ""
+                local wan_gateway = get_uci("network.wan.gateway") or ""
+                local wan_dns_enable = get_uci("network.wan.peerdns") or 1  --0 手动设置 1 自动获取
+
+                local lte_dns_enable = get_uci("network.lte.peerdns") or 1  --0 手动设置 1 自动获取
+                local lte_device = get_uci("network.lte.modem_device") or ""
+                local lte_apn = get_uci("network.lte.modem_apn") or ""
+                local lte_user = get_uci("network.lte.modem_user") or ""
+                local lte_pswd = get_uci("network.lte.modem_passwd") or ""
+                local lte_auth = get_uci("network.lte.modem_auth") or 0
+                local lte_simnum = get_uci("network.lte.modem_simnum") or 0
+
+                -- Read DNS
+                local wan_dns = {}
+                local f = io.popen("uci get network.wan.dns 2>/dev/null")
+                if f then
+                    for line in f:lines() do
+                        for dns in string.gmatch(line, "%S+") do
+                            table.insert(wan_dns, dns)
+                        end
+                    end
+                    f:close()
+                end
+
+                local lte_dns = {}
+                local f = nil
+                if lte_dns_enable == 0 then
+                    f = io.popen("uci get network.lte.dns 2>/dev/null")
+                else
+                    f = io.popen("uci get network.lte._dns 2>/dev/null")
+                end
+                if f then
+                    for line in f:lines() do
+                        for dns in string.gmatch(line, "%S+") do
+                            table.insert(lte_dns, dns)
+                        end
+                    end
+                    f:close()
+                end
+
+                local ip_mode = 0
+                if wan_proto == "dhcp" then
+                    ip_mode = 1
+                end
+
+                local track_ip1 = get_uci("mwan3.globals.keepalive_ip1") or "223.5.5.5"
+                local track_ip2 = get_uci("mwan3.globals.keepalive_ip2") or "223.6.6.6"
+                local track_period = get_uci("mwan3.globals.keepalive_period") or 10
+                local net_select = get_uci("mwan3.globals.net_select") or 0
+
+                reply(req, {
+                    net_select = net_select, keepalive_period = track_period,
+                    keepalive_addr = {track_ip1, track_ip2},
+                    eth0 = {
+                        ip_mode = ip_mode,
+                        sip = wan_ip,
+                        gip = wan_gateway,
+                        mip = wan_netmask,
+                        dns_mode = wan_dns_enable,
+                        dns_ip = {wan_dns[1] or "", wan_dns[2] or ""}
+                    },
+                    cell = {
+                        sim_switch = lte_simnum,
+                        apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
+                        dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
+                    }
+                })
             end,
             {}
         },
         
-        -- 设置网络配置
+        -- 设置网络配置 (兼容旧接口)
         set_network_config = {
+            function(req, msg)
+                local res = set_network_config_values(msg)
+                reply(req, {result = res})
+            end,
+            {}
+        },
+
+        -- 设置网络配置 (新接口)
+        set_network_config_values = {
             function(req, msg)
                 local res = set_network_config_values(msg)
                 reply(req, {result = res})
@@ -2590,6 +2922,7 @@ local methods = {
                 -- 后台延迟执行，确保 ubus 先回复前端
                 -- 使用 nohup 和完全的输入输出重定向，确保与父进程完全脱离
                 local cmd = "( sleep 3; " ..
+                    "/etc/init.d/nginx_hlk stop; " ..
                     "/etc/init.d/network restart; " ..
                     "/etc/init.d/edge restart; " ..
                     "/etc/init.d/mqtt_app restart; " ..
@@ -2598,8 +2931,7 @@ local methods = {
                     "/etc/init.d/cloud restart; " ..
                     "/etc/init.d/cron restart;" ..
                     "/etc/init.d/firewall restart;" ..
-                    "/etc/init.d/firewall restart;" ..
-                    "/etc/init.d/nginx_hlk restart" ..
+                    "/etc/init.d/nginx_hlk start" ..
                 " ) </dev/null >/dev/null 2>&1 &"
                 log_info("Executing restart command: " .. cmd)
                 os.execute(cmd)
@@ -2638,6 +2970,157 @@ local methods = {
                 end
             end,
             {}
+        },
+
+	    -- WiFi扫描
+        wifi_scan = {
+            function(req, msg)
+                local act = msg.act
+                local result = {}
+
+                if act == "start" then
+                    -- 检查锁文件
+                    local lock_file = io.open(SCAN_LOCK_FILE, "r")
+                    if lock_file then
+                        lock_file:close()
+                        -- 检查是否超时
+                        local file_stat = io.popen("date -r " .. SCAN_LOCK_FILE .. " +%s")
+                        if file_stat then
+                            local mtime_str = file_stat:read("*a")
+                            file_stat:close()
+                            local mtime_clean = string.gsub(mtime_str, "\n", "")
+                            local mtime = tonumber(mtime_clean)
+                            if mtime and (os.time() - mtime < SCAN_TIMEOUT) then
+                                result = { result = true, status = "scanning" }
+                            else
+                                -- 超时，删除锁文件
+                                os.remove(SCAN_LOCK_FILE)
+                                os.remove(SCAN_RESULT_FILE)
+                                result = { result = false, msg = "timeout" }
+                            end
+                        else
+                            result = { result = false, msg = "date failed" }
+                        end
+                    else
+                        -- 开始扫描
+                        local lock = io.open(SCAN_LOCK_FILE, "w")
+                        if lock then
+                            lock:write(os.time())
+                            lock:close()
+                            -- 异步执行扫描命令
+                            os.execute("iwinfo " .. WIFI_IFACE .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
+                            result = { result = true, status = "started" }
+                        else
+                            result = { result = false, msg = "cannot create lock file" }
+                        end
+                    end
+
+                elseif act == "check" then
+                    -- 检查扫描结果
+                    local lock_file = io.open(SCAN_LOCK_FILE, "r")
+                    if not lock_file then
+                        result = { result = false, msg = "no scan in progress" }
+                    else
+                        lock_file:close()
+                        -- 检查是否超时
+                        local file_stat = io.popen("date -r " .. SCAN_LOCK_FILE .. " +%s")
+                        if file_stat then
+                            local mtime_str = file_stat:read("*a")
+                            file_stat:close()
+                            local mtime_clean = string.gsub(mtime_str, "\n", "")
+                            local mtime = tonumber(mtime_clean)
+                            if mtime and (os.time() - mtime >= SCAN_TIMEOUT) then
+                                -- 超时
+                                os.remove(SCAN_LOCK_FILE)
+                                os.remove(SCAN_RESULT_FILE)
+                                result = { result = false, msg = "timeout" }
+                            else
+                                -- 检查结果文件
+                                local result_file = io.open(SCAN_RESULT_FILE, "r")
+                                if not result_file then
+                                    result = { result = true, status = "scanning" }
+                                else
+                                    result_file:close()
+                                    -- 检查文件大小
+                                    local result_file = io.open(SCAN_RESULT_FILE, "r")
+                                    local size = 0
+                                    if result_file then
+                                        local content = result_file:read("*a")
+                                        result_file:close()
+                                        size = string.len(content)
+                                        if size and size > 0 then
+                                            -- 解析结果
+                                            if content then
+                                                local wifi_list = {}
+                                                -- 按Cell切分解析
+                                                local cell_start = 1
+                                                while true do
+                                                    local cell_end = string.find(content, "Cell %d+", cell_start + 1)
+                                                    if not cell_end then
+                                                        cell_end = string.len(content) + 1
+                                                    end
+
+                                                    local cell = string.sub(content, cell_start, cell_end - 1)
+                                                    if string.match(cell, "Cell %d+") then
+                                                        local ssid = string.match(cell, 'ESSID: "([^"]+)"')
+                                                        local signal = string.match(cell, 'Signal: ([-]?%d+) dBm')
+                                                        local enc_str = string.match(cell, 'Encryption: ([^\n]+)')
+
+                                                        if ssid and ssid ~= "" and ssid ~= "unknown" and signal then
+                                                            local security_type = 0 -- NONE
+                                                            if enc_str and string.find(enc_str, "WPA") then
+                                                                if string.find(enc_str, "SAE") then
+                                                                    security_type = 2 -- WPA3
+                                                                else
+                                                                    security_type = 1 -- WPA2
+                                                                end
+                                                            end
+
+                                                            table.insert(wifi_list, {
+                                                                ssid = ssid,
+                                                                signal = signal,
+                                                                security = security_type
+                                                            })
+                                                        end
+                                                    end
+
+                                                    if cell_end > string.len(content) then
+                                                        break
+                                                    end
+                                                    cell_start = cell_end
+                                                end
+
+                                                -- 清理文件
+                                                os.remove(SCAN_LOCK_FILE)
+                                                os.remove(SCAN_RESULT_FILE)
+
+                                                result = {
+                                                    result = true,
+                                                    status = "done",
+                                                    data = wifi_list
+                                                }
+                                            else
+                                                result = { result = false, msg = "cannot read result file" }
+                                            end
+                                        else
+                                            result = { result = true, status = "scanning" }
+                                        end
+                                    else
+                                        result = { result = false, msg = "cannot check file size" }
+                                    end
+                                end
+                            end
+                        else
+                            result = { result = false, msg = "date failed" }
+                        end
+                    end
+                else
+                    result = { result = false, msg = "invalid action" }
+                end
+
+                reply(req, result)
+            end,
+            { act = ubus.STRING }
         },
 
         -- 下载服务证书集合

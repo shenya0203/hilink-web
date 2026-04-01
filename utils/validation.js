@@ -164,6 +164,16 @@ export const isValidReconnectInterval = (interval) => {
 };
 
 /**
+ * 验证 TCP Server 最大连接数
+ * 规则：整数，范围 1 ~ 32
+ */
+export const isValidMaxConnections = (num) => {
+    if (num === '' || num === null || num === undefined) return false;
+    const n = Number(num);
+    return Number.isInteger(n) && n >= 1 && n <= 32;
+};
+
+/**
  * 验证 MQTT Client ID
  * 规则：允许字母、数字、下划线、横线，长度限制在 16 字节以内
  */
@@ -323,4 +333,28 @@ export const isValidCustomContent = (content) => {
     if (str.length < 1 || str.length > 128) return false;
     const reg = /^[a-zA-Z0-9\-\.\@]+$/;
     return reg.test(str);
+};
+
+/**
+ * 检查两个IP是否在同一个网段内
+ * @param {string} ip1 第一个IP地址
+ * @param {string} ip2 第二个IP地址
+ * @param {string} mask 子网掩码
+ * @returns {boolean} 如果在同一网段返回true，否则返回false
+ */
+export const isSameSubnet = (ip1, ip2, mask) => {
+    if (!isValidIPv4Format(ip1) || !isValidIPv4Format(ip2) || !isValidSubnetMask(mask)) {
+        return false;
+    }
+
+    const ip1Parts = ip1.split('.').map(Number);
+    const ip2Parts = ip2.split('.').map(Number);
+    const maskParts = mask.split('.').map(Number);
+
+    for (let i = 0; i < 4; i++) {
+        if ((ip1Parts[i] & maskParts[i]) !== (ip2Parts[i] & maskParts[i])) {
+            return false;
+        }
+    }
+    return true;
 };

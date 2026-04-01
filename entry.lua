@@ -237,7 +237,10 @@ local function handle_download_nv(args)
         
     elseif name == "network" then
         response = ubus_adapter.get_network_config()
-        
+
+    elseif name == "network_lan" then
+        response = ubus_adapter.get_network_lan_config()
+
     elseif name == "comm_tunnel" then
         response = ubus_adapter.get_comm_tunnel_config()
         
@@ -607,6 +610,26 @@ local function handle_upgrade(args)
     end
 end
 
+-- 处理 /action_wifi.cgi (WiFi扫描)
+local function handle_wifi_scan(args)
+    ngx.log(ngx.ERR, "[DEBUG] handle_wifi_scan args: ", cjson.encode(args))
+    local act = args.act
+
+    if not act then
+        send_error("Missing act parameter")
+        return
+    end
+
+    -- 调用 ubus 触发WiFi扫描
+    local result = ubus_adapter.wifi_scan(act)
+
+    if result then
+        send_json(result)
+    else
+        send_error("WiFi scan failed")
+    end
+end
+
 -- ==========================================================
 -- 3. 主路由入口
 -- ==========================================================
@@ -656,6 +679,10 @@ elseif uri == "/action_reset.cgi" then
 
 elseif uri == "/action_upgrade.cgi" then
     handle_upgrade(args)
+
+elseif uri == "/action_wifi.cgi" then
+    ngx.log(ngx.ERR, "[DEBUG] handle_wifi_scan args: ", cjson.encode(args))
+    handle_wifi_scan(args)
 
 -- 匹配 /upload/ 开头的 URI
 elseif string.sub(uri, 1, 8) == "/upload/" then

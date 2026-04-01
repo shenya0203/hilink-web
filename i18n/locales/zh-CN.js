@@ -200,6 +200,7 @@ export default {
         invalidServerAddress: '服务器地址格式错误 (IP或域名)',
         invalidPort: '端口号必须在 1024-65534 之间',
         invalidReconnectInterval: '重连间隔必须在 5-60 秒之间',
+        invalidMaxConnections: '最大连接数必须在 1-32 之间',
         portConflict: '端口已被占用'
     },
 
@@ -563,19 +564,30 @@ export default {
     network: {
         title: '网络配置',
         description: '配置网络参数',
+        // 顶级标签页
+        wanSettings: 'WAN 设置',
+        lanSettings: 'LAN 设置',
         // 标签页
         tabPriority: '网络优先',
         tabEthernet: '以太网',
+        tabWifi: 'WiFi',
         tabLte: 'LTE/CAT1',
         // 网络优先
         prioritySelect: '网络优先选择',
         networkPriority: '网络优先',
-        ethernetFirst: '以太网优先',
-        cellularFirst: '蜂窝网络优先',
+        ethernetWifiFirst: '有线/WiFi 优先',
+        cellularFirst: '4G/蜂窝 优先',
         ethernetOnly: '仅以太网',
+        ethernetWifiFirstDesc: '优先使用有线连接；当网线断开时，自动切换至 WiFi 连接',
         probePeriod: '探测周期',
         probeServer1: '探测服务器地址1',
         probeServer2: '探测服务器地址2',
+        // WiFi
+        wifi: 'WiFi',
+        wifiEnable: 'WiFi 开关',
+        wifiSsid: 'WiFi SSID',
+        wifiPassword: 'WiFi 密码',
+        wifiEncryption: '加密方式',
         // 以太网
         ethernet: '以太网',
         workMode: '工作模式',
@@ -584,11 +596,21 @@ export default {
         dnsMode: 'DNS获取方式',
         manualDns: '手动设置',
         autoDns: '自动获取',
-        lanIp: 'LAN IP',
+        wanIp: 'WAN IP',
         subnetMask: '子网掩码',
         gatewayAddress: '网关地址',
         primaryDns: '首选DNS地址',
         backupDns: '备用DNS地址',
+        // LAN
+        lan: 'LAN 配置',
+        lanInterface: '接口配置',
+        lanIp: '管理 IP 地址',
+        lanNetmask: '子网掩码',
+        dhcpServer: 'DHCP Server 配置',
+        dhcpEnable: 'DHCP 开关',
+        dhcpStart: '起始 IP',
+        dhcpEnd: '结束 IP',
+        dhcpLease: '租期 (小时)',
         // LTE/CAT1
         simSwitch: 'SIM卡切换',
         externalSimFirst: '外置SIM优先',
@@ -601,6 +623,7 @@ export default {
         authMethod: '鉴权方式',
         // 弹窗
         restartRequired: '网络配置需要重启设备才能生效。',
+        lanIpChangedRestart: '检测到 LAN IP 已修改。设备重启后，请手动修改电脑 IP 段并使用新 IP [{{newIp}}] 重新访问管理页面。',
         continueConfig: '继续配置',
         invalidProbePeriod: '探测周期必须在 5-600 秒之间',
         invalidServerAddress: '服务器地址格式错误 (IP或域名)',
@@ -608,7 +631,8 @@ export default {
         invalidSubnetMask: '子网掩码格式错误',
         invalidGateway: '网关地址格式错误',
         gatewayNotInSubnet: '网关不在子网范围内',
-        invalidStringSafe: '输入包含非法字符 (空格, 括号等) 或长度不符'
+        invalidStringSafe: '输入包含非法字符 (空格, 括号等) 或长度不符',
+        subnetConflict: 'LAN 口 IP 网段不能与 WAN 口 IP 网段冲突，请修改其中一个'
     },
 
     // 页脚

@@ -63,6 +63,14 @@ export function getNetworkConfig() {
 }
 
 /**
+ * 获取网络 LAN 配置（nv 版本）
+ */
+export function getNetworkLanConfig() {
+    return apiClient.get('/download_nv.cgi?name=network_lan')
+        .then(res => res.data)
+}
+
+/**
  * 获取串口配置
  */
 export function getUartConfig() {

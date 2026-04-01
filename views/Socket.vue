@@ -282,7 +282,16 @@
           </div>
           <div class="form-group">
             <label>{{ t('socket.maxConnections') }}:</label>
-            <input v-model.number="socketList[activeTab].tcps.conn_max_num" type="number" />
+            <div class="input-wrapper">
+              <input 
+                v-model.number="socketList[activeTab].tcps.conn_max_num" 
+                type="number" 
+                :class="{ 'input-error': getFieldError(activeTab, 'tcps_conn_max_num') }"
+              />
+              <span v-if="getFieldError(activeTab, 'tcps_conn_max_num')" class="field-error-text">
+                {{ getFieldError(activeTab, 'tcps_conn_max_num') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
             <label>{{ t('socket.overflowHandle') }}:</label>
@@ -444,7 +453,7 @@ import { fetchSocketConfigData, fetchOfflineCacheData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
-import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidCustomContent } from '../utils/validation.js'
+import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidCustomContent, isValidMaxConnections } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
@@ -516,6 +525,9 @@ const socketErrors = computed(() => {
     else if (sock.mode === 1) {
       if (!isValidPort(sock.tcps.local_port)) {
         errors[`${index}_tcps_local_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      }
+      if (!isValidMaxConnections(sock.tcps.conn_max_num)) {
+        errors[`${index}_tcps_conn_max_num`] = t('socket.invalidMaxConnections') || 'Max connections must be between 1-32'
       }
     }
     // UDP Client

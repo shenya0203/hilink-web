@@ -194,6 +194,7 @@ export default {
         restartRequired: 'Socket configuration requires a device restart to take effect.',
         continueConfig: 'Continue Configuration',
         customContentHint: '(1-128 bytes, supports a-z/A-Z/0-9 and -.@)',
+        invalidMaxConnections: 'Max connections must be between 1 and 32',
     },
 
     // MQTT Configuration Page
@@ -543,19 +544,30 @@ export default {
     network: {
         title: 'Network Configuration',
         description: 'Configure network parameters',
+        // Main Tabs
+        wanSettings: 'WAN Settings',
+        lanSettings: 'LAN Settings',
         // Tabs
         tabPriority: 'Network Priority',
         tabEthernet: 'Ethernet',
+        tabWifi: 'WiFi',
         tabLte: 'LTE/CAT1',
         // Network Priority
         prioritySelect: 'Network Priority Selection',
         networkPriority: 'Network Priority',
-        ethernetFirst: 'Ethernet First',
-        cellularFirst: 'Cellular First',
+        ethernetWifiFirst: 'Wired/WiFi Priority',
+        cellularFirst: '4G/Cellular Priority',
         ethernetOnly: 'Ethernet Only',
+        ethernetWifiFirstDesc: 'Prioritize wired connection; automatically switch to WiFi when cable is disconnected',
         probePeriod: 'Probe Period',
         probeServer1: 'Probe Server 1',
         probeServer2: 'Probe Server 2',
+        // WiFi
+        wifi: 'WiFi',
+        wifiEnable: 'WiFi Enable',
+        wifiSsid: 'WiFi SSID',
+        wifiPassword: 'WiFi Password',
+        wifiEncryption: 'Encryption',
         // Ethernet
         ethernet: 'Ethernet',
         workMode: 'Work Mode',
@@ -564,11 +576,21 @@ export default {
         dnsMode: 'DNS Mode',
         manualDns: 'Manual',
         autoDns: 'Auto',
-        lanIp: 'LAN IP',
+        wanIp: 'WAN IP',
         subnetMask: 'Subnet Mask',
         gatewayAddress: 'Gateway Address',
         primaryDns: 'Primary DNS',
         backupDns: 'Backup DNS',
+        // LAN
+        lan: 'LAN Configuration',
+        lanInterface: 'Interface Configuration',
+        lanIp: 'Management IP Address',
+        lanNetmask: 'Subnet Mask',
+        dhcpServer: 'DHCP Server Configuration',
+        dhcpEnable: 'DHCP Enable',
+        dhcpStart: 'Start IP',
+        dhcpEnd: 'End IP',
+        dhcpLease: 'Lease (hours)',
         // LTE/CAT1
         simSwitch: 'SIM Switch',
         externalSimFirst: 'External SIM First',
@@ -581,6 +603,7 @@ export default {
         authMethod: 'Auth Method',
         // Modal
         restartRequired: 'Network configuration requires a device restart to take effect.',
+        lanIpChangedRestart: 'LAN IP has been modified. After device restart, please manually change your computer IP segment and access the management page using the new IP [{{newIp}}].',
         continueConfig: 'Continue Configuration',
         invalidProbePeriod: 'Probe period must be between 5 and 600 seconds.',
         invalidServerAddress: 'Invalid server address format (IP or domain).',
@@ -588,7 +611,8 @@ export default {
         invalidSubnetMask: 'Invalid subnet mask format.',
         invalidGateway: 'Invalid gateway address format.',
         gatewayNotInSubnet: 'Gateway is not within the subnet range.',
-        invalidStringSafe: 'Input contains invalid characters (spaces, parentheses, etc.) or has an invalid length.'
+        invalidStringSafe: 'Input contains invalid characters (spaces, parentheses, etc.) or has an invalid length.',
+        subnetConflict: 'LAN IP subnet cannot conflict with WAN IP subnet, please modify one of them.'
     },
 
     // Footer
