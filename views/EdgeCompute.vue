@@ -3120,8 +3120,9 @@ const dataTypeMap = {
   '32 Bit Unsigned (CD AB)': 7,
   '32 Bit Signed (AB CD)': 8,
   '32 Bit Signed (CD AB)': 9,
-  '32 Bit Float (AB CD)': 10,
-  '32 Bit Float (CD AB)': 11,
+  '32 Bit Float(AB CD)': 10,
+  '32 Bit Float(CD AB)': 11,
+  
   'Bool': 18
 }
 

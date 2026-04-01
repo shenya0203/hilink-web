@@ -402,8 +402,14 @@ local function handle_upload(uri)
             C,Device1,Device1_state,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
             V开头的 表示虚拟设备
         ]]--
-        save_points_csv(content)
-        notify_core_process("edge_points")
+
+        if ubus_adapter.set_edge_proto_access_csv(content) then
+            -- Note: set_edge_proto_access_csv in daemon already saves and reloads
+            send_success()
+        else
+            send_error("Failed to save edge points via ubus")
+        end
+        return -- Response already sent
         
     elseif string.find(uri, "/upload/nv1") or string.find(uri, "/upload/nv2") then
         -- 3.3 Socket 链接同步 (Filename: link) 或 上报策略 (Filename: edge_report)

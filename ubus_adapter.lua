@@ -453,8 +453,8 @@ function _M.get_edge_points_csv()
 end
 
 function _M.set_edge_points_csv(content)
-    edge_points_csv = content
-    return true
+    local result = ubus_call("hilink", "set_edge_points_csv", { content = content })
+    return result and result.result
 end
 
 -- 17. Edge Proto Access Data - 协议转换点位数据 (CSV格式)
@@ -465,8 +465,8 @@ function _M.get_edge_proto_access_csv()
 end
 
 function _M.set_edge_proto_access_csv(content)
-    edge_proto_access_csv = content
-    return true
+    local result = ubus_call("hilink", "set_edge_proto_access_csv", { content = content })
+    return result and result.result
 end
 
 -- 18. Upgrade Firmware

@@ -31,6 +31,10 @@ local function get_runtime()
    return tonumber(string.format("%.0f", tonumber(uptime)))  --转成整数
 end
 
+-- 边缘计算点位配置缓存
+local edge_point_configs = {}
+local edge_proto_access_csv = ""
+
 local function log_info(msg)
     print(string.format("[INFO] %s", msg))
 end
@@ -198,6 +202,74 @@ local function read_file_content(path)
     local content = file:read("*a")
     file:close()
     return content
+end
+
+-- 格式化边缘计算点位值（支持截断和补位）
+local function format_edge_value(val, data_type, precision)
+    log_info("format_edge_value: " .. val .. ", " .. data_type .. ", " .. precision)
+    if not val then return "0" end
+    local n = 10 ^ precision
+    local num_val = tonumber(val) or 0
+    
+    -- 1:Bit, 4:Unsigned, 5:Signed, 18:Bool 等整数类
+    -- 预处理：如果是整数类，先取整
+    if data_type == 1 or data_type == 4 or data_type == 5 or data_type == 6 or data_type == 7 or data_type == 8 or data_type == 9  or data_type == 18 then
+        num_val = math.floor(num_val)
+    else
+        -- 移除手动截断逻辑，保留浮点原始精度，以便后续 string.format 执行标准的四舍五入
+    end
+    
+    -- 强制格式化为指定精度字符串（自动补0）
+    local fmt = "%." .. precision .. "f"
+    local ret_val = string.format(fmt, num_val)
+    log_info("format_edge_value: " .. ret_val)
+    return ret_val
+end
+
+-- 加载协议转换配置 CSV 到内存缓存
+local function load_edge_point_configs()
+    local path = "/etc/config/device/points.csv"
+    local content = read_file_content(path)
+    if not content then 
+        log_info("No points.csv file found or empty at " .. path)
+        edge_proto_access_csv = ""
+        edge_point_configs = {}
+        return 
+    end
+    
+    edge_proto_access_csv = content
+    edge_point_configs = {}
+    
+    -- 解析 CSV 格式 (C 行)
+    for line in string.gmatch(content, "[^\r\n]+") do
+        -- 去掉末尾分号
+        line = string.gsub(line, ";%s*$", "")
+        if line ~= "" then
+            local fields = {}
+            for field in string.gmatch(line .. ",", "([^,]*),") do
+                table.insert(fields, field)
+            end
+            
+            -- 索引 0: 标识 (C)
+            -- 索引 2: 数据点名称 (CSV 的第三个字段) -> 与 SHM 的 key 对应
+            -- 索引 4: 数据类型
+            -- 索引 5: 小数位数
+            log_info("fields: " .. cjson.encode(fields))
+            if fields[1] == "C" then
+                local key = fields[3]
+                local data_type = tonumber(fields[5])
+                local precision = tonumber(fields[6])
+                if key and data_type and precision then
+                    edge_point_configs[key] = {
+                        data_type = data_type,
+                        precision = precision
+                    }
+                end
+                log_info("Loaded edge point config: key=" .. key .. ", type=" .. data_type .. ", precision=" .. precision)
+            end
+        end
+    end
+    log_info("Loaded edge point configs for " .. (function() local c=0 for _ in pairs(edge_point_configs) do c=c+1 end return c end)() .. " points")
 end
 
 local function base64_encode_file(path)
@@ -701,7 +773,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.013",
+    soft_ver = "V1.014",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2447,9 +2519,16 @@ local methods = {
         set_edge_proto_access_csv = {
             function(req, msg)
                 if msg.content then
-                    edge_proto_access_csv = msg.content
+                    local path = "/etc/config/device/points.csv"
+                    if write_file_content(path, msg.content) then
+                        load_edge_point_configs() -- 配置保存后立即重新加载内存缓存
+                        reply(req, {result = true})
+                    else
+                        reply(req, {result = false, error = "Failed to write file"})
+                    end
+                else
+                    reply(req, {result = false, error = "No content provided"})
                 end
-                reply(req, {result = true})
             end,
             { content = ubus.STRING }
         },
@@ -2535,6 +2614,20 @@ local methods = {
             function(req, msg)
                 local values = shm.read_values()
                 if values then
+                    log_info("11111111 get_edge_values: " .. cjson.encode(values))
+                    -- 这里的 values 是嵌套结构 { slave_name = { point_name = value, ... }, ... }
+                    for slave, points in pairs(values) do
+                        if type(points) == "table" then
+                            for key, val in pairs(points) do
+                                local cfg = edge_point_configs[key]
+                                if cfg then
+                                    points[key] = format_edge_value(val, cfg.data_type, cfg.precision)
+                                end
+                            end
+                        end
+                    end
+
+                    log_info("get_edge_values formatted: " .. cjson.encode(values))
                     -- 注入系统从机数据
                     values["System_Sla..System"] = get_system_slave_data()
                     reply(req, { result = true, data = values })
@@ -2578,6 +2671,7 @@ local methods = {
 }
 
 sync_nginx_settings()
+load_edge_point_configs() -- 启动时加载一次边缘计算点位配置
 
 -- ==========================================================
 -- 注册 ubus 对象并启动事件循环
