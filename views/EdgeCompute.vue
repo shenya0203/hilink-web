@@ -2879,16 +2879,17 @@ const deletePoint = (index) => {
   const point = currentSlave.value.points[index]
   
   const { referenced, refTypes } = checkPointReference(currentSlave.value.name, point.name)
-  let confirmMsg = `${t('edge.confirmDeletePoint')} "${point.name}" 吗？`
+  let confirmMsg = null
   if (referenced) {
      confirmMsg = `${t('edge.confirmPointDeleteWithRef1')} ${refTypes.join('、')} ${t('edge.confirmPointDeleteWithRef2')}\n${t('edge.confirmPointDeleteWithRef3')}`
   }
 
-  if (window.confirm(confirmMsg)) {
+  if (!confirmMsg || window.confirm(confirmMsg)) {
     if (referenced) {
        cleanUpPointReference(currentSlave.value.name, point.name)
     }
     currentSlave.value.points.splice(index, 1)
+    edgeConfigDirty.value = true
   }
 }
 
