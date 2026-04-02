@@ -517,9 +517,9 @@ function _M.factory_reset()
 end
 
 -- 21. Restart Service
-function _M.restart_service()
-    ngx.log(ngx.INFO, "Triggering service restart via ubus...")
-    local result = ubus_call("hilink", "restart_service", {})
+function _M.restart_service(apply)
+    ngx.log(ngx.INFO, "Triggering service restart via ubus (apply=" .. tostring(apply) .. ")...")
+    local result = ubus_call("hilink", "restart_service", { apply = tonumber(apply) or 1 })
     if result and result.result then
         return true
     else

@@ -331,7 +331,7 @@
       <legend>{{ t('network.wifi') }}</legend>
       <div class="form-section">
         <div class="form-group">
-          <label>{{ t('network.wifiEnable') }}:</label>
+          <label>{{ t('network.wifiStaEnable') }}:</label>
           <select v-model="config.n_wifi.enable">
             <option value="0">{{ t('common.disable') }}</option>
             <option value="1">{{ t('common.enable') }}</option>
@@ -382,6 +382,97 @@
             <option value="1">WPA2</option>
             <option value="2">WPA3</option>
           </select>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-group">
+          <label>{{ t('network.workMode') }}:</label>
+          <select v-model="config.wifi_ip_mode" :disabled="config.n_wifi.enable !== '1'">
+            <option value="0">{{ t('network.staticMode') }}</option>
+            <option value="1">{{ t('network.dhcpMode') }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>{{ t('network.dnsMode') }}:</label>
+          <select v-model="config.wifi_dns_mode" :disabled="config.n_wifi.enable !== '1'">
+            <option value="0">{{ t('network.manualDns') }}</option>
+            <option value="1">{{ t('network.autoDns') }}</option>
+          </select>
+        </div>
+        <div v-if="config.wifi_ip_mode === '0'" class="form-group">
+          <label>{{ t('network.wanIp') }}:</label>
+          <div class="input-wrapper">
+            <input
+              v-model="config.wifi_ip"
+              type="text"
+              placeholder=""
+              :disabled="config.n_wifi.enable !== '1'"
+              :class="{ 'input-error': getFieldError('wifi_ip') }"
+            />
+            <span v-if="getFieldError('wifi_ip')" class="field-error-text">
+              {{ getFieldError('wifi_ip') }}
+            </span>
+          </div>
+        </div>
+        <div v-if="config.wifi_ip_mode === '0'" class="form-group">
+          <label>{{ t('network.subnetMask') }}:</label>
+          <div class="input-wrapper">
+            <input
+              v-model="config.wifi_netmask"
+              type="text"
+              placeholder=""
+              :disabled="config.n_wifi.enable !== '1'"
+              :class="{ 'input-error': getFieldError('wifi_netmask') }"
+            />
+            <span v-if="getFieldError('wifi_netmask')" class="field-error-text">
+              {{ getFieldError('wifi_netmask') }}
+            </span>
+          </div>
+        </div>
+        <div v-if="config.wifi_ip_mode === '0'" class="form-group">
+          <label>{{ t('network.gatewayAddress') }}:</label>
+          <div class="input-wrapper">
+            <input
+              v-model="config.wifi_gw"
+              type="text"
+              placeholder=""
+              :disabled="config.n_wifi.enable !== '1'"
+              :class="{ 'input-error': getFieldError('wifi_gw') }"
+            />
+            <span v-if="getFieldError('wifi_gw')" class="field-error-text">
+              {{ getFieldError('wifi_gw') }}
+            </span>
+          </div>
+        </div>
+        <div v-if="config.wifi_dns_mode === '0'" class="form-group">
+          <label>{{ t('network.primaryDns') }}:</label>
+          <div class="input-wrapper">
+            <input
+              v-model="config.wifi_dns"
+              type="text"
+              placeholder=""
+              :disabled="config.n_wifi.enable !== '1'"
+              :class="{ 'input-error': getFieldError('wifi_dns') }"
+            />
+            <span v-if="getFieldError('wifi_dns')" class="field-error-text">
+              {{ getFieldError('wifi_dns') }}
+            </span>
+          </div>
+        </div>
+        <div v-if="config.wifi_dns_mode === '0'" class="form-group">
+          <label>{{ t('network.backupDns') }}:</label>
+          <div class="input-wrapper">
+            <input
+              v-model="config.wifi_sdns"
+              type="text"
+              placeholder=""
+              :disabled="config.n_wifi.enable !== '1'"
+              :class="{ 'input-error': getFieldError('wifi_sdns') }"
+            />
+            <span v-if="getFieldError('wifi_sdns')" class="field-error-text">
+              {{ getFieldError('wifi_sdns') }}
+            </span>
+          </div>
         </div>
       </div>
     </form>
@@ -521,6 +612,101 @@
           </div>
         </div>
       </form>
+
+      <!-- Wi-Fi AP (热点) 配置 -->
+      <form style="margin-top: 20px;">
+        <legend>{{ t('network.wifiApConfig') }}</legend>
+        <div class="form-section">
+          <div class="form-group">
+            <label>{{ t('network.apEnable') }}:</label>
+            <select v-model="config.n_ap.enable">
+              <option value="0">{{ t('common.disable') }}</option>
+              <option value="1">{{ t('common.enable') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apSsid') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model="config.s_ap.ssid"
+                type="text"
+                placeholder=""
+                :class="{ 'input-error': getFieldError('ap_ssid') }"
+                :disabled="config.n_ap.enable !== '1'"
+              />
+              <span v-if="getFieldError('ap_ssid')" class="field-error-text">
+                {{ getFieldError('ap_ssid') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apEncryption') }}:</label>
+            <select v-model="config.n_ap.encryption" :disabled="config.n_ap.enable !== '1'">
+              <option value="0">OPEN</option>
+              <option value="1">WPA2-PSK</option>
+              <option value="2">WPA/WPA2-PSK</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apPassword') }}:</label>
+            <div class="input-wrapper">
+              <div class="password-group">
+                <input
+                  v-model="config.s_ap.password"
+                  :type="showApPassword ? 'text' : 'password'"
+                  placeholder=""
+                  :class="{ 'input-error': getFieldError('ap_password') }"
+                  :disabled="config.n_ap.enable !== '1' || config.n_ap.encryption === '0'"
+                  style="padding-right: 35px;"
+                />
+                <span 
+                  class="toggle-icon" 
+                  @click="showApPassword = !showApPassword"
+                  v-if="config.n_ap.enable === '1' && config.n_ap.encryption !== '0'"
+                >
+                  <svg v-if="showApPassword" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                </span>
+              </div>
+              <span v-if="getFieldError('ap_password')" class="field-error-text">
+                {{ getFieldError('ap_password') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apChannel') }}:</label>
+            <select v-model="config.n_ap.channel" :disabled="config.n_ap.enable !== '1'">
+              <option value="0">{{ t('network.auto') }}</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13">13</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ t('network.apHidden') }}:</label>
+            <select v-model="config.n_ap.hidden" :disabled="config.n_ap.enable !== '1'">
+              <option value="0">{{ t('network.apSsidVisible') }}</option>
+              <option value="1">{{ t('network.apSsidHidden') }}</option>
+            </select>
+          </div>
+        </div>
+      </form>
     </div>
 
     <!-- 应用保存按钮 -->
@@ -584,6 +770,7 @@ const error = ref(null)
 const activeMainTab = ref('wan')
 const activeTab = ref('ethernet')
 const showRestartModal = ref(false)
+const showApPassword = ref(false)
 const originalLanIp = ref('')
 
 // WiFi扫描相关
@@ -619,6 +806,13 @@ const config = ref({
     ssid: '',
     password: ''
   },
+  wifi_ip_mode: '1',
+  wifi_ip: '',
+  wifi_netmask: '',
+  wifi_gw: '',
+  wifi_dns_mode: '1',
+  wifi_dns: '',
+  wifi_sdns: '',
   // LTE/CAT1
   lte_sim: '',
   lte_apn: '',
@@ -638,6 +832,17 @@ const config = ref({
   n_lan: {
     dhcp_enable: '',
     dhcp_lease: ''
+  },
+  // AP (热点)
+  n_ap: {
+    enable: '',
+    encryption: '',
+    channel: '',
+    hidden: ''
+  },
+  s_ap: {
+    ssid: '',
+    password: ''
   }
 })
 
@@ -697,6 +902,33 @@ const networkErrors = computed(() => {
       errors['wifi_password'] = t('network.invalidStringSafe') || 'Password is required for encrypted connection'
     } else if (config.value.s_wifi.password && !isValidStringSafe(config.value.s_wifi.password, 8, 64)) {
       errors['wifi_password'] = t('network.invalidStringSafe') || 'Invalid Password (8-64 chars, no special chars)'
+    }
+
+    if (config.value.wifi_ip_mode === '0') {
+      if (!isValidIP(config.value.wifi_ip)) {
+        errors['wifi_ip'] = t('network.invalidIP') || 'Invalid IP'
+      }
+      if (!isValidSubnetMask(config.value.wifi_netmask)) {
+        errors['wifi_netmask'] = t('network.invalidSubnetMask') || 'Invalid Subnet Mask'
+      }
+      if (!isValidIP(config.value.wifi_gw)) {
+        errors['wifi_gw'] = t('network.invalidGateway') || 'Invalid Gateway'
+      }
+
+      if (isValidIP(config.value.wifi_ip) && isValidSubnetMask(config.value.wifi_netmask) && isValidIP(config.value.wifi_gw)) {
+        if (!isIpInSubnet(config.value.wifi_gw, config.value.wifi_ip, config.value.wifi_netmask)) {
+          errors['wifi_gw'] = t('network.gatewayNotInSubnet') || 'Gateway not in subnet'
+        }
+      }
+    }
+
+    if (config.value.wifi_dns_mode === '0') {
+      if (config.value.wifi_dns && !isValidIP(config.value.wifi_dns)) {
+        errors['wifi_dns'] = t('network.invalidIP') || 'Invalid DNS IP'
+      }
+      if (config.value.wifi_sdns && !isValidIP(config.value.wifi_sdns)) {
+        errors['wifi_sdns'] = t('network.invalidIP') || 'Invalid DNS IP'
+      }
     }
   }
 
@@ -761,11 +993,37 @@ const networkErrors = computed(() => {
     }
   }
 
-  // 6. WAN/LAN 网段冲突校验
+  // 6. AP 验证
+  if (config.value.n_ap.enable === '1') {
+    if (!config.value.s_ap.ssid || config.value.s_ap.ssid.trim() === '') {
+      errors['ap_ssid'] = t('network.apSsidRequired') || 'SSID is required'
+    } else if (!isValidStringSafe(config.value.s_ap.ssid, 1, 32)) {
+      errors['ap_ssid'] = t('network.apSsidInvalid') || 'Invalid SSID (1-32 characters)'
+    }
+
+    if (config.value.n_ap.encryption !== '0') { // 非OPEN模式
+      if (!config.value.s_ap.password || config.value.s_ap.password.trim() === '') {
+        errors['ap_password'] = t('network.apPasswordRequired') || 'Password is required for encrypted hotspot'
+      } else if (!isValidStringSafe(config.value.s_ap.password, 8, 63)) {
+        errors['ap_password'] = t('network.apPasswordInvalid') || 'Invalid password (8-63 characters)'
+      }
+    }
+  }
+
+  // 7. WAN/LAN 网段冲突校验
   if (config.value.eth_mode === '0' && // WAN为静态IP模式
       isValidIP(config.value.eth_ip) && isValidSubnetMask(config.value.eth_netmask) &&
       isValidIP(config.value.s_lan.ip) && isValidSubnetMask(config.value.s_lan.netmask)) {
     if (isSameSubnet(config.value.eth_ip, config.value.s_lan.ip, config.value.eth_netmask)) {
+      errors['subnet_conflict'] = t('network.subnetConflict') || 'LAN IP subnet cannot conflict with WAN IP subnet'
+    }
+  }
+
+  if (config.value.eth_mode === '0' && config.value.wifi_ip_mode === '0' &&
+      isValidIP(config.value.eth_ip) && isValidSubnetMask(config.value.eth_netmask) &&
+      isValidIP(config.value.wifi_ip) && isValidSubnetMask(config.value.wifi_netmask)) {
+    if (isSameSubnet(config.value.wifi_ip, config.value.eth_ip, config.value.wifi_netmask) ||
+        isSameSubnet(config.value.wifi_ip, config.value.eth_ip, config.value.eth_netmask)) {
       errors['subnet_conflict'] = t('network.subnetConflict') || 'LAN IP subnet cannot conflict with WAN IP subnet'
     }
   }
@@ -794,7 +1052,7 @@ const hasTabError = (tabName) => {
     return errors.eth_ip || errors.eth_netmask || errors.eth_gw || errors.eth_dns || errors.eth_sdns
   }
   if (tabName === 'wifi') {
-    return errors.wifi_ssid || errors.wifi_password
+    return errors.wifi_ssid || errors.wifi_password || errors.wifi_ip || errors.wifi_netmask || errors.wifi_gw || errors.wifi_dns || errors.wifi_sdns || errors.subnet_conflict
   }
   if (tabName === 'ltecat') {
     return errors.lte_apn || errors.lte_user || errors.lte_pwd || errors.lte_dns || errors.lte_sdns
@@ -807,12 +1065,13 @@ const hasMainTabError = (mainTabName) => {
   if (mainTabName === 'wan') {
     return errors.probe_period || errors.probe_server1 || errors.probe_server2 ||
            errors.eth_ip || errors.eth_netmask || errors.eth_gw || errors.eth_dns || errors.eth_sdns ||
-           errors.wifi_ssid || errors.wifi_password ||
+           errors.wifi_ssid || errors.wifi_password || errors.wifi_ip || errors.wifi_netmask || errors.wifi_gw || errors.wifi_dns || errors.wifi_sdns ||
            errors.lte_apn || errors.lte_user || errors.lte_pwd || errors.lte_dns || errors.lte_sdns ||
            errors.subnet_conflict
   }
   if (mainTabName === 'lan') {
-    return errors.lan_ip || errors.lan_netmask || errors.dhcp_start || errors.dhcp_end || errors.dhcp_lease
+    return errors.lan_ip || errors.lan_netmask || errors.dhcp_start || errors.dhcp_end || errors.dhcp_lease ||
+           errors.ap_ssid || errors.ap_password
   }
   return false
 }
@@ -834,26 +1093,33 @@ const loadData = async () => {
     
     if (netConfig) {
       Object.assign(config.value, {
-        net_select: netConfig.net_select !== undefined ? String(netConfig.net_select) : '',
-        probe_period: netConfig.keepalive_period !== undefined ? String(netConfig.keepalive_period) : '',
-        probe_server1: netConfig.keepalive_addr?.[0] || '',
-        probe_server2: netConfig.keepalive_addr?.[1] || '',
-        eth_mode: netConfig.eth0?.ip_mode !== undefined ? String(netConfig.eth0.ip_mode) : '',
-        eth_dns_mode: netConfig.eth0?.dns_mode !== undefined ? String(netConfig.eth0.dns_mode) : '',
-        eth_ip: netConfig.eth0?.sip || '',
-        eth_netmask: netConfig.eth0?.mip || '',
-        eth_gw: netConfig.eth0?.gip || '',
-        eth_dns: netConfig.eth0?.dns_ip?.[0] || '',
-        eth_sdns: netConfig.eth0?.dns_ip?.[1] || '',
-        // WiFi (不设默认值，等待接口数据)
+        net_select: String(netConfig.net_select),
+        probe_period: String(netConfig.keepalive_period),
+        probe_server1: netConfig.keepalive_addr[0],
+        probe_server2: netConfig.keepalive_addr[1],
+        eth_mode: String(netConfig.eth0.ip_mode),
+        eth_dns_mode: String(netConfig.eth0.dns_mode),
+        eth_ip: netConfig.eth0.sip,
+        eth_netmask: netConfig.eth0.mip,
+        eth_gw: netConfig.eth0.gip,
+        eth_dns: netConfig.eth0.dns_ip[0],
+        eth_sdns: netConfig.eth0.dns_ip[1],
+        // WiFi (使用模拟数据或默认值)
         n_wifi: {
-          enable: '', 
-          encryption: ''
+          enable: String(netConfig.n_wifi?.enable ?? 0),
+          encryption: String(netConfig.n_wifi?.encryption ?? 1)
         },
         s_wifi: {
-          ssid: '',
-          password: ''
+          ssid: netConfig.s_wifi?.ssid ?? '',
+          password: netConfig.s_wifi?.password ?? ''
         },
+        wifi_ip_mode: String(netConfig.n_wifi?.ip_mode ?? 1),
+        wifi_ip: netConfig.s_wifi?.ip ?? '',
+        wifi_netmask: netConfig.s_wifi?.netmask ?? '',
+        wifi_gw: netConfig.s_wifi?.gw ?? '',
+        wifi_dns_mode: String(netConfig.n_wifi?.dns_mode ?? 1),
+        wifi_dns: netConfig.s_wifi?.dns_ip?.[0] ?? '',
+        wifi_sdns: netConfig.s_wifi?.dns_ip?.[1] ?? '',
         lte_sim: String(netConfig.cell.sim_switch),
         lte_apn: netConfig.cell.apn.addr || '',
         lte_user: netConfig.cell.apn.user || '',
@@ -879,6 +1145,18 @@ const loadData = async () => {
       config.value.n_lan = {
         dhcp_enable: lanConfig.n_lan?.dhcp_enable !== undefined ? String(lanConfig.n_lan.dhcp_enable) : '',
         dhcp_lease: lanConfig.n_lan?.dhcp_lease !== undefined ? String(lanConfig.n_lan.dhcp_lease) : ''
+      }
+
+      // AP 配置容错处理
+      config.value.n_ap = {
+        enable: String(lanConfig.n_ap?.enable ?? 0),
+        encryption: String(lanConfig.n_ap?.encryption ?? 1),
+        channel: String(lanConfig.n_ap?.channel ?? 0),
+        hidden: String(lanConfig.n_ap?.hidden ?? 0)
+      }
+      config.value.s_ap = {
+        ssid: lanConfig.s_ap?.ssid ?? '',
+        password: lanConfig.s_ap?.password ?? ''
       }
     } else {
       // 如果API调用失败，保持配置项为空，防止误导用户
@@ -924,6 +1202,13 @@ const saveConfig = async () => {
     params.push(`s_wifi.ssid=${c.s_wifi.ssid}`)
     params.push(`s_wifi.password=${c.s_wifi.password}`)
     params.push(`n_wifi.encryption=${c.n_wifi.encryption}`)
+    params.push(`n_wifi.ip_mode=${c.wifi_ip_mode}`)
+    params.push(`s_wifi.ip=${c.wifi_ip}`)
+    params.push(`s_wifi.netmask=${c.wifi_netmask}`)
+    params.push(`s_wifi.gw=${c.wifi_gw}`)
+    params.push(`n_wifi.dns_mode=${c.wifi_dns_mode}`)
+    params.push(`s_wifi.dns_ip[0]=${c.wifi_dns}`)
+    params.push(`s_wifi.dns_ip[1]=${c.wifi_sdns}`)
 
     // LTE/CAT1 参数
     params.push(`n_cell.sim_switch=${c.lte_sim}`)
@@ -942,6 +1227,14 @@ const saveConfig = async () => {
     params.push(`s_lan.dhcp_start=${c.s_lan.dhcp_start}`)
     params.push(`s_lan.dhcp_end=${c.s_lan.dhcp_end}`)
     params.push(`n_lan.dhcp_lease=${c.n_lan.dhcp_lease}`)
+
+    // AP 参数
+    params.push(`n_ap.enable=${c.n_ap.enable}`)
+    params.push(`s_ap.ssid=${c.s_ap.ssid}`)
+    params.push(`s_ap.password=${c.s_ap.password}`)
+    params.push(`n_ap.encryption=${c.n_ap.encryption}`)
+    params.push(`n_ap.channel=${c.n_ap.channel}`)
+    params.push(`n_ap.hidden=${c.n_ap.hidden}`)
 
     const queryString = params.join('&')
     console.log('Saving network config:', queryString)
@@ -1520,5 +1813,26 @@ onUnmounted(() => {
 
 .btn-continue:hover {
   background-color: #f5f5f5;
+}
+.password-group {
+  position: relative;
+  width: 100%;
+}
+
+.toggle-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.toggle-icon:hover {
+  color: #0066cc;
 }
 </style>

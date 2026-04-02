@@ -518,8 +518,10 @@ end
 
 -- 处理 /action_restart_service.cgi
 local function handle_restart_service()
-    ngx.log(ngx.ERR, "[DEBUG] handle_restart_service triggered")
-    local success, msg = ubus_adapter.restart_service()
+    local args = ngx.req.get_uri_args(0)
+    local apply = tonumber(args.apply) or 1
+    ngx.log(ngx.ERR, "[DEBUG] handle_restart_service triggered (apply=" .. apply .. ")")
+    local success, msg = ubus_adapter.restart_service(apply)
     if success then
         send_success()
     else

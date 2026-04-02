@@ -130,6 +130,74 @@
         </table>
       </form>
 
+    <!-- 第四部分：WiFi STA -->
+    <form>
+      <legend>{{ t('status.wifiSta') }}</legend>
+      <table>
+        <tbody>
+          <tr>
+            <td class="title">{{ t('status.connectionStatus') }}:</td>
+            <td>
+              <span :class="{ 'status-connected': networkInfo.wifi_sta?.status === 'Connected', 'status-disconnected': networkInfo.wifi_sta?.status !== 'Connected' }">
+                {{ networkInfo.wifi_sta?.status === 'Connected' ? t('common.connected') : t('common.disconnected') }}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td class="title">{{ t('status.localIP') }}:</td>
+            <td>{{ networkInfo.wifi_sta?.ip || '-' }}</td>
+          </tr>
+          <tr>
+            <td class="title">{{ t('status.signalStrength') }}:</td>
+            <td>
+              <div class="signal-container" v-if="networkInfo.wifi_sta?.signal">
+                <span class="signal-value">{{ networkInfo.wifi_sta?.signal }} dBm</span>
+                <div class="signal-bar-bg">
+                   <div class="signal-bar-fill" :style="{ width: Math.min(Math.max((networkInfo.wifi_sta?.signal + 100) * 2, 0), 100) + '%', backgroundColor: getSignalColor(networkInfo.wifi_sta?.signal) }"></div>
+                </div>
+              </div>
+              <span v-else>-</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="title">{{ t('status.negotiatedRate') }}:</td>
+            <td>{{ networkInfo.wifi_sta?.rate || '-' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </form>
+
+    <!-- 第五部分：WiFi AP 设备列表 -->
+    <form class="wide-form">
+      <legend>{{ t('status.wifiApDeviceList') }}</legend>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>{{ t('status.deviceName') }}</th>
+              <th>{{ t('status.ipAddress') }}</th>
+              <th>{{ t('status.mac') }}</th>
+              <th>{{ t('status.signalStrength') }}</th>
+              <th>{{ t('status.negotiatedRate') }}</th>
+              <th>{{ t('status.leaseRemaining') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(client, index) in (networkInfo.wifi_ap?.clients || [])" :key="index">
+              <td>{{ client.hostname || '-' }}</td>
+              <td>{{ client.ip || '-' }}</td>
+              <td>{{ client.mac }}</td>
+              <td>{{ client.signal }} dBm</td>
+              <td>{{ client.rates }}</td>
+              <td>{{ formatLeaseTime(client.lease_remaining) }}</td>
+            </tr>
+            <tr v-if="!networkInfo.wifi_ap?.clients || networkInfo.wifi_ap.clients.length === 0">
+              <td colspan="6" class="text-center">{{ t('common.none') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </form>
       <!-- 第四部分：TCP 连接状态 -->
       <form>
         <legend class="collapsible" @click="toggleSection('tcp')">
@@ -287,6 +355,24 @@ const getSignalStrength = (csq) => {
   if (strength <= 20) return t('status.signalGood')
   if (strength <= 30) return t('status.signalExcellent')
   return t('status.signalStrong')
+}
+
+// 辅助函数：获取信号颜色
+const getSignalColor = (signal) => {
+  if (!signal) return '#ccc'
+  if (signal >= -50) return '#4caf50' // Strong Green
+  if (signal >= -70) return '#ff9800' // Medium Orange
+  return '#f44336' // Weak Red
+}
+
+// 辅助函数：格式化租约时间
+const formatLeaseTime = (seconds) => {
+  if (seconds === 'Static' || seconds === -1) return t('status.static')
+  if (!seconds || seconds < 0) return '-'
+  
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return `${h}小时${m}分`
 }
 
 // 加载所有数据（首次加载，显示 loading 状态）

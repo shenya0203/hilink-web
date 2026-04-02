@@ -17,6 +17,11 @@ local SCAN_TIMEOUT = 5                 -- 超时时间(秒)
 local SCAN_RESULT_FILE = "/tmp/wifi_scan.txt" -- 结果临时文件
 local SCAN_LOCK_FILE = "/tmp/wifi_scan.lock"  -- 锁文件
 
+-- Data Collection Config
+local WIFI_STA_IFACE = "wlan0"
+local WIFI_AP_IFACE = "wlan0-1"
+local NETWORK_STA_LOGICAL = "wwan"
+
 -- ==========================================================
 -- 配置数据存储 (实际应用中应该从文件或数据库读取)
 -- ==========================================================
@@ -179,14 +184,16 @@ local function get_current_run_net()
     -- 1. 获取接口物理状态
     local wan_online = check_is_online("wan")
     local lte_online = check_is_online("lte")
+    local wifi_online = check_is_online("wwan")
+
+    --查看mwan3的配置中的globals中的 net_select 配置
 
     -- 2. 互斥判断：只有一个接口在线的情况
-    if wan_online and not lte_online then
+    if (wan_online or wifi_online) and not lte_online then
         return "EtherNet"
-    elseif not wan_online and lte_online then
-        --判断是否有卡 是否注网Registered
+    elseif not (wan_online or wifi_online) and lte_online then
         return "LTE"
-    elseif not wan_online and not lte_online then
+    elseif not (wan_online or wifi_online) and not lte_online then
         return "None" -- 全部离线
     end
 
@@ -206,7 +213,7 @@ local function get_current_run_net()
         end
         
         -- 3.3 明确匹配 EtherNet 优先策略 (如 policy_eth_pri)
-        if string.find(policy, "eth") or string.find(policy, "wan") then
+        if string.find(policy, "eth") or string.find(policy, "wan") or string.find(policy, "wwan") then
             return "EtherNet"
         end
     end
@@ -226,6 +233,18 @@ local function read_file_content(path)
     return content
 end
 
+-- precision-aware rounding
+local function math_round(val, precision)
+    local multiplier = 10 ^ (precision or 0)
+    if val >= 0 then
+        -- 正数：+0.5 后向下取整
+        return math.floor(val * multiplier + 0.5) / multiplier
+    else
+        -- 负数：-0.5 后向上取整 (保证对称性)
+        return math.ceil(val * multiplier - 0.5) / multiplier
+    end
+end
+
 -- 格式化边缘计算点位值（支持截断和补位）
 local function format_edge_value(val, data_type, precision)
     log_info("format_edge_value: " .. val .. ", " .. data_type .. ", " .. precision)
@@ -238,6 +257,7 @@ local function format_edge_value(val, data_type, precision)
     if data_type == 1 or data_type == 4 or data_type == 5 or data_type == 6 or data_type == 7 or data_type == 8 or data_type == 9  or data_type == 18 then
         num_val = math.floor(num_val)
     else
+        num_val = math_round(val, precision)
         -- 移除手动截断逻辑，保留浮点原始精度，以便后续 string.format 执行标准的四舍五入
     end
     
@@ -795,7 +815,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.014",
+    soft_ver = "V1.015",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1838,6 +1858,122 @@ local function set_network_config_values(args)
             end
         end
     end
+    -- Wi-Fi STA 配置
+    local wifi_enable = args["n_wifi.enable"]
+    local wifi_ssid = args["s_wifi.ssid"]
+    local wifi_password = args["s_wifi.password"]
+    local wifi_encryption = args["n_wifi.encryption"]
+    local wifi_ip_mode = args["n_wifi.ip_mode"] and tonumber(args["n_wifi.ip_mode"])
+    local wifi_ip = args["s_wifi.ip"]
+    local wifi_netmask = args["s_wifi.netmask"]
+    local wifi_gw = args["s_wifi.gw"]
+    local wifi_dns_mode = args["n_wifi.dns_mode"] and tonumber(args["n_wifi.dns_mode"])
+    local wifi_dns1 = args["s_wifi.dns_ip[0]"]
+    local wifi_dns2 = args["s_wifi.dns_ip[1]"]
+
+    if wifi_enable ~= nil or wifi_ssid or wifi_password or wifi_encryption then
+        -- 查找已有的 STA 接口（device=radio0, mode=sta）
+        local sta_section = nil
+        cursor:foreach("wireless", "wifi-iface", function(section)
+            if section.device == "radio0" and section.mode == "sta" then
+                sta_section = section[".name"]
+                return false
+            end
+        end)
+
+        -- 不存在则创建新的 STA 接口
+        if not sta_section then
+            sta_section = cursor:add("wireless", "wifi-iface")
+            cursor:set("wireless", sta_section, "device", "radio0")
+            cursor:set("wireless", sta_section, "mode", "sta")
+            log_info("Created new wifi-iface for STA: " .. sta_section)
+        end
+
+        -- 设置 STA 参数
+        if wifi_ssid then
+            cursor:set("wireless", sta_section, "ssid", wifi_ssid)
+            log_info("Set wireless." .. sta_section .. ".ssid = " .. wifi_ssid)
+        end
+        if wifi_password then
+            cursor:set("wireless", sta_section, "key", wifi_password)
+            log_info("Set wireless." .. sta_section .. ".key = " .. wifi_password)
+        end
+        if wifi_encryption ~= nil then
+            local enc_str = "none"
+            local enc_num = tonumber(wifi_encryption)
+            if enc_num == 0 then
+                enc_str = "none"
+            elseif enc_num == 1 then
+                enc_str = "psk2"
+            elseif enc_num == 2 then
+                enc_str = "sae"
+            end
+            cursor:set("wireless", sta_section, "encryption", enc_str)
+            log_info("Set wireless." .. sta_section .. ".encryption = " .. enc_str)
+        end
+
+        cursor:set("wireless", sta_section, "network", "wwan")
+        log_info("Set wireless." .. sta_section .. ".network = wwan")
+
+        if wifi_enable ~= nil then
+            local disabled = (tonumber(wifi_enable) == 1) and "0" or "1"
+            cursor:set("wireless", sta_section, "disabled", disabled)
+            log_info("Set wireless." .. sta_section .. ".disabled = " .. disabled)
+        end
+
+        cursor:commit("wireless")
+        log_info("Committed wireless configuration")
+    end
+
+    if wifi_ip_mode ~= nil or wifi_ip or wifi_netmask or wifi_gw or wifi_dns_mode ~= nil or wifi_dns1 or wifi_dns2 then
+        if wifi_ip_mode ~= nil then
+            if wifi_ip_mode == 1 then
+                cursor:set("network", "wwan", "proto", "dhcp")
+                log_info("Set network.wwan.proto = dhcp")
+            else
+                cursor:set("network", "wwan", "proto", "static")
+                log_info("Set network.wwan.proto = static")
+                if wifi_ip then
+                    cursor:set("network", "wwan", "ipaddr", wifi_ip)
+                    log_info("Set network.wwan.ipaddr = " .. wifi_ip)
+                end
+                if wifi_netmask then
+                    cursor:set("network", "wwan", "netmask", wifi_netmask)
+                    log_info("Set network.wwan.netmask = " .. wifi_netmask)
+                end
+                if wifi_gw then
+                    cursor:set("network", "wwan", "gateway", wifi_gw)
+                    log_info("Set network.wwan.gateway = " .. wifi_gw)
+                end
+            end
+        end
+
+        if wifi_dns_mode ~= nil then
+            cursor:set("network", "wwan", "peerdns", wifi_dns_mode)
+            log_info("Set network.wwan.peerdns = " .. wifi_dns_mode)
+
+            cursor:delete("network", "wwan", "dns")
+            cursor:delete("network", "wwan", "_dns")
+
+            local dns_list = {}
+            if wifi_dns1 and wifi_dns1 ~= "" then
+                table.insert(dns_list, wifi_dns1)
+            end
+            if wifi_dns2 and wifi_dns2 ~= "" then
+                table.insert(dns_list, wifi_dns2)
+            end
+
+            if #dns_list > 0 then
+                if wifi_dns_mode == 1 then
+                    cursor:set("network", "wwan", "_dns", dns_list)
+                    log_info("Set network.wwan._dns = " .. table.concat(dns_list, " "))
+                else
+                    cursor:set("network", "wwan", "dns", dns_list)
+                    log_info("Set network.wwan.dns = " .. table.concat(dns_list, " "))
+                end
+            end
+        end
+    end
 
     -- 处理 LTE 参数
     local lte_simnum = args["n_cell.sim_switch"] and tonumber(args["n_cell.sim_switch"])
@@ -1936,6 +2072,9 @@ local function set_network_config_values(args)
     local lan_ip = args["s_lan.ip"]
     local lan_netmask = args["s_lan.netmask"]
     local dhcp_enable = args["n_lan.dhcp_enable"]
+    if dhcp_enable ~= nil then
+        dhcp_enable = tonumber(dhcp_enable)
+    end
     local dhcp_start_ip = args["s_lan.dhcp_start"]
     local dhcp_end_ip = args["s_lan.dhcp_end"]
     local dhcp_lease = args["n_lan.dhcp_lease"]
@@ -1979,6 +2118,85 @@ local function set_network_config_values(args)
         end
     end
 
+    -- 处理 AP 参数
+    local ap_enable = args["n_ap.enable"]
+    local ap_ssid = args["s_ap.ssid"]
+    local ap_password = args["s_ap.password"]
+    local ap_encryption = args["n_ap.encryption"]
+    local ap_channel = args["n_ap.channel"]
+    local ap_hidden = args["n_ap.hidden"]
+
+    if ap_enable ~= nil or ap_ssid or ap_password or ap_encryption or ap_channel or ap_hidden then
+        -- 查找现有的AP配置
+        local ap_iface_name = nil
+        cursor:foreach("wireless", "wifi-iface", function(section)
+            if section.mode == "ap" and section.network == "lan" then
+                ap_iface_name = section[".name"]
+            end
+        end)
+
+        -- 如果没有找到AP配置，创建一个新的
+        if not ap_iface_name then
+            ap_iface_name = cursor:add("wireless", "wifi-iface")
+            cursor:set("wireless", ap_iface_name, "mode", "ap")
+            cursor:set("wireless", ap_iface_name, "network", "lan")
+            log_info("Created new wifi-iface for AP: " .. ap_iface_name)
+        end
+
+        -- 设置AP参数
+        if ap_ssid then
+            cursor:set("wireless", ap_iface_name, "ssid", ap_ssid)
+            log_info("Set wireless." .. ap_iface_name .. ".ssid = " .. ap_ssid)
+        end
+
+        if ap_password then
+            cursor:set("wireless", ap_iface_name, "key", ap_password)
+            log_info("Set wireless." .. ap_iface_name .. ".key = " .. ap_password)
+        end
+
+        if ap_encryption then
+            local enc_str = "none"
+            local enc_num = tonumber(ap_encryption)
+            if enc_num == 0 then
+                enc_str = "none"
+            elseif enc_num == 1 then
+                enc_str = "psk2"
+            elseif enc_num == 2 then
+                enc_str = "psk-mixed"
+            end
+            cursor:set("wireless", ap_iface_name, "encryption", enc_str)
+            log_info("Set wireless." .. ap_iface_name .. ".encryption = " .. enc_str)
+        end
+
+        if ap_hidden then
+            local hidden_val = (ap_hidden == "1") and "1" or "0"
+            cursor:set("wireless", ap_iface_name, "hidden", hidden_val)
+            log_info("Set wireless." .. ap_iface_name .. ".hidden = " .. hidden_val)
+        end
+
+        -- 设置信道（需要找到对应的wifi-device）
+        if ap_channel then
+            cursor:foreach("wireless", "wifi-device", function(section)
+                local device_name = section[".name"]
+                cursor:set("wireless", device_name, "channel", ap_channel)
+                log_info("Set wireless." .. device_name .. ".channel = " .. ap_channel)
+            end)
+        end
+
+        -- 设置设备启用状态
+        if ap_enable then
+            local disabled = (ap_enable == "1") and "0" or "1"
+            cursor:foreach("wireless", "wifi-device", function(section)
+                local device_name = section[".name"]
+                cursor:set("wireless", device_name, "disabled", disabled)
+                log_info("Set wireless." .. device_name .. ".disabled = " .. disabled)
+            end)
+        end
+
+        cursor:commit("wireless")
+        log_info("Committed wireless configuration")
+    end
+
     -- 提交配置
     cursor:commit("network")
     cursor:commit("mwan3")
@@ -1997,6 +2215,12 @@ local function set_network_config_values(args)
            k ~= "n_eth0.ip_mode" and k ~= "s_eth0.sip" and k ~= "s_eth0.mip" and k ~= "s_eth0.gip" and
            k ~= "n_eth0.dns_mode" and k ~= "s_eth0.dns_ip[0]" and k ~= "s_eth0.dns_ip[1]" and
            k ~= "n_cell.sim_switch" and k ~= "s_cell.apn.addr" and k ~= "s_cell.apn.user" and
+           k ~= "n_ap.enable" and k ~= "s_ap.ssid" and k ~= "s_ap.password" and
+           k ~= "n_ap.encryption" and k ~= "n_ap.channel" and k ~= "n_ap.hidden" and
+           k ~= "n_wifi.enable" and k ~= "s_wifi.ssid" and k ~= "s_wifi.password" and
+           k ~= "n_wifi.encryption" and k ~= "n_wifi.ip_mode" and k ~= "s_wifi.ip" and
+           k ~= "s_wifi.netmask" and k ~= "s_wifi.gw" and k ~= "n_wifi.dns_mode" and
+           k ~= "s_wifi.dns_ip[0]" and k ~= "s_wifi.dns_ip[1]" and
            k ~= "s_cell.apn.pswd" and k ~= "n_cell.apn.auth" and k ~= "n_cell.dns_mode" and
            k ~= "s_cell.dns_ip[0]" and k ~= "s_cell.dns_ip[1]" and
            k ~= "n_net_select" and k ~= "n_keepalive_period" and
@@ -2079,6 +2303,49 @@ if not conn then
 end
 
 -- ==========================================================
+-- Helper Functions for WiFi
+-- ==========================================================
+
+local function parse_dhcp_leases()
+    local leases = {}
+    local f = io.open("/tmp/dhcp.leases", "r")
+    if not f then return leases end
+    
+    for line in f:lines() do
+        -- Format: timestamp mac ip hostname mac_id
+        local ts, mac, ip, hostname = string.match(line, "(%d+)%s+(%S+)%s+(%S+)%s+(%S+)")
+        if mac and ip then
+            leases[mac] = {
+                ip = ip,
+                hostname = (hostname == "*") and "Unknown" or hostname,
+                expires = tonumber(ts)
+            }
+        end
+    end
+    f:close()
+    return leases
+end
+
+local function parse_arp_table()
+    local arp = {}
+    local f = io.open("/proc/net/arp", "r")
+    if not f then return arp end
+    
+    -- Skip header
+    f:read() 
+    
+    for line in f:lines() do
+        -- IP address       HW type     Flags       HW address            Mask     Device
+        local ip, mac = string.match(line, "(%d+%.%d+%.%d+%.%d+)%s+%S+%s+%S+%s+(%S+)")
+        if ip and mac then
+            arp[mac] = ip
+        end
+    end
+    f:close()
+    return arp
+end
+
+-- ==========================================================
 -- 定义 ubus 方法
 -- ==========================================================
 
@@ -2108,6 +2375,16 @@ local function collect_network_status()
             lte_netmask = "",
             lte_dns = "", 
             lte_sdns = ""
+        },
+        wifi_sta = {
+            status = "Disconnected",
+            ip = "",
+            ssid = "",
+            signal = 0,
+            rate = ""
+        },
+        wifi_ap = {
+            clients = {}
         }
     }
 
@@ -2262,6 +2539,133 @@ local function collect_network_status()
         end
     end
     ]]--
+
+    -- ==========================================================
+    -- WiFi STA Information
+    -- ==========================================================
+    --获取配置 查看是否开启
+    local sta_status = conn:call("network.interface." .. NETWORK_STA_LOGICAL, "status", {})
+    if sta_status and sta_status.up then
+        net_status.wifi_sta.status = "Connected"
+        if sta_status["ipv4-address"] and #sta_status["ipv4-address"] > 0 then
+            net_status.wifi_sta.ip = sta_status["ipv4-address"][1].address
+        end
+    else
+        net_status.wifi_sta.status = "Disconnected"
+    end
+
+    -- Get physical info (Signal, Rate)
+    local f = io.popen("iwinfo " .. WIFI_STA_IFACE .. " assolist 2>/dev/null")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content then
+            -- Match signal: "Signal: -65 dBm"
+            --local signal = string.match(content, "Signal:%s*([-%d]+)%s*dBm")
+            --if signal then
+            --    net_status.wifi_sta.signal = tonumber(signal)
+            --end
+            local signal = string.match(content, "([-%d]+)%s*dBm")
+            if signal then
+                net_status.wifi_sta.signal = tonumber(signal)
+            end            
+            
+            -- Match RX/TX Rate: "RX: 72.2 MBit/s", "TX: 72.2 MBit/s"
+            -- Or combined output depending on iwinfo version/driver
+            -- Trying to capture the whole lines or just the rates
+            local rx_rate = string.match(content, "RX:%s*([%d%.]+%s*M?Bit/s)")
+            local tx_rate = string.match(content, "TX:%s*([%d%.]+%s*M?Bit/s)")
+            
+            if rx_rate and tx_rate then
+                net_status.wifi_sta.rate = "RX: " .. rx_rate .. " / TX: " .. tx_rate
+            end
+        end
+    end
+
+    -- ==========================================================
+    -- WiFi AP Client List
+    -- ==========================================================
+    local dhcp_leases = parse_dhcp_leases()
+    local arp_table = parse_arp_table()
+    local clients = {}
+
+    local f_ap = io.popen("iwinfo " .. WIFI_AP_IFACE .. " assolist 2>/dev/null")
+    if f_ap then
+        local current_mac = nil
+        local current_client = {}
+        
+        for line in f_ap:lines() do
+            -- MAC Address line: "00:11:22:33:44:55  -70 dBm / -90 dBm (SNR 20)  120 ms remaining"
+            -- OR simply "00:11:22:33:44:55" at start of line
+            local mac = string.match(line, "^(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)")
+            
+            if mac then
+                -- Push previous client if exists
+                if current_mac then
+                    table.insert(clients, current_client)
+                end
+                
+                current_mac = mac
+                current_client = {
+                    mac = mac,
+                    signal = 0,
+                    rx_rate = "-",
+                    tx_rate = "-"
+                }
+                
+                -- Attempt to parse signal on same line
+                local signal = string.match(line, "([-%d]+)%s*dBm")
+                if signal then current_client.signal = tonumber(signal) end
+                
+            elseif current_mac then
+                -- Parse details for current mac
+                -- RX: 6.0 MBit/s -> 6.0 MBit/s
+                local rx = string.match(line, "RX:%s*([%d%.]+%s*M?Bit/s)")
+                if rx then current_client.rx_rate = rx end
+                
+                local tx = string.match(line, "TX:%s*([%d%.]+%s*M?Bit/s)")
+                if tx then current_client.tx_rate = tx end
+                
+                -- Sometimes signal is on a separate line
+                local signal = string.match(line, "Signal:%s*([-%d]+)%s*dBm")
+                if signal then current_client.signal = tonumber(signal) end
+            end
+        end
+        -- Add last client
+        if current_mac then
+            table.insert(clients, current_client)
+        end
+        f_ap:close()
+    end
+
+    -- Enrich data
+    local now = os.time()
+    for _, client in ipairs(clients) do
+        local mac = client.mac:lower()
+        local lease = dhcp_leases[mac]
+        
+        if lease then
+            client.ip = lease.ip
+            client.hostname = lease.hostname
+            client.lease_remaining = lease.expires - now
+        else
+            -- Fallback to ARP
+            client.ip = arp_table[mac] or "-"
+            client.hostname = "Unknown"
+            -- Mark as Static or Unknown
+            if client.ip ~= "-" then
+                client.lease_remaining = "Static"
+            else
+                client.lease_remaining = -1
+            end
+        end
+        
+        -- Format rates
+        client.rates = "RX: " .. client.rx_rate .. " / TX: " .. client.tx_rate
+    end
+
+    net_status.wifi_ap.clients = clients
+
     log_info("finally netdev : "..net_status.netdev)
 
     return net_status
@@ -2416,6 +2820,44 @@ local methods = {
                 -- DHCP 开关: ignore='1' 表示关闭，否则开启
                 local dhcp_enable = (dhcp_ignore ~= "1") and 1 or 0
 
+                -- 读取 Wi-Fi AP 配置
+                local ap_enable = 0
+                local ap_ssid = ""
+                local ap_password = ""
+                local ap_encryption = 1  -- 默认 WPA2-PSK
+                local ap_channel = 0    -- 默认自动
+                local ap_hidden = 0     -- 默认显示SSID
+
+                cursor:foreach("wireless", "wifi-iface", function(section)
+                    if section.mode == "ap" and section.network == "lan" then
+                        -- AP 启用状态：如果wifi-device没有disabled，则认为启用
+                        local device_disabled = get_uci("wireless." .. section.device .. ".disabled") or "1"
+                        ap_enable = (device_disabled ~= "1") and 1 or 0
+
+                        -- 读取AP配置
+                        ap_ssid = section.ssid or ""
+                        ap_encryption = section.encryption or "none"
+
+                        -- 转换加密方式为数字
+                        if ap_encryption == "none" then
+                            ap_encryption = 0  -- OPEN
+                        elseif ap_encryption == "psk2" then
+                            ap_encryption = 1  -- WPA2-PSK
+                        elseif ap_encryption == "psk-mixed" or ap_encryption == "psk2+psk" then
+                            ap_encryption = 2  -- WPA/WPA2-PSK
+                        else
+                            ap_encryption = 1  -- 默认 WPA2-PSK
+                        end
+
+                        ap_password = section.key or ""
+                        ap_hidden = (section.hidden == "1") and 1 or 0
+
+                        -- 读取信道配置
+                        local device_channel = get_uci("wireless." .. section.device .. ".channel")
+                        ap_channel = tonumber(device_channel) or 0
+                    end
+                end)
+
                 -- 返回前端所需的 JSON 结构
                 local result = {
                     s_lan = {
@@ -2427,6 +2869,17 @@ local methods = {
                     n_lan = {
                         dhcp_enable = dhcp_enable,
                         dhcp_lease = dhcp_lease
+                    },
+                    -- AP 配置
+                    n_ap = {
+                        enable = ap_enable,
+                        encryption = ap_encryption,
+                        channel = ap_channel,
+                        hidden = ap_hidden
+                    },
+                    s_ap = {
+                        ssid = ap_ssid,
+                        password = ap_password
                     }
                 }
 
@@ -2491,6 +2944,60 @@ local methods = {
                 local track_period = get_uci("mwan3.globals.keepalive_period") or 10
                 local net_select = get_uci("mwan3.globals.net_select") or 0
 
+                -- Read WiFi STA configuration
+                local wifi_enable = 0
+                local wifi_encryption = "0"
+                local wifi_ssid = ""
+                local wifi_password = ""
+                local wwan_proto = get_uci("network.wwan.proto")
+                local wwan_ip = get_uci("network.wwan.ipaddr") or ""
+                local wwan_netmask = get_uci("network.wwan.netmask") or ""
+                local wwan_gateway = get_uci("network.wwan.gateway") or ""
+                local wwan_dns_enable = get_uci("network.wwan.peerdns") or 1  --0 手动设置 1 自动获取
+
+                -- Get UCI cursor for wireless config
+                local uci_cursor = require("uci").cursor()
+                uci_cursor:foreach("wireless", "wifi-iface", function(section)
+                    if section.mode == "sta" then
+                        wifi_enable = section.disabled == "0" and 1 or 0
+                        wifi_ssid = section.ssid or ""
+                        wifi_password = section.key or ""
+
+                        -- Map encryption to frontend format
+                        local enc = section.encryption or "none"
+                        if enc == "none" then
+                            wifi_encryption = "0"
+                        elseif enc == "psk2" then
+                            wifi_encryption = "1"  -- WPA2
+                        elseif enc == "sae" then
+                            wifi_encryption = "2"  -- WPA3
+                        else
+                            wifi_encryption = "0"  -- default to none
+                        end
+                    end
+                end)
+
+                local wwan_dns = {}
+                local f = nil
+                if wwan_dns_enable == 0 then
+                    f = io.popen("uci get network.wwan.dns 2>/dev/null")
+                else
+                    f = io.popen("uci get network.wwan._dns 2>/dev/null")
+                end
+                if f then
+                    for line in f:lines() do
+                        for dns in string.gmatch(line, "%S+") do
+                            table.insert(wwan_dns, dns)
+                        end
+                    end
+                    f:close()
+                end
+
+                local wifi_ip_mode = 0
+                if wwan_proto == "dhcp" then
+                    wifi_ip_mode = 1
+                end
+
                 reply(req, {
                     net_select = net_select, keepalive_period = track_period,
                     keepalive_addr = {track_ip1, track_ip2},
@@ -2506,6 +3013,20 @@ local methods = {
                         sim_switch = lte_simnum,
                         apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
                         dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
+                    },
+                    n_wifi = {
+                        enable = wifi_enable,
+                        encryption = wifi_encryption,
+                        ip_mode = wifi_ip_mode,
+                        dns_mode = wwan_dns_enable
+                    },
+                    s_wifi = {
+                        ssid = wifi_ssid,
+                        password = wifi_password,
+                        ip = wwan_ip,
+                        netmask = wwan_netmask,
+                        gw = wwan_gateway,
+                        dns_ip = {wwan_dns[1] or "", wwan_dns[2] or ""}
                     }
                 })
             end,
@@ -2918,10 +3439,20 @@ local methods = {
         -- 重启服务
         restart_service = {
             function(req, msg)
-                log_info("Service restart requested...")
+                local apply = tonumber(msg.apply) or 1
+                log_info("Service restart requested (apply=" .. apply .. ")")
+                
+                if apply == 0 then
+                    -- 准备阶段：仅返回成功
+                    log_info("Service restart check passed, waiting for apply=1 trigger.")
+                    reply(req, {result = true})
+                    return
+                end
+
+                -- 执行阶段：立即重启动作 (延时 0.1s 确保响应发出)
                 -- 后台延迟执行，确保 ubus 先回复前端
                 -- 使用 nohup 和完全的输入输出重定向，确保与父进程完全脱离
-                local cmd = "( sleep 3; " ..
+                local cmd = "( sleep 1; " ..
                     "/etc/init.d/nginx_hlk stop; " ..
                     "/etc/init.d/network restart; " ..
                     "/etc/init.d/edge restart; " ..
@@ -2933,12 +3464,13 @@ local methods = {
                     "/etc/init.d/firewall restart;" ..
                     "/etc/init.d/nginx_hlk start" ..
                 " ) </dev/null >/dev/null 2>&1 &"
-                log_info("Executing restart command: " .. cmd)
+                
+                log_info("Executing direct restart command: " .. cmd)
                 os.execute(cmd)
                 -- 立即返回成功响应，给前端足够时间接收
                 reply(req, {result = true})
             end,
-            {}
+            { apply = ubus.INT32 }
         },
 
         -- 获取边缘计算实时数据 (从共享内存读取)

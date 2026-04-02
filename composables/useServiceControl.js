@@ -98,39 +98,30 @@ export function useServiceControl() {
         isServiceRestarting.value = true
 
         try {
-            // 2. 尝试发送重启指令
-            await apiClient.get('/action_restart_service.cgi')
-            console.log('Service restart command sent successfully')
+            // 2. 第一步：发送“准备”指令 (apply=0)
+            // 该请求不执行重启动作，仅确认后端在线，确保握手完成
+            await apiClient.get('/action_restart_service.cgi?apply=0')
+            console.log('Service restart prepared successfully')
             
-            // 3. 开始轮询探测服务恢复
+            // 3. 第二步：发送“执行”指令 (apply=1)
+            // 后端收到此指令后将立即重启服务。该请求通常会因为 Nginx 关闭而导致 Network Error，这是正常现象。
+            // 我们不使用 await，或者直接忽略其报错，立即进入探测阶段
+            apiClient.get('/action_restart_service.cgi?apply=1').catch(err => {
+                console.log('Execute restart triggered expected network drop:', err)
+            })
+            
+            console.log('Service restart command sequence finished, starting recovery polling...')
+            
+            // 4. 开始轮询探测服务恢复
             pollServiceRecovery(targetPort)
         } catch (err) {
-            console.log('Caught error during restart request:', err)
+            console.log('Caught error during restart sequence:', err)
             
-            // 4. 判断是否为网络相关错误（重启导致的正常现象）
+            // 如果在第一阶就报错，说明系统本身通信有问题
             const message = err && err.message ? err.message : ''
-            const code = err && err.code ? err.code : ''
-            
-            // 网络错误、连接重置、超时等都视为"重启指令已发送"
-            const isExpectedError = 
-                message.includes('Network Error') ||
-                message.includes('Connection Reset') ||
-                message.includes('timeout') ||
-                message.includes('ECONNRESET') ||
-                message.includes('ETIMEDOUT') ||
-                code === 'ECONNABORTED' ||
-                code === 'ECONNRESET'
-            
-            if (isExpectedError) {
-                console.log('Network error detected (expected during restart), starting recovery polling...')
-                // 5. 视为成功，开始轮询探测服务恢复
-                pollServiceRecovery(targetPort)
-            } else {
-                // 6. 其他未知错误，报错并取消重启状态
-                console.error('Unexpected error during service restart:', err)
-                alert(t('common.operationFailed') + ': ' + message)
-                isServiceRestarting.value = false
-            }
+            console.error('Failed to prepare service restart:', err)
+            alert(t('common.operationFailed') + ': ' + message)
+            isServiceRestarting.value = false
         }
     }
 
