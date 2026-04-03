@@ -9,9 +9,23 @@
     </div>
     
     <!-- 错误提示 -->
-    <div v-if="error" class="error">{{ error }}</div>
+    <div v-if="error" class="error-container">
+      <div class="error-content">
+        <div class="error-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <div class="error-message">{{ error }}</div>
+        <button class="btn-reload" @click="loadData">
+          {{ t('common.retry') || '重试' }}
+        </button>
+      </div>
+    </div>
 
-    <div v-if="!loading">
+    <div v-if="!loading && !error">
       <!-- 网络配置标题 -->
       <form>
         <legend>{{ t('network.title') }}</legend>
@@ -19,7 +33,8 @@
       </form>
     </div>
 
-    <!-- 顶级标签页选择 -->
+    <div v-if="!loading && !error">
+      <!-- 顶级标签页选择 -->
     <div class="main-tabs">
       <button
         class="main-tab-btn"
@@ -716,9 +731,10 @@
       </form>
     </div>
 
-    <!-- 应用保存按钮 -->
-    <div class="button-group">
-      <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
+      <!-- 应用保存按钮 -->
+      <div class="button-group">
+        <button class="btn-save" @click="saveConfig" :disabled="!isConfigValid" :class="{ 'btn-disabled': !isConfigValid }">{{ t('common.save') }}</button>
+      </div>
     </div>
 
     <!-- 重启确认弹窗 -->
@@ -1636,6 +1652,52 @@ onUnmounted(() => {
   text-align: center;
   padding: 40px 20px;
   color: #666;
+}
+
+.error-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  width: 100%;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  border: 1px solid #ffcdd2;
+}
+
+.error-icon {
+  color: #d32f2f;
+}
+
+.error-message {
+  color: #d32f2f;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.btn-reload {
+  padding: 8px 25px;
+  background-color: #d32f2f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.btn-reload:hover {
+  background-color: #b71c1c;
 }
 
 .error {

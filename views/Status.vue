@@ -372,7 +372,7 @@ const formatLeaseTime = (seconds) => {
   
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  return `${h}小时${m}分`
+  return `${h}${t('status.hour')}${m}${t('status.minute')}`
 }
 
 // 加载所有数据（首次加载，显示 loading 状态）

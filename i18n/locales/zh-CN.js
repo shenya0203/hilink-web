@@ -139,7 +139,9 @@ export default {
         wifiApDeviceList: 'WiFi AP 设备列表',
         ipAddress: 'IP 地址',
         leaseRemaining: '租期剩余',
-        static: '静态'
+        static: '静态',
+        hour: '小时',
+        minute: '分'
     },
 
     // 串口配置页面

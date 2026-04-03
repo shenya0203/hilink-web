@@ -18,8 +18,8 @@ local SCAN_RESULT_FILE = "/tmp/wifi_scan.txt" -- 结果临时文件
 local SCAN_LOCK_FILE = "/tmp/wifi_scan.lock"  -- 锁文件
 
 -- Data Collection Config
-local WIFI_STA_IFACE = "wlan0"
-local WIFI_AP_IFACE = "wlan0-1"
+--local WIFI_STA_IFACE = "wlan0"
+--local WIFI_AP_IFACE = "wlan0-1"
 local NETWORK_STA_LOGICAL = "wwan"
 
 -- ==========================================================
@@ -2345,6 +2345,25 @@ local function parse_arp_table()
     return arp
 end
 
+-- 根据模式 (ap 或 sta) 动态获取物理接口名称 (用于 MT7628 / mt76 驱动等动态命名环境)
+local function get_wifi_ifname_by_mode(target_mode)
+    if not conn then return nil end
+    local wireless_status = conn:call("network.wireless", "status", {})
+    if not wireless_status then return nil end
+
+    for radio, data in pairs(wireless_status) do
+        if data.interfaces then
+            for _, iface in ipairs(data.interfaces) do
+                -- 匹配 config 中的 mode (ap 或 sta)
+                if iface.config and iface.config.mode == target_mode then
+                    return iface.ifname
+                end
+            end
+        end
+    end
+    return nil
+end
+
 -- ==========================================================
 -- 定义 ubus 方法
 -- ==========================================================
@@ -2554,30 +2573,33 @@ local function collect_network_status()
         net_status.wifi_sta.status = "Disconnected"
     end
 
-    -- Get physical info (Signal, Rate)
-    local f = io.popen("iwinfo " .. WIFI_STA_IFACE .. " assolist 2>/dev/null")
-    if f then
-        local content = f:read("*a")
-        f:close()
-        if content then
-            -- Match signal: "Signal: -65 dBm"
-            --local signal = string.match(content, "Signal:%s*([-%d]+)%s*dBm")
-            --if signal then
-            --    net_status.wifi_sta.signal = tonumber(signal)
-            --end
-            local signal = string.match(content, "([-%d]+)%s*dBm")
-            if signal then
-                net_status.wifi_sta.signal = tonumber(signal)
-            end            
-            
-            -- Match RX/TX Rate: "RX: 72.2 MBit/s", "TX: 72.2 MBit/s"
-            -- Or combined output depending on iwinfo version/driver
-            -- Trying to capture the whole lines or just the rates
-            local rx_rate = string.match(content, "RX:%s*([%d%.]+%s*M?Bit/s)")
-            local tx_rate = string.match(content, "TX:%s*([%d%.]+%s*M?Bit/s)")
-            
-            if rx_rate and tx_rate then
-                net_status.wifi_sta.rate = "RX: " .. rx_rate .. " / TX: " .. tx_rate
+    if net_status.wifi_sta.status == "Connected" then
+        -- Get physical info (Signal, Rate)
+        local WIFI_STA_IFACE = get_wifi_ifname_by_mode("sta")
+        local f = io.popen("iwinfo " .. WIFI_STA_IFACE .. " assolist 2>/dev/null")
+        if f then
+            local content = f:read("*a")
+            f:close()
+            if content then
+                -- Match signal: "Signal: -65 dBm"
+                --local signal = string.match(content, "Signal:%s*([-%d]+)%s*dBm")
+                --if signal then
+                --    net_status.wifi_sta.signal = tonumber(signal)
+                --end
+                local signal = string.match(content, "([-%d]+)%s*dBm")
+                if signal then
+                    net_status.wifi_sta.signal = tonumber(signal)
+                end            
+                
+                -- Match RX/TX Rate: "RX: 72.2 MBit/s", "TX: 72.2 MBit/s"
+                -- Or combined output depending on iwinfo version/driver
+                -- Trying to capture the whole lines or just the rates
+                local rx_rate = string.match(content, "RX:%s*([%d%.]+%s*M?Bit/s)")
+                local tx_rate = string.match(content, "TX:%s*([%d%.]+%s*M?Bit/s)")
+                
+                if rx_rate and tx_rate then
+                    net_status.wifi_sta.rate = "RX: " .. rx_rate .. " / TX: " .. tx_rate
+                end
             end
         end
     end
@@ -2588,6 +2610,8 @@ local function collect_network_status()
     local dhcp_leases = parse_dhcp_leases()
     local arp_table = parse_arp_table()
     local clients = {}
+
+    local WIFI_AP_IFACE = get_wifi_ifname_by_mode("ap")
 
     local f_ap = io.popen("iwinfo " .. WIFI_AP_IFACE .. " assolist 2>/dev/null")
     if f_ap then

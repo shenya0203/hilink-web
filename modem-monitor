@@ -1,11 +1,11 @@
 #!/bin/sh
 
 # --- 配置部分 ---
-DEVICE="/dev/ttyUSB1"        
-INTERFACE="lte"              
-INFO_FILE="/tmp/modem_info.json" 
-CHECK_INTERVAL=10            
-FAIL_THRESHOLD=3             
+DEVICE="/dev/ttyUSB1"
+INTERFACE="lte"
+INFO_FILE="/tmp/modem_info.json"
+CHECK_INTERVAL=10
+FAIL_THRESHOLD=3
 
 # --- 全局变量初始化 ---
 fail_count=0
@@ -19,7 +19,7 @@ send_at() {
     local cmd="$1"
     local output=""
     local line=""
-    
+
     exec 3<>"$DEVICE"
     if flock -n 3; then
         echo -e "${cmd}\r" >&3
@@ -73,7 +73,7 @@ update_status_file() {
     local stat="$3"
     local sim_st="$4"
     local ip="$5"  # 新增 IP 参数
-    
+
     cat <<EOF > "${INFO_FILE}.tmp"
 {
     "imei": "${g_imei:-N/A}",
@@ -114,10 +114,10 @@ while true; do
 
     # 1. 检查 SIM 状态
     cpin_resp=$(send_at "AT+CPIN?")
-    
+
     if echo "$cpin_resp" | grep -q "READY"; then
         sim_status="ready"
-        
+
         # 2. 获取信号
         csq_line=$(send_at "AT+CSQ" | grep "+CSQ:")
         csq_val=$(echo "$csq_line" | awk -F '[,: ]+' '{print $2}')
@@ -129,26 +129,24 @@ while true; do
         # 3. 获取注册状态
         cereg_resp=$(send_at "AT+CEREG?" | grep "+CEREG:")
         reg_stat=$(echo "$cereg_resp" | awk -F ',' '{print $2}' | tr -d '\r')
-        
+
         # 4. 获取网络类型
         cops_resp=$(send_at "AT+COPS?" | grep "+COPS:")
         if echo "$cops_resp" | grep -q "7"; then net_type="LTE"; elif echo "$cops_resp" | grep -q "9"; then net_type="NR5G"; else net_type="LTE"; fi
 
         is_online=0
         case "$reg_stat" in
-            1|5) 
-                is_online=1
-                net_status="Registered"
-                
+            1|5)
                 # 5. --- 新增：获取 IP 地址 ---
-                # 发送 AT+CGPADDR=1
                 ip_resp=$(send_at "AT+CGPADDR=1")
-                # 解析 +CGPADDR: 1,"10.x.x.x"
-                # grep 提取包含引号的行，awk -F '"' 取第二个字段 (即引号中间的内容)
                 ip_val=$(echo "$ip_resp" | grep "+CGPADDR:" | awk -F '"' '{print $2}')
-                
-                if [ -n "$ip_val" ]; then
+
+                if [ -n "$ip_val" ] && [ "$ip_val" != "0.0.0.0" ]; then
                     local_ip="$ip_val"
+                    is_online=1
+                    net_status="Registered"
+                else
+                    net_status="Registered (No IP)"
                 fi
                 ;;
             2) net_status="Searching" ;;
@@ -161,18 +159,26 @@ while true; do
         if [ "$is_online" -eq 1 ]; then
             fail_count=0
         else
-            fail_count=$((fail_count + 1))
+            # 方案 A：只有在注册成功但无 IP 的情况下才尝试增加计数
+            # SIM 缺失、未注册、搜索中 (2) 均将计数清零，不触发重启
+            if [ "$reg_stat" = "1" ] || [ "$reg_stat" = "5" ]; then
+                fail_count=$((fail_count + 1))
+                logger -t "Modem-Monitor" "Registered but no IP. Count: $fail_count"
+            else
+                fail_count=0
+            fi
         fi
 
     else
         # SIM 异常处理
         sim_raw=$(echo "$cpin_resp" | grep "+CPIN:" | awk -F ': ' '{print $2}' | tr -d '\r')
         sim_status="${sim_raw:-absent}"
-        
+
         update_status_file "0" "None" "SIM Error" "$sim_status" "0.0.0.0"
-        
-        fail_count=$((fail_count + 1))
-        logger -t "Modem-Monitor" "SIM not ready: $sim_status. Count: $fail_count"
+
+        # 方案 A：SIM 卡异常时不执行重启，重置计数器
+        fail_count=0
+        logger -t "Modem-Monitor" "SIM not ready: $sim_status. Skip restart logic."
     fi
 
     # 故障重启逻辑

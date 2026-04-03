@@ -1,0 +1,164 @@
+#!/bin/sh /etc/rc.common
+
+. "${IPKG_INSTROOT}/lib/mwan3/common.sh"
+. "${IPKG_INSTROOT}/lib/functions/network.sh"
+. "${IPKG_INSTROOT}/lib/mwan3/mwan3.sh"
+
+START=19
+USE_PROCD=1
+SCRIPTNAME="mwan3-init"
+
+service_running() {
+        [ -d "$MWAN3_STATUS_DIR" ]
+}
+
+# --- 新增功能：将globals配置同步到interface和rule ---
+sync_config_from_globals() {
+        local net_select ip1 ip2 period target_policy
+
+        # 加载当前配置
+        config_load mwan3
+
+        # 读取 globals 中的参数
+        config_get net_select globals net_select
+        config_get ip1 globals keepalive_ip1
+        config_get ip2 globals keepalive_ip2
+        config_get period globals keepalive_period '10' # 默认10秒
+
+        # 如果没有配置net_select，则不执行同步操作
+        [ -z "$net_select" ] && return
+
+        # 1. 根据 net_select 选择策略名称
+        case "$net_select" in
+            0) target_policy="policy_wired_wifi_pri" ;;   # 对应网页：有线/WiFi 优先
+            1) target_policy="policy_lte_pri" ;;          # 对应网页：4G 优先
+            2) target_policy="policy_eth_only" ;;         # 对应网页：仅有线
+            *) target_policy="policy_wired_wifi_pri" ;;   # 默认情况
+        esac
+
+        # 修改 default_rule 的策略 (假设你的主规则名为 default_rule)
+        # 如果你的规则名不是 default_rule，请将下面这行改为对应的名字
+        uci -q set mwan3.default_rule.use_policy="$target_policy"
+
+        # 2. 定义更新接口参数的内部函数
+        update_iface_params() {
+            local cfg="$1"
+            # 更新探测周期
+            uci -q set mwan3."$cfg".interval="$period"
+
+            # 更新探测IP (先删除旧列表，再添加新列表)
+            uci -q delete mwan3."$cfg".track_ip
+            [ -n "$ip1" ] && uci -q add_list mwan3."$cfg".track_ip="$ip1"
+            [ -n "$ip2" ] && uci -q add_list mwan3."$cfg".track_ip="$ip2"
+        }
+
+        # 3. 遍历所有 interface 并应用配置
+        config_foreach update_iface_params interface
+
+        # 4. 提交更改到配置文件
+        uci commit mwan3
+}
+# --------------------------------------------------------
+
+start_tracker() {
+        local enabled interface
+        interface=$1
+        config_get_bool enabled $interface 'enabled' '0'
+        [ $enabled -eq 0 ] && return
+        [ -z "$(config_get $interface track_ip)" ] && return
+
+        procd_open_instance "track_${1}"
+        procd_set_param command /usr/sbin/mwan3track $interface
+        procd_set_param respawn
+        procd_close_instance
+}
+
+start_service() {
+        local enabled hotplug_pids
+
+        # 在初始化前，先同步配置
+        sync_config_from_globals
+
+        mwan3_init
+        config_foreach start_tracker interface
+
+        mwan3_update_iface_to_table
+        mwan3_set_connected_ipset
+        mwan3_set_custom_ipset
+        mwan3_set_general_rules
+        mwan3_set_general_iptables
+        config_foreach mwan3_ifup interface "init"
+        wait $hotplug_pids
+        mwan3_set_policies_iptables
+        mwan3_set_user_rules
+
+        procd_open_instance rtmon_ipv4
+        procd_set_param command /usr/sbin/mwan3rtmon ipv4
+        procd_set_param respawn
+        procd_close_instance
+
+        if command -v ip6tables > /dev/null; then
+                procd_open_instance rtmon_ipv6
+                procd_set_param command /usr/sbin/mwan3rtmon ipv6
+                procd_set_param respawn
+                procd_close_instance
+        fi
+}
+
+stop_service() {
+        local ipset rule IP IPTR IPT family table tid
+
+        mwan3_init
+        config_foreach mwan3_interface_shutdown interface
+
+        for family in ipv4 ipv6; do
+                if [ "$family" = "ipv4" ]; then
+                        IPT="$IPT4"
+                        IPTR="$IPT4R"
+                        IP="$IP4"
+                elif [ "$family" = "ipv6" ]; then
+                        [ $NO_IPV6 -ne 0 ] && continue
+                        IPT="$IPT6"
+                        IPTR="$IPT6R"
+                        IP="$IP6"
+                fi
+
+                for tid in $($IP route list table all | sed -ne 's/.*table \([0-9]\+\).*/\1/p' | sort -u); do
+                        [ $tid -gt $MWAN3_INTERFACE_MAX ] && continue
+                        $IP route flush table $tid &> /dev/null
+                done
+
+                for rule in $($IP rule list | grep -E '^[1-3][0-9]{3}\:' | cut -d ':' -f 1); do
+                        $IP rule del pref $rule &> /dev/null
+                done
+                table="$($IPT -S)"
+                {
+                        echo "*mangle";
+                        [ -z "${table##*PREROUTING -j mwan3_hook*}" ] && echo "-D PREROUTING -j mwan3_hook"
+                        [ -z "${table##*OUTPUT -j mwan3_hook*}" ] && echo "-D OUTPUT -j mwan3_hook"
+                        echo "$table" | awk '{print "-F "$2}' | grep mwan3 | sort -u
+                        echo "$table" | awk '{print "-X "$2}' | grep mwan3 | sort -u
+                        echo "COMMIT"
+                } | $IPTR
+        done
+
+        for ipset in $($IPS -n list | grep mwan3_); do
+                $IPS -q destroy $ipset
+        done
+
+        for ipset in $($IPS -n list | grep mwan3 | grep -E '_v4|_v6'); do
+                $IPS -q destroy $ipset
+        done
+
+        rm -rf $MWAN3_STATUS_DIR $MWAN3TRACK_STATUS_DIR
+
+}
+
+reload_service() {
+        stop
+        start
+}
+
+service_triggers() {
+        procd_add_reload_trigger 'mwan3'
+}

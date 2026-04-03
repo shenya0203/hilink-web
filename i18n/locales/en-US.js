@@ -136,7 +136,9 @@ export default {
         wifiApDeviceList: 'WiFi AP Device List',
         ipAddress: 'IP Address',
         leaseRemaining: 'Lease Remaining',
-        static: 'Static'
+        static: 'Static',
+        hour: 'h',
+        minute: 'm'
 
     },
 
