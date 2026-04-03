@@ -39,7 +39,14 @@ export default defineConfig({
         target: proxyTarget,
         ...proxyConfig
       },
-
+      '/action_restart_service.cgi': {
+        target: proxyTarget,
+        ...proxyConfig
+      },
+      "/download_file.cgi": {
+        target: proxyTarget,
+        ...proxyConfig
+      }
     }
   }
 })

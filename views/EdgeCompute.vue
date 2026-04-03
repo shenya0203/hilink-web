@@ -3207,7 +3207,7 @@ const generateCsvContent = () => {
           registerStr = String(point.registerType) + String(point.registerAddress).padStart(5, '0')
         }
 
-        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${registerStr},${bitIndex},0,0,${point.timeout || 200},${report},${point.changeRange || 2},${point.controlFormula || ''},;\n`
+        csv += `C,${slave.name},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces || 0},0,0,0,0,0,${point.collectFormula || ''},${registerStr},${bitIndex},0,0,${point.timeout || 200},${report},${point.changeRange ?? 2},${point.controlFormula || ''},;\n`
       }
     })
   })
@@ -3303,7 +3303,7 @@ const parseCsvContent = (content) => {
           collectFormula: parts[11] || '',
           timeout: parseInt(parts[16]) || 200,
           reportOnChange: parts[17] === '1',
-          changeRange: parseInt(parts[18]) || 2,
+          changeRange: parseFloat(parts[18]) || 0,
           controlFormula: parts[19] || '',
           value: null,
           isDefault: false

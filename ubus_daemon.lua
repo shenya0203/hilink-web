@@ -815,7 +815,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.015",
+    soft_ver = "V1.016",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -3540,7 +3540,7 @@ local methods = {
                             lock:write(os.time())
                             lock:close()
                             -- 异步执行扫描命令
-                            os.execute("iwinfo " .. WIFI_IFACE .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
+                            os.execute("/usr/bin/iwinfo " .. WIFI_IFACE .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
                             result = { result = true, status = "started" }
                         else
                             result = { result = false, msg = "cannot create lock file" }
@@ -3594,25 +3594,41 @@ local methods = {
 
                                                     local cell = string.sub(content, cell_start, cell_end - 1)
                                                     if string.match(cell, "Cell %d+") then
-                                                        local ssid = string.match(cell, 'ESSID: "([^"]+)"')
+                                                        local ssid = string.match(cell, 'ESSID: "([^"]*)"')
+                                                        if not ssid then
+                                                            ssid = string.match(cell, 'ESSID: ([^\n]+)')
+                                                        end
+
+                                                        -- 规范化：如果为 "unknown" 或匹配失败，视为空字符串（代表隐藏 SSID）
+                                                        if not ssid or ssid == "unknown" then
+                                                            ssid = ""
+                                                        end
+
+                                                        local bssid = string.match(cell, 'Address: ([^\n]+)')
                                                         local signal = string.match(cell, 'Signal: ([-]?%d+) dBm')
                                                         local enc_str = string.match(cell, 'Encryption: ([^\n]+)')
+                                                        
 
-                                                        if ssid and ssid ~= "" and ssid ~= "unknown" and signal then
-                                                            local security_type = 0 -- NONE
-                                                            if enc_str and string.find(enc_str, "WPA") then
-                                                                if string.find(enc_str, "SAE") then
-                                                                    security_type = 2 -- WPA3
-                                                                else
-                                                                    security_type = 1 -- WPA2
+                                                        -- 只要有 BSSID 和 信号强度，即认为是有效热点 (SSID 可能隐藏)
+                                                        if bssid and signal then
+                                                            -- 过滤 WEP 加密方式 (安全性低，根据需求不兼容)
+                                                            if not (enc_str and string.find(enc_str, "WEP")) then
+                                                                local security_type = 0 -- NONE
+                                                                if enc_str and string.find(enc_str, "WPA") then
+                                                                    if string.find(enc_str, "SAE") then
+                                                                        security_type = 2 -- WPA3
+                                                                    else
+                                                                        security_type = 1 -- WPA2
+                                                                    end
                                                                 end
-                                                            end
 
-                                                            table.insert(wifi_list, {
-                                                                ssid = ssid,
-                                                                signal = signal,
-                                                                security = security_type
-                                                            })
+                                                                table.insert(wifi_list, {
+                                                                    ssid = ssid,
+                                                                    bssid = bssid,
+                                                                    signal = signal,
+                                                                    security = security_type
+                                                                })
+                                                            end
                                                         end
                                                     end
 

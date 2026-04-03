@@ -38,6 +38,8 @@ export default {
         uploadFailed: '上传失败',
         operationFailed: '操作失败',
         uploadedFile: '已上传文件',
+        action: '操作',
+        select: '选择',
     },
 
     // 顶部导航栏
@@ -447,7 +449,7 @@ export default {
         invalidTimeout: '超时时间必须在 200-10000 ms 之间',
         invalidSlaveAddress: '从机地址必须在 1-247 之间',
         invalidRegisterAddress: '寄存器地址必须在 1-65536 之间',
-        invalidChangeRange: '变化范围必须为正整数',
+        invalidChangeRange: '范围 0.000~100.000 (最多三位小数)',
         invalidReportPeriod: '上报周期必须在 5-86400 秒之间',
         invalidTopic: '格式错误 (1-200字节 ASCII, 无空格/#/+/$//, 最多7层)',
         invalidSubTopic: '订阅主题长度须1-32字节，禁止空格和括号',
@@ -596,6 +598,7 @@ export default {
         wifi: 'WiFi',
         wifiStaEnable: 'WiFi 开关',
         wifiSsid: 'WiFi SSID',
+        wifiBssid: 'WiFi MAC地址',
         wifiPassword: 'WiFi 密码',
         wifiEncryption: '加密方式',
         // 以太网
@@ -658,7 +661,13 @@ export default {
         apSsidRequired: '热点名称不能为空',
         apSsidInvalid: '热点名称无效 (1-32个字符)',
         apPasswordRequired: '加密模式下密码不能为空',
-        apPasswordInvalid: '密码无效 (8-63个字符)'
+        apPasswordInvalid: '密码无效 (8-63个字符)',
+        wifiScan: 'WiFi 扫描',
+        wifiScanning: '正在扫描周围 WiFi... (约3-5秒)',
+        wifiSignalStrength: '信号强度 (dBm)',
+        noWifiFound: '未扫描到 WiFi 网络',
+        hiddenSsid: '隐藏网络',
+        hiddenSsidHint: '提示：选中的热点隐藏了 SSID，现已进入手动输入模式，请在 SSID 栏中输入。',
     },
 
     // 页脚

@@ -358,6 +358,9 @@
             <span v-if="getFieldError('wifi_ssid')" class="field-error-text">
               {{ getFieldError('wifi_ssid') }}
             </span>
+            <span v-if="config.n_wifi.enable === '1' && showHiddenSsidHint" class="field-hint-text">
+              {{ t('network.hiddenSsidHint') }}
+            </span>
           </div>
         </div>
         <div class="form-group">
@@ -478,30 +481,34 @@
     </form>
 
     <!-- WiFi扫描弹窗 -->
-    <div v-if="wifiScanModal.show" class="modal" @click="closeWifiScanModal">
-      <div class="modal-content wifi-scan-modal" @click.stop>
+    <div v-if="wifiScanModal.show" class="modal-overlay">
+      <div class="modal wifi-scan-modal">
         <div class="modal-header wifi-scan-header">
-          <h3>WiFi扫描</h3>
+          <h3>{{ t('network.wifiScan') }}</h3>
           <button type="button" class="close-btn" @click="closeWifiScanModal">&times;</button>
         </div>
         <div class="modal-body">
           <div v-if="wifiScanModal.loading" class="scan-loading">
             <div class="loading-spinner"></div>
-            <p>正在扫描周围 WiFi... (约3-5秒)</p>
+            <p>{{ t('network.wifiScanning') }}</p>
           </div>
           <div v-else-if="wifiScanModal.networks && wifiScanModal.networks.length > 0" class="scan-results">
             <table class="wifi-table">
               <thead>
                 <tr>
-                  <th>SSID</th>
-                  <th>信号强度 (dBm)</th>
-                  <th>加密方式</th>
-                  <th>操作</th>
+                  <th>{{ t('network.wifiSsid') }}</th>
+                  <th>{{ t('network.wifiBssid') }}</th>
+                  <th>{{ t('network.wifiSignalStrength') }}</th>
+                  <th>{{ t('network.wifiEncryption') }}</th>
+                  <th>{{ t('common.action') }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="network in wifiScanModal.networks" :key="network.ssid">
-                  <td>{{ network.ssid }}</td>
+                <tr v-for="network in wifiScanModal.networks" :key="network.bssid">
+                  <td :class="{ 'hidden-ssid-label': !network.ssid }">
+                    {{ network.ssid || t('network.hiddenSsid') }}
+                  </td>
+                  <td>{{ network.bssid }}</td>
                   <td>{{ network.signal }}</td>
                   <td>
                     <span v-if="network.security === 0">NONE</span>
@@ -509,14 +516,14 @@
                     <span v-else-if="network.security === 2">WPA3</span>
                   </td>
                   <td>
-                    <button type="button" class="select-btn" @click="selectWifi(network)">选择</button>
+                    <button type="button" class="select-btn" @click="selectWifi(network)">{{ t('common.select') }}</button>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div v-else class="scan-empty">
-            <p>未扫描到 WiFi 网络</p>
+            <p>{{ t('network.noWifiFound') }}</p>
           </div>
         </div>
       </div>
@@ -781,6 +788,7 @@ const wifiScanModal = ref({
 })
 const scanInterval = ref(null)
 const scanAttempts = ref(0)
+const showHiddenSsidHint = ref(false)
 
 // 配置对象
 const config = ref({
@@ -1269,6 +1277,14 @@ watch(() => activeMainTab.value, (newVal) => {
   if (newVal === 'wan' && activeTab.value !== 'ethernet' && activeTab.value !== 'lte' && activeTab.value !== 'wifi' && activeTab.value !== 'ltecat') {
     activeTab.value = 'ethernet'
   }
+  // 切换主标签页时关闭WiFi扫描弹窗
+  closeWifiScanModal()
+})
+
+// 监听子标签页变化
+watch(() => activeTab.value, () => {
+  // 切换子标签页时关闭WiFi扫描弹窗
+  closeWifiScanModal()
 })
 
 // WiFi扫描方法
@@ -1339,6 +1355,9 @@ const selectWifi = (network) => {
 
   // 清空密码
   config.value.s_wifi.password = ''
+
+  // 只要SSID为空，即视为选择了隐藏SSID的AP
+  showHiddenSsidHint.value = !network.ssid
 
   // 关闭弹窗
   closeWifiScanModal()
@@ -1515,6 +1534,19 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
+.field-hint-text {
+  color: #ff8800;
+  font-size: 11px;
+  margin-top: 4px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.hidden-ssid-label {
+  color: #888;
+  font-style: italic;
+}
+
 .priority-description {
   color: #666;
   font-size: 12px;
@@ -1638,16 +1670,17 @@ onUnmounted(() => {
 }
 
 .wifi-scan-modal {
+  /* 基础宽度定义，覆盖 .modal 的默认 400px */
   max-width: 800px;
   width: 90%;
   min-width: 600px;
-}
-
-/* WiFi 扫描弹窗专用样式覆盖 */
-.modal:has(.wifi-scan-modal) {
-  width: auto !important;
-  max-width: 800px;
-  min-width: 600px;
+  
+  /* 圆角和阴影优化 */
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important;
+  
+  /* 确保溢出内容正确处理（如标题栏圆角） */
+  overflow: hidden;
 }
 
 /* WiFi 扫描弹窗头部样式 */
@@ -1655,20 +1688,39 @@ onUnmounted(() => {
   background-color: #0066cc !important;
   color: white !important;
   border-bottom: 1px solid #0052a3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 15px !important; /* 减小内边距，解决“太宽”问题 */
 }
 
 .wifi-scan-header h3 {
   color: white !important;
+  margin: 0;
+  font-size: 16px;
 }
 
 .wifi-scan-header .close-btn {
+  background: none;
+  border: none;
   color: white !important;
+  font-size: 20px; /* 稍微减小字体 */
+  cursor: pointer;
+  line-height: 1;
   opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; /* 减小按钮尺寸以匹配紧凑型标题栏 */
+  height: 32px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  margin-right: -5px; /* 向右微调位置 */
 }
 
 .wifi-scan-header .close-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
   opacity: 1;
-  color: white !important;
 }
 
 .scan-loading {
@@ -1722,18 +1774,26 @@ onUnmounted(() => {
 }
 
 .select-btn {
-  padding: 4px 8px;
+  padding: 6px 16px;
   background-color: #28a745;
   color: white;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
-  transition: background-color 0.2s;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
 }
 
 .select-btn:hover {
   background-color: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.select-btn:active {
+  transform: translateY(0);
 }
 
 .scan-empty {

@@ -255,13 +255,21 @@ export const isValidRegisterAddress = (address) => {
 
 /**
  * 验证变化范围
- * 规则：正整数 (大于 0)
+ * 规则：0-100，最多支持3位小数
  * @param {number|string} range 变化范围
  */
 export const isValidChangeRange = (range) => {
     if (range === '' || range === null || range === undefined) return false;
     const r = Number(range);
-    return Number.isInteger(r) && r > 0;
+    if (isNaN(r) || r < 0 || r > 100) return false;
+    
+    // 精度校验：最多支持3位小数
+    const str = String(range);
+    if (str.includes('.')) {
+        const decimals = str.split('.')[1];
+        if (decimals.length > 3) return false;
+    }
+    return true;
 };
 
 /**

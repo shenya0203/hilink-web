@@ -37,6 +37,8 @@ export default {
         uploadSuccess: 'Upload successful',
         uploadFailed: 'Upload failed',
         uploadedFile: 'Uploaded File',
+        action: 'Action',
+        select: 'Select',
     },
 
     // Top Navigation Bar
@@ -426,7 +428,7 @@ export default {
         invalidTimeout: 'Timeout must be between 200-10000 ms',
         invalidSlaveAddress: 'Slave address must be between 1-247',
         invalidRegisterAddress: 'Register address must be between 1-65536',
-        invalidChangeRange: 'Change range must be a positive integer',
+        invalidChangeRange: 'Range 0.000-100.000 (max 3 decimal places)',
         invalidReportPeriod: 'Report period must be between 5-86400 seconds',
         invalidTopic: 'Topic must be 1-32 bytes, no spaces or brackets',
         invalidSubTopic: 'Subscribe topic must be 1-32 bytes, no spaces or brackets',
@@ -576,6 +578,7 @@ export default {
         wifi: 'WiFi',
         wifiStaEnable: 'WiFi Enable',
         wifiSsid: 'WiFi SSID',
+        wifiBssid: 'WiFi MAC',
         wifiPassword: 'WiFi Password',
         wifiEncryption: 'Encryption',
         // Ethernet
@@ -638,7 +641,13 @@ export default {
         apSsidRequired: 'Hotspot name cannot be empty',
         apSsidInvalid: 'Invalid hotspot name (1-32 characters)',
         apPasswordRequired: 'Password is required for encrypted mode',
-        apPasswordInvalid: 'Invalid password (8-63 characters)'
+        apPasswordInvalid: 'Invalid password (8-63 characters)',
+        wifiScan: 'WiFi Scan',
+        wifiScanning: 'Scanning surrounding WiFi... (approx. 3-5 seconds)',
+        wifiSignalStrength: 'Signal Strength (dBm)',
+        noWifiFound: 'No WiFi networks found',
+        hiddenSsid: 'Hidden SSID',
+        hiddenSsidHint: 'Hint: The selected AP has a hidden SSID, please enter it manually.',
     },
 
     // Footer
