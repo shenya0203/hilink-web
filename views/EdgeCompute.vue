@@ -1602,7 +1602,7 @@ const pointForm = ref({
   detail: '',
   registerType: 0,
   registerAddress: 1,
-  dataType: 'Bool',
+  dataType: 'Bit',
   decimalPlaces: 3,
   timeout: 200,
   collectFormula: '',
@@ -1643,7 +1643,7 @@ const totalPoints = computed(() => {
 const availableDataTypes = computed(() => {
   const regType = pointForm.value.registerType
   if (regType === 0 || regType === 1) {
-    return ['Bool']
+    return ['Bit']
   } else if (regType === 3) {
     return [
       'Unsigned', 
@@ -1668,7 +1668,7 @@ const availableDataTypes = computed(() => {
       'Bit'
     ]
   }
-  return ['Bool']
+  return ['Bit']
 })
 
 // 计算属性：数据点名称校验
@@ -2702,8 +2702,8 @@ const showAddSlaveModal = () => {
     name: defaultName,
     detail: '',
     protocol: 1,
-    remoteAddress: '192.168.0.21',
-    remotePort: 2100,
+    remoteAddress: '',
+    remotePort: 502,
     serialPort: 1,
     slaveAddress: 1,
     pollInterval: 200,
@@ -2752,7 +2752,7 @@ const saveSlave = () => {
       {
         id: `point_${Date.now()}`,
         name: `${slaveForm.value.name}_state`,
-        dataType: 'Bool',
+        dataType: 'Bit',
         registerType: 0,
         registerAddress: 0,
         registerDisplay: 'State',
@@ -2849,7 +2849,7 @@ const showAddPointModal = () => {
     registerType: 0,
     registerAddress: getNextRegisterAddress(0),
     bitIndex: 0,
-    dataType: 'Bool',
+    dataType: 'Bit',
     decimalPlaces: 3,
     timeout: 200,
     collectFormula: '',
@@ -3155,21 +3155,19 @@ const saveProtoAccessData = async () => {
 
 // 数据类型映射
 const dataTypeMap = {
-  'Bit': 1,
-  'Unsigned': 4,
-  'Signed': 5,
-  '32 Bit Unsigned (AB CD)': 6,
-  '32 Bit Unsigned (CD AB)': 7,
-  '32 Bit Signed (AB CD)': 8,
-  '32 Bit Signed (CD AB)': 9,
+  'Unsigned': 1,
+  'Signed': 2,
+  '32 Bit Unsigned (AB CD)': 7,
+  '32 Bit Unsigned (CD AB)': 8,
+  '32 Bit Signed (AB CD)': 4,
+  '32 Bit Signed (CD AB)': 5,
   '32 Bit Float(AB CD)': 10,
   '32 Bit Float(CD AB)': 11,
-  
-  'Bool': 18
+  'Bit': 18
 }
 
 const getDataTypeName = (code) => {
-  return Object.keys(dataTypeMap).find(key => dataTypeMap[key] === code) || 'Bool'
+  return Object.keys(dataTypeMap).find(key => dataTypeMap[key] === code) || 'Bit'
 }
 
 // 生成CSV内容
@@ -3273,7 +3271,7 @@ const parseCsvContent = (content) => {
           registerType: 0,
           registerAddress: 0,
           registerDisplay: 'State',
-          dataType: 'Bool',
+          dataType: 'Bit',
           value: null,
           isDefault: true
         })
