@@ -1489,8 +1489,29 @@ onUnmounted(() => {
 }
 
 .form-section {
-  padding: 20px 15px;
+  padding: 25px 30px;
   background-color: white;
+}
+
+form {
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin-bottom: 25px;
+  overflow: hidden;
+}
+
+legend {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  background-color: #0066cc;
+  padding: 12px 20px;
+  width: 100%;
+  margin: 0;
+  border: none;
+  display: block;
 }
 
 .form-group {
@@ -1588,9 +1609,9 @@ onUnmounted(() => {
 
 .button-group {
   display: flex;
-  justify-content: center;
-  padding: 20px;
-  gap: 10px;
+  justify-content: flex-end;
+  padding: 0 0 20px 0;
+  margin-top: -10px;
 }
 
 .btn-save {
@@ -1711,19 +1732,23 @@ onUnmounted(() => {
 
 /* WiFi扫描相关样式 */
 .scan-btn {
-  padding: 6px 12px;
+  width: 100%;
+  padding: 10px 12px;
   background-color: #0066cc;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
-  margin-left: 8px;
-  transition: background-color 0.2s;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 10px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 102, 204, 0.2);
 }
 
 .scan-btn:hover:not(:disabled) {
   background-color: #0052a3;
+  box-shadow: 0 4px 8px rgba(0, 102, 204, 0.3);
 }
 
 .scan-btn:disabled {
@@ -1837,7 +1862,7 @@ onUnmounted(() => {
 
 .select-btn {
   padding: 6px 16px;
-  background-color: #28a745;
+  background-color: #007bff;
   color: white;
   border: none;
   border-radius: 4px;
@@ -1845,13 +1870,13 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
 }
 
 .select-btn:hover {
-  background-color: #218838;
+  background-color: #0056b3;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
 }
 
 .select-btn:active {
