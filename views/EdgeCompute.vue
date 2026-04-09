@@ -1678,19 +1678,31 @@ const pointNameError = ref('')
 const validatePointName = () => {
   const name = pointForm.value.name
   
-  // Layer 1: Format Validation
+  // 1. 格式校验
   const regex = /^[a-zA-Z0-9_]{1,20}$/
   if (!name || !regex.test(name)) {
     pointNameError.value = "(1-20字节 支持'a'-'z'/'A'-'Z'/'0'-'9'和'_')"
     return
   }
   
+  // 2. 系统点位重复校验
+  if (systemPoints.value.some(p => p.name === name)) {
+    pointNameError.value = "(与系统点位名称重复！)"
+    return
+  }
+  
   if (!currentSlave.value) return
   
-  // Layer 2: Duplicate Validation
-  const duplicate = currentSlave.value.points.some((point, index) => {
-    if (isEditingPoint.value && index === editingPointIndex.value) return false
-    return point.name === name
+  // 3. 全局重复校验
+  let duplicate = false
+  slaveList.value.forEach(slave => {
+    if (slave.points.some((point, index) => {
+      // 如果正在编辑，忽略自身
+      if (isEditingPoint.value && slave.id === currentSlave.value.id && index === editingPointIndex.value) return false
+      return point.name === name
+    })) {
+      duplicate = true
+    }
   })
   
   if (duplicate) {
@@ -2428,11 +2440,38 @@ const importCsv = async () => {
     
     let slaveCount = 0
     let pointCount = 0
+    const pointNamesInCsv = new Set()
+    const duplicateNames = []
+    
     const lines = fileContent.split(/\r?\n/)
-    lines.forEach(line => {
-      if (line.startsWith('SC,')) slaveCount++
-      if (line.startsWith('C,')) pointCount++
+    lines.forEach((line, index) => {
+      const parts = line.split(',')
+      if (parts[0] === 'SC') slaveCount++
+      if (parts[0] === 'C') {
+        pointCount++
+        const pName = parts[2]
+        if (!pName) return
+        
+        // 1. 校验系统点位冲突
+        if (systemPoints.value.some(sp => sp.name === pName)) {
+          duplicateNames.push(`${pName} (与系统点位名称冲突)`)
+        }
+        
+        // 2. 校验文件内同名冲突
+        if (pointNamesInCsv.has(pName)) {
+          duplicateNames.push(`${pName} (文件内重复)`)
+        } else {
+          pointNamesInCsv.add(pName)
+        }
+      }
     })
+    
+    // 发现冲突，中止导入
+    if (duplicateNames.length > 0) {
+      const errorMsg = duplicateNames.slice(0, 5).join('\n') + (duplicateNames.length > 5 ? '\n...' : '')
+      alert(`导入失败！发现重复或非法的点位名称：\n${errorMsg}`)
+      return
+    }
     
     if (slaveCount > 64) {
       alert(t('edge.slavesLimitReached'))
@@ -2743,6 +2782,22 @@ const saveSlave = () => {
   if (slaveNameError.value) {
     return
   }
+
+  const statePointName = `${slaveForm.value.name}_state`
+  
+  // 检查全局是否有重名的用户点位，如果有则强制删除，保证状态点优先级最高
+  slaveList.value.forEach(s => {
+    // 查找非默认（用户手动添加）的重名点位
+    const conflictIndex = s.points.findIndex(p => p.name === statePointName && !p.isDefault)
+    if (conflictIndex !== -1) {
+      console.log(`发现与状态点冲突的点位 ${statePointName}，正在自动清理...`)
+      // 清理相关引用
+      cleanUpPointReference(s.name, statePointName)
+      // 删除点位
+      s.points.splice(conflictIndex, 1)
+      edgeConfigDirty.value = true
+    }
+  })
   
   const newSlave = {
     id: isEditingSlave.value ? slaveList.value[editingSlaveIndex.value].id : `slave_${Date.now()}`,
@@ -2751,7 +2806,7 @@ const saveSlave = () => {
     points: isEditingSlave.value ? slaveList.value[editingSlaveIndex.value].points : [
       {
         id: `point_${Date.now()}`,
-        name: `${slaveForm.value.name}_state`,
+        name: statePointName,
         dataType: 'Bit',
         registerType: 0,
         registerAddress: 0,
@@ -2836,8 +2891,14 @@ const showAddPointModal = () => {
   let pointIdxStr = String(counter).padStart(2, '0')
   let defaultName = `node${slaveIdxStr}${pointIdxStr}`
   
-  // Ensure uniqueness
-  while (currentSlave.value.points.some(p => p.name === defaultName)) {
+  // 定义全局查重辅助函数
+  const isGlobalNameDuplicate = (name) => {
+    if (systemPoints.value.some(p => p.name === name)) return true
+    return slaveList.value.some(s => s.points.some(p => p.name === name))
+  }
+
+  // 确保全局唯一性
+  while (isGlobalNameDuplicate(defaultName)) {
     counter++
     pointIdxStr = String(counter).padStart(2, '0')
     defaultName = `node${slaveIdxStr}${pointIdxStr}`
