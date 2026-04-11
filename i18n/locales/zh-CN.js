@@ -435,6 +435,7 @@ export default {
         pubQos: '发布QOS',
         retainMessage: '保留信息',
         query: '查询',
+        invert: '反选',
         search: '搜索',
         addPoint: '添加点位',
         seq: '序号',

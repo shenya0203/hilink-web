@@ -989,7 +989,7 @@
                </option>
              </select>
              <input v-model="cloudPointForm.searchQuery" type="text" :placeholder="t('edge.search')" style="margin-left: 10px;" />
-             <button class="btn-outline">{{ t('edge.query') }}</button>
+             <button class="btn-outline" @click="invertCloudSelection" style="margin-left: 10px;">{{ t('edge.invert') || '反选' }}</button>
            </div>
            
            <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
@@ -997,16 +997,25 @@
                <thead>
                  <tr>
                    <th style="width: 50px;">
-                     <!-- Optional: Select All for current view -->
+                     <input 
+                       type="checkbox" 
+                       :checked="isAllCloudSelected" 
+                       :indeterminate="isCloudIndeterminate"
+                       @change="toggleSelectAllCloud" 
+                     />
                    </th>
                    <th>{{ t('edge.pointName') }}</th>
                    <th>{{ t('edge.dataType') }}</th>
                  </tr>
                </thead>
                <tbody>
-                 <tr v-for="point in cloudPointList" :key="point.id">
+                 <tr v-for="(point, index) in cloudPointList" :key="point.id">
                    <td>
-                     <input type="checkbox" :checked="isCloudPointSelected(point)" @change="toggleCloudPointSelection(point)" />
+                     <input 
+                       type="checkbox" 
+                       :checked="isCloudPointSelected(point)" 
+                       @click="toggleCloudPointSelection(point, index, $event)" 
+                     />
                    </td>
                    <td>{{ point.name }}</td>
                    <td>{{ point.dataType }}</td>
@@ -1363,6 +1372,8 @@ const closeCloudPointModal = () => {
   showCloudPointModal.value = false
 }
 
+const lastCloudIndex = ref(-1)
+
 const isCloudPointSelected = (point) => {
   const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
   if (!slave) return false
@@ -1370,17 +1381,99 @@ const isCloudPointSelected = (point) => {
   return cloudPointForm.value.selectedPoints.includes(key)
 }
 
-const toggleCloudPointSelection = (point) => {
+const isAllCloudSelected = computed(() => {
+  if (cloudPointList.value.length === 0) return false
+  return cloudPointList.value.every(p => isCloudPointSelected(p))
+})
+
+const isCloudIndeterminate = computed(() => {
+  const selectedCount = cloudPointList.value.filter(p => isCloudPointSelected(p)).length
+  return selectedCount > 0 && selectedCount < cloudPointList.value.length
+})
+
+const toggleSelectAllCloud = () => {
+  const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
+  if (!slave) return
+  
+  if (isAllCloudSelected.value) {
+    // Unselect all in current filtered view
+    cloudPointList.value.forEach(p => {
+      const key = `${slave.name}-${p.name}`
+      const idx = cloudPointForm.value.selectedPoints.indexOf(key)
+      if (idx >= 0) cloudPointForm.value.selectedPoints.splice(idx, 1)
+    })
+  } else {
+    // Select all in current filtered view
+    cloudPointList.value.forEach(p => {
+      const key = `${slave.name}-${p.name}`
+      if (!cloudPointForm.value.selectedPoints.includes(key)) {
+        cloudPointForm.value.selectedPoints.push(key)
+      }
+    })
+  }
+}
+
+const invertCloudSelection = () => {
+  const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
+  if (!slave) return
+  
+  cloudPointList.value.forEach(p => {
+    const key = `${slave.name}-${p.name}`
+    const idx = cloudPointForm.value.selectedPoints.indexOf(key)
+    if (idx >= 0) {
+      cloudPointForm.value.selectedPoints.splice(idx, 1)
+    } else {
+      cloudPointForm.value.selectedPoints.push(key)
+    }
+  })
+}
+
+const toggleCloudPointSelection = (point, index, event) => {
   const slave = slaveList.value.find(s => s.id === cloudPointForm.value.slaveId)
   if (!slave) return
   const key = `${slave.name}-${point.name}`
-  const idx = cloudPointForm.value.selectedPoints.indexOf(key)
-  if (idx >= 0) {
-    cloudPointForm.value.selectedPoints.splice(idx, 1)
+  
+  // For @click on checkbox, the 'checked' state hasn't been synced to cloudPointForm.selectedPoints yet.
+  // We determine what the user INTENDS to set this point to.
+  const isSelectedBefore = cloudPointForm.value.selectedPoints.includes(key);
+  const isNowSelected = !isSelectedBefore;
+  
+  if (event && event.shiftKey && lastCloudIndex.value !== -1) {
+    // Prevent browser from selecting text while shift-clicking
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges()
+    }
+    
+    const start = Math.min(lastCloudIndex.value, index)
+    const end = Math.max(lastCloudIndex.value, index)
+    const pointsInRange = cloudPointList.value.slice(start, end + 1)
+    
+    // Follow the new state of the current clicked item for the entire range
+    pointsInRange.forEach(p => {
+      const pKey = `${slave.name}-${p.name}`
+      const pIdx = cloudPointForm.value.selectedPoints.indexOf(pKey)
+      if (isNowSelected) {
+        if (pIdx === -1) cloudPointForm.value.selectedPoints.push(pKey)
+      } else {
+        if (pIdx >= 0) cloudPointForm.value.selectedPoints.splice(pIdx, 1)
+      }
+    })
   } else {
-    cloudPointForm.value.selectedPoints.push(key)
+    // Regular single toggle
+    if (isNowSelected) {
+      cloudPointForm.value.selectedPoints.push(key)
+    } else {
+      const idx = cloudPointForm.value.selectedPoints.indexOf(key)
+      if (idx >= 0) cloudPointForm.value.selectedPoints.splice(idx, 1)
+    }
   }
+  lastCloudIndex.value = index
 }
+
+// Reset last clicked index when filter changes
+watch(() => [cloudPointForm.value.slaveId, cloudPointForm.value.searchQuery], () => {
+  lastCloudIndex.value = -1
+})
 
 const saveCloudPoints = () => {
   reportGroupForm.value.selectedPointsText = cloudPointForm.value.selectedPoints.join('\n')

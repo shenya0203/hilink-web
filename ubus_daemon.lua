@@ -3502,7 +3502,6 @@ local methods = {
             function(req, msg)
                 local values = shm.read_values()
                 if values then
-                    log_info("11111111 get_edge_values: " .. cjson.encode(values))
                     -- 这里的 values 是嵌套结构 { slave_name = { point_name = value, ... }, ... }
                     for slave, points in pairs(values) do
                         if type(points) == "table" then
@@ -3745,6 +3744,25 @@ for obj_name, obj_methods in pairs(methods) do
     end
 end
 log_info("=========================================")
+
+-- ==========================================================
+-- WORK 状态指示灯 (GPIO4) 闪烁逻辑
+-- ==========================================================
+local led_state = 0
+local work_led_timer
+
+local function toggle_work_led()
+    led_state = (led_state == 0) and 1 or 0
+    os.execute(string.format("echo %d > /sys/class/leds/system:work:status/brightness", led_state))
+    work_led_timer:set(1000) -- 每隔1000ms尝试翻转状态
+end
+
+-- 初始状态置为灭
+os.execute("echo none > /sys/class/leds/system:work:status/trigger")
+os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
+-- 启动定时器，1s后开始第一次翻转
+work_led_timer = uloop.timer(toggle_work_led)
+work_led_timer:set(1000)
 
 os.execute("/etc/init.d/nginx_hlk restart")
 
