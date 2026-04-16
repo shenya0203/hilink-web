@@ -1413,6 +1413,7 @@ onUnmounted(() => {
   margin: 20px 0;
   border-bottom: 2px solid #e8e8e8;
   padding-bottom: 10px;
+  width: 100%;
 }
 
 .main-tab-btn {
@@ -1451,6 +1452,7 @@ onUnmounted(() => {
   gap: 10px;
   margin: 15px 0;
   border-bottom: 1px solid #e8e8e8;
+  width: 100%;
 }
 
 .tabs {
@@ -1498,8 +1500,9 @@ form {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  margin-bottom: 25px;
+  margin: 0 0 25px 0;
   overflow: hidden;
+  width: 100%;
 }
 
 legend {
@@ -1609,9 +1612,11 @@ legend {
 
 .button-group {
   display: flex;
-  justify-content: flex-end;
-  padding: 0 0 20px 0;
-  margin-top: -10px;
+  justify-content: center;
+  padding: 20px 0;
+  margin: 10px 0 0 0;
+  width: 100%;
+  background-color: #f9f9f9;
 }
 
 .btn-save {

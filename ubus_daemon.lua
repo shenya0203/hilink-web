@@ -149,11 +149,15 @@ local function check_is_online(iface_name)
     
     local content = f:read("*a")
     f:close()
+
+    log_info("content: "..content)
     
     -- 2. 判断内容是否包含 "online"
     if content and string.find(content, "online") then
+        log_info("lte is online")
         return true
     end
+    log_info("lte is offline")
     
     return false
 end
@@ -815,7 +819,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.016",
+    soft_ver = "V1.019",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2444,6 +2448,7 @@ local function collect_network_status()
     --net_status.lte.sim --改为表示sim状态 1 表示ready 其他值暂时表示Not ready
     net_status.lte.sim = "0"
     net_status.lte.lte_sta = "Disconnected"
+    net_status.lte.lte_ip = ""
 
     local modem_info_str = read_file_content("/tmp/modem_info.json")
     
@@ -2454,13 +2459,13 @@ local function collect_network_status()
         if ok then
             log_info("info: "..cjson.encode(info))
             local is_ready = (info.sim_status == "ready")
-            local reg_status = (info.status == "Registered")
+            local reg_status = (info.status:find("Registered"))
             net_status.lte.sim = info.sim_status == "ready" and "1" or "0"
             net_status.lte.imei = info.imei
             
 
-            if info.local_ip == "0.0.0.0" then
-                net_status.lte.lte_ip = ""
+            if info.local_ip ~= "0.0.0.0" then
+                net_status.lte.lte_ip = info.local_ip
             end
 
             if is_ready then
@@ -2479,7 +2484,7 @@ local function collect_network_status()
                 end
             end
 
-            net_status.lte.lte_sta = info.connection_status
+            --net_status.lte.lte_sta = info.connection_status
             
             log_info("net_status: "..cjson.encode(net_status))
 
@@ -2517,6 +2522,10 @@ local function collect_network_status()
                         net_status.lte.lte_dns = lte_status["dns-server"][1] or ""
                         net_status.lte.lte_sdns = lte_status["dns-server"][2] or ""
                     end
+                    local lte_online = check_is_online("lte")
+                    if lte_online then
+                        net_status.lte.lte_sta = "Connected"
+                    end
                 end
             else
                 if net_status.netdev == "LTE" then
@@ -2528,10 +2537,7 @@ local function collect_network_status()
                 net_status.netdev = "None"
             end
         end
-        local lte_online = check_is_online("lte")
-        if is_ready and reg_status and lte_online then
-            net_status.lte.lte_sta = "Connected"
-        end
+
     end
     
     -- 5. SIM Num
@@ -3479,6 +3485,7 @@ local methods = {
                 local cmd = "( sleep 1; " ..
                     "/etc/init.d/nginx_hlk stop; " ..
                     "/etc/init.d/network restart; " ..
+                    "/etc/init.d/modem-monitor restart;" ..
                     "/etc/init.d/edge restart; " ..
                     "/etc/init.d/mqtt_app restart; " ..
                     "/etc/init.d/socket restart; " ..
