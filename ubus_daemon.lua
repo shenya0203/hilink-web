@@ -13,9 +13,22 @@ local shm = require "shm_reader"
 -- WiFi扫描全局配置
 -- ==========================================================
 local WIFI_IFACE = "wlan0"             -- 扫描接口
-local SCAN_TIMEOUT = 5                 -- 超时时间(秒)
+local SCAN_TIMEOUT = 8                 -- 超时时间(秒)
 local SCAN_RESULT_FILE = "/tmp/wifi_scan.txt" -- 结果临时文件
 local SCAN_LOCK_FILE = "/tmp/wifi_scan.lock"  -- 锁文件
+
+-- ==========================================================
+-- LED 指示灯配置与状态
+-- ==========================================================
+local LED_PATH = "/sys/class/leds/system:net:info/brightness"
+local LED_MODE_OFF = 0
+local LED_MODE_ON  = 1
+local LED_MODE_BLINK = 2
+
+local current_led_mode = LED_MODE_OFF
+local led_blink_timer = nil
+local blink_count = 0      -- 记录当前是第几次闪烁 (0-7, 偶数亮奇数灭)
+local is_led_lit = false    -- 指示灯物理状态
 
 -- Data Collection Config
 --local WIFI_STA_IFACE = "wlan0"
@@ -149,15 +162,11 @@ local function check_is_online(iface_name)
     
     local content = f:read("*a")
     f:close()
-
-    log_info("content: "..content)
     
     -- 2. 判断内容是否包含 "online"
     if content and string.find(content, "online") then
-        log_info("lte is online")
         return true
     end
-    log_info("lte is offline")
     
     return false
 end
@@ -226,6 +235,114 @@ local function get_current_run_net()
     -- 如果两个都在线，且无法识别策略（或策略为 balanced），
     -- 通常默认认为有线网络（EtherNet）优先级更高。
     return "EtherNet"
+end
+
+-- ==========================================================
+-- LED 硬件控制与闪烁逻辑
+-- ==========================================================
+
+local function set_led_brightness(val)
+    local f = io.open(LED_PATH, "w")
+    if f then
+        f:write(tostring(val))
+        f:close()
+        is_led_lit = (val == 1)
+    end
+end
+
+-- 闪烁定时器回调函数
+local function led_blink_cb()
+    if current_led_mode ~= LED_MODE_BLINK then return end
+
+    if blink_count < 8 then
+        -- 在 4 次完整闪烁周期内 (8 次切换)
+        if is_led_lit then
+            set_led_brightness(0)
+        else
+            set_led_brightness(1)
+        end
+        blink_count = blink_count + 1
+        -- 250ms 后进行下一次切换
+        led_blink_timer:set(250)
+    else
+        -- 闪烁 4 次完成，熄灭并进入 2s 延时
+        set_led_brightness(0)
+        blink_count = 0
+        -- 2000ms 后重新开始闪烁循环
+        led_blink_timer:set(2000)
+    end
+end
+
+-- 根据网络状态更新 LED 模式
+local function update_net_led_logic()
+    log_info("Updating Network LED Logic...")
+    
+    -- 1. 获取 UCI 策略 (参考原有逻辑)
+    local handle = io.popen("uci -q get mwan3.default_rule.use_policy", "r")
+    local policy = nil
+    if handle then
+        local res = handle:read("*a")
+        handle:close()
+        if res then policy = string.gsub(res, "^%s*(.-)%s*$", "%1") end
+    end
+    log_info("Current Policy: " .. (policy or "nil"))
+
+    -- 2. 获取接口在线状态
+    local wan_online = check_is_online("wan")
+    local wifi_online = check_is_online("wwan")
+    local lte_online = check_is_online("lte")
+
+    log_info("wan_online: " .. (wan_online and "online" or "offline"))
+    log_info("wifi_online: " .. (wifi_online and "online" or "offline"))
+    log_info("lte_online: " .. (lte_online and "online" or "offline"))
+    
+    local new_mode = LED_MODE_OFF
+
+    -- 规则判定
+    if policy == "policy_lte_pri" then
+        -- LTE 优先模式
+        if lte_online then
+            new_mode = LED_MODE_BLINK
+        elseif wan_online or wifi_online then
+            -- LTE 断开但 WAN/WiFi 通，按您的逻辑“只要lte优先，lte在线就闪”，
+            -- 那如果 LTE 不在线但 WAN 在线呢？通常回落到常亮更合理。
+            new_mode = LED_MODE_ON
+        end
+    else
+        -- 默认或 policy_ew_pri (以太网优先)
+        if wan_online or wifi_online then
+            new_mode = LED_MODE_ON
+        elseif lte_online then
+            -- 即使以太网优先，如果只有 4G 在线，通常也应显示状态
+            -- 此时由于处于以太网策略，建议常亮或根据需求定义（暂定常亮）
+            new_mode = LED_MODE_BLINK
+        end
+    end
+
+    -- 3. 应用模式切换
+    if new_mode == current_led_mode then return end
+    
+    log_info("LED Mode Change: " .. current_led_mode .. " -> " .. new_mode)
+    current_led_mode = new_mode
+
+    -- 停止旧定时器
+    if led_blink_timer then
+        led_blink_timer:cancel()
+    end
+
+    if current_led_mode == LED_MODE_OFF then
+        set_led_brightness(0)
+    elseif current_led_mode == LED_MODE_ON then
+        set_led_brightness(1)
+    elseif current_led_mode == LED_MODE_BLINK then
+        blink_count = 0
+        set_led_brightness(1) -- 从点亮开始
+        blink_count = 1
+        if not led_blink_timer then
+            led_blink_timer = uloop.timer(led_blink_cb)
+        end
+        led_blink_timer:set(250)
+    end
 end
 
 
@@ -470,6 +587,7 @@ local function set_nginx_config(port, user, pass)
     if pass then cursor:set("nginx", "global", "uci_pass", pass) end
     
     cursor:commit("nginx")
+    os.execute("touch /tmp/nginx_commit")
     
     -- Also update real nginx config file if needed, or trigger reload
     -- os.execute("/etc/init.d/nginx reload")
@@ -486,6 +604,7 @@ local function set_system_config(hostname, timezone_num)
     end)
     
     cursor:commit("system")
+    os.execute("touch /tmp/misc_commit")
     -- 核心步骤：让系统根据新的 timezone 重新生成 /etc/TZ 文件
     os.execute("/etc/init.d/system restart")
     return true
@@ -507,6 +626,7 @@ local function set_ntp_config(enabled, server_list)
         cursor:delete("system", "ntp", "server")
     end
     cursor:commit("system")
+    os.execute("touch /tmp/misc_commit")
 end
 
 -- 从UCI读取串口配置到内存
@@ -567,6 +687,7 @@ local function save_uart_config_to_uci(config)
     end
     
     cursor:commit("uart")
+    os.execute("touch /tmp/uart_commit")
     return true
 end
 
@@ -807,6 +928,7 @@ local function save_comm_tunnel_config_to_uci(config)
     end
     
     cursor:commit("comm_tunnel")
+    os.execute("touch /tmp/comm_commit")
     return true
 end
 
@@ -819,7 +941,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.019",
+    soft_ver = "V1.021",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1373,6 +1495,7 @@ local function manage_firewall_for_tcp_servers(config)
     if changes_made then
         log_info("Committing firewall changes.")
         cursor:commit("firewall")
+        os.execute("touch /tmp/firewall_commit")
     else
         log_info("No firewall changes needed.")
     end
@@ -1563,6 +1686,9 @@ local function sync_nginx_settings()
     status_data.sn = get_system_sn()
     status_data.product_type = get_product_type()
     status_data.netdev = get_current_run_net()
+
+    -- 初始更新一次指示灯状态
+    update_net_led_logic()
 end
 
 -- ==========================================================
@@ -1630,6 +1756,7 @@ local function save_reboot_config_to_uci(enable, hh, mm, ss)
     cursor:set("system", "auto_reboot", "mm", tostring(mm))
     cursor:set("system", "auto_reboot", "ss", tostring(ss))
     cursor:commit("system")
+    os.execute("touch /tmp/misc_commit")
 end
 
 
@@ -1926,6 +2053,7 @@ local function set_network_config_values(args)
         end
 
         cursor:commit("wireless")
+        os.execute("touch /tmp/wifi_commit")
         log_info("Committed wireless configuration")
     end
 
@@ -2198,16 +2326,19 @@ local function set_network_config_values(args)
         end
 
         cursor:commit("wireless")
+        os.execute("touch /tmp/wifi_commit")
         log_info("Committed wireless configuration")
     end
 
     -- 提交配置
     cursor:commit("network")
+    os.execute("touch /tmp/network_commit")
     cursor:commit("mwan3")
     log_info("Committed network and mwan3 configurations")
 
     if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
         cursor:commit("dhcp")
+        os.execute("touch /tmp/network_commit")
         log_info("Committed dhcp configuration")
     end
 
@@ -2270,6 +2401,7 @@ local function set_edge_config_values(args)
     local cursor = uci_lib.cursor()
     cursor:set("edge", "@edge[0]", "enable", tostring(edge_config.all_en))
     cursor:commit("edge")
+    os.execute("touch /tmp/edge_commit")
     log_info("Edge config saved to UCI: all_en=" .. tostring(edge_config.all_en))
     return true
 end
@@ -2349,19 +2481,27 @@ local function parse_arp_table()
     return arp
 end
 
--- 根据模式 (ap 或 sta) 动态获取物理接口名称 (用于 MT7628 / mt76 驱动等动态命名环境)
-local function get_wifi_ifname_by_mode(target_mode)
-    if not conn then return nil end
-    local wireless_status = conn:call("network.wireless", "status", {})
-    if not wireless_status then return nil end
-
-    for radio, data in pairs(wireless_status) do
-        if data.interfaces then
-            for _, iface in ipairs(data.interfaces) do
-                -- 匹配 config 中的 mode (ap 或 sta)
-                if iface.config and iface.config.mode == target_mode then
-                    return iface.ifname
-                end
+-- 根据模式 (ap 或 sta) 动态解析 iwinfo 输出获取物理接口名称
+local function get_wifi_ifname_by_mode(target_type)
+    local target_mode = (target_type == "ap") and "Master" or "Client"
+    local f = io.popen("iwinfo 2>/dev/null")
+    if not f then return nil end
+    
+    local content = f:read("*a")
+    f:close()
+    
+    local current_iface = nil
+    for line in string.gmatch(content, "[^\n]+") do
+        -- 匹配行首接口，例如 "wlan0" 或 "wlan0-1"
+        local iface = string.match(line, "^([%w%-%.]+)%s+ESSID:")
+        if iface then
+            current_iface = iface
+        end
+        
+        local mode = string.match(line, "Mode: (%a+)")
+        if mode and current_iface then
+            if mode == target_mode then
+                return current_iface
             end
         end
     end
@@ -2771,6 +2911,15 @@ local methods = {
                 data.cloud_sta = get_communication_status("CLOUD")
                 data.cloud_enable = get_communication_enable("CLOUD")
                 reply(req, data)
+            end,
+            {}
+        },
+        
+        -- 更新网络指示灯状态
+        update_net_led = {
+            function(req, msg)
+                update_net_led_logic()
+                reply(req, { status = "ok" })
             end,
             {}
         },
@@ -3346,6 +3495,7 @@ local methods = {
                         write_file_content("/etc/config/device/edge_access/" .. i .. ".json", cjson.encode(g))
                     end
                     log_info("Edge access config saved to files")
+                    os.execute("touch /tmp/edge_commit")
                 end
                 reply(req, {result = true})
             end,
@@ -3405,6 +3555,7 @@ local methods = {
                     local path = "/etc/config/device/points.csv"
                     if write_file_content(path, msg.content) then
                         load_edge_point_configs() -- 配置保存后立即重新加载内存缓存
+                        os.execute("touch /tmp/edge_commit")
                         reply(req, {result = true})
                     else
                         reply(req, {result = false, error = "Failed to write file"})
@@ -3479,26 +3630,67 @@ local methods = {
                     return
                 end
 
-                -- 执行阶段：立即重启动作 (延时 0.1s 确保响应发出)
-                -- 后台延迟执行，确保 ubus 先回复前端
-                -- 使用 nohup 和完全的输入输出重定向，确保与父进程完全脱离
-                local cmd = "( sleep 1; " ..
-                    "/etc/init.d/nginx_hlk stop; " ..
-                    "/etc/init.d/network restart; " ..
-                    "/etc/init.d/modem-monitor restart;" ..
-                    "/etc/init.d/edge restart; " ..
-                    "/etc/init.d/mqtt_app restart; " ..
-                    "/etc/init.d/socket restart; " ..
-                    "/etc/init.d/uart restart; " ..
-                    "/etc/init.d/cloud restart; " ..
-                    "/etc/init.d/cron restart;" ..
-                    "/etc/init.d/firewall restart;" ..
-                    "/etc/init.d/nginx_hlk start" ..
-                " ) </dev/null >/dev/null 2>&1 &"
+                -- 执行阶段：识别需要重启的服务
+                local need_wifi_reset = (os.execute("test -f /tmp/wifi_commit") == 0)
+                local need_network = need_wifi_reset or 
+                                     (os.execute("test -f /tmp/network_commit") == 0) or 
+                                     (os.execute("test -f /tmp/firewall_commit") == 0)
+                local need_nginx = (os.execute("test -f /tmp/nginx_commit") == 0)
+
                 
-                log_info("Executing direct restart command: " .. cmd)
+                local has_any_commit = need_network or need_nginx or 
+                                       (os.execute("test -f /tmp/misc_commit") == 0) or 
+                                       (os.execute("test -f /tmp/uart_commit") == 0) or 
+                                       (os.execute("test -f /tmp/comm_commit") == 0) or 
+                                       (os.execute("test -f /tmp/edge_commit") == 0)
+
+                if not has_any_commit then
+                    log_info("No configuration changes detected, skipping restart.")
+                    reply(req, {result = true})
+                    return
+                end
+
+                -- 构建重启命令串
+                local cmd_parts = { "sleep 1" }
+                
+                if need_network then
+                    table.insert(cmd_parts, "/etc/init.d/nginx_hlk stop")
+                    
+                    -- WiFi 特殊处理：卸载驱动防止死锁
+                    if need_wifi_reset then
+                        log_info("WiFi change detected, executing driver hard reset sequence.")
+                        table.insert(cmd_parts, "wifi down")
+                        table.insert(cmd_parts, "rmmod mt7603e")
+                        table.insert(cmd_parts, "sleep 1")
+                        table.insert(cmd_parts, "modprobe mt7603e")
+                    end
+
+                    table.insert(cmd_parts, "/etc/init.d/network restart")
+                    table.insert(cmd_parts, "/etc/init.d/modem-monitor restart")
+                end
+
+                -- 应用层服务总是重启 (根据反馈，它们影响较小)
+                table.insert(cmd_parts, "/etc/init.d/edge restart")
+                table.insert(cmd_parts, "/etc/init.d/mqtt_app restart")
+                table.insert(cmd_parts, "/etc/init.d/socket restart")
+                table.insert(cmd_parts, "/etc/init.d/uart restart")
+                table.insert(cmd_parts, "/etc/init.d/cloud restart")
+                table.insert(cmd_parts, "/etc/init.d/cron restart")
+
+                if need_network or need_nginx then
+                    table.insert(cmd_parts, "/etc/init.d/firewall restart")
+                    table.insert(cmd_parts, "/etc/init.d/nginx_hlk restart")
+                end
+
+                -- 清理所有标记文件
+                table.insert(cmd_parts, "rm -f /tmp/*_commit")
+
+                local cmd = "( " .. table.concat(cmd_parts, "; ") .. " ) </dev/null >/dev/null 2>&1 &"
+                
+                log_info("Executing optimized restart command with WiFi reset: " .. cmd)
                 os.execute(cmd)
-                -- 立即返回成功响应，给前端足够时间接收
+                
+                -- 立即返回成功响应
                 reply(req, {result = true})
             end,
             { apply = ubus.INT32 }
@@ -3570,7 +3762,9 @@ local methods = {
                             lock:write(os.time())
                             lock:close()
                             -- 异步执行扫描命令
-                            os.execute("/usr/bin/iwinfo " .. WIFI_IFACE .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
+                            local wifi_iface = get_wifi_ifname_by_mode("ap") or "wlan0"
+                            log_info("wifi_scan: start".. "/usr/bin/iwinfo " .. wifi_iface .. " scan > " .. SCAN_RESULT_FILE)
+                            os.execute("/usr/bin/iwinfo " .. wifi_iface .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
                             result = { result = true, status = "started" }
                         else
                             result = { result = false, msg = "cannot create lock file" }
@@ -3772,5 +3966,8 @@ work_led_timer = uloop.timer(toggle_work_led)
 work_led_timer:set(1000)
 
 os.execute("/etc/init.d/nginx_hlk restart")
+
+-- 初始化网络状态灯
+update_net_led_logic()
 
 uloop.run()

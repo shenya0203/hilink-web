@@ -1,0 +1,11 @@
+#!/bin/sh
+#
+# mwan3 hotplug script
+# 每次接口状态变化时通知 ubus_daemon 更新指示灯状态
+
+# 检查关心的接口
+if [ "$INTERFACE" = "wan" ] || [ "$INTERFACE" = "wwan" ] || [ "$INTERFACE" = "lte" ]; then
+    logger "mwan3 event: $INTERFACE $ACTION, notifying ubus_daemon"
+    # 异步调用 ubus 方法，避免阻塞 hotplug 流程
+    ubus call hilink update_net_led &
+fi
