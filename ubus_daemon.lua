@@ -941,7 +941,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.021",
+    soft_ver = "V1.023",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2759,53 +2759,55 @@ local function collect_network_status()
 
     local WIFI_AP_IFACE = get_wifi_ifname_by_mode("ap")
 
-    local f_ap = io.popen("iwinfo " .. WIFI_AP_IFACE .. " assolist 2>/dev/null")
-    if f_ap then
-        local current_mac = nil
-        local current_client = {}
-        
-        for line in f_ap:lines() do
-            -- MAC Address line: "00:11:22:33:44:55  -70 dBm / -90 dBm (SNR 20)  120 ms remaining"
-            -- OR simply "00:11:22:33:44:55" at start of line
-            local mac = string.match(line, "^(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)")
+    if WIFI_AP_IFACE ~= nil then
+        local f_ap = io.popen("iwinfo " .. WIFI_AP_IFACE .. " assolist 2>/dev/null")
+        if f_ap then
+            local current_mac = nil
+            local current_client = {}
             
-            if mac then
-                -- Push previous client if exists
-                if current_mac then
-                    table.insert(clients, current_client)
+            for line in f_ap:lines() do
+                -- MAC Address line: "00:11:22:33:44:55  -70 dBm / -90 dBm (SNR 20)  120 ms remaining"
+                -- OR simply "00:11:22:33:44:55" at start of line
+                local mac = string.match(line, "^(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)")
+                
+                if mac then
+                    -- Push previous client if exists
+                    if current_mac then
+                        table.insert(clients, current_client)
+                    end
+                    
+                    current_mac = mac
+                    current_client = {
+                        mac = mac,
+                        signal = 0,
+                        rx_rate = "-",
+                        tx_rate = "-"
+                    }
+                    
+                    -- Attempt to parse signal on same line
+                    local signal = string.match(line, "([-%d]+)%s*dBm")
+                    if signal then current_client.signal = tonumber(signal) end
+                    
+                elseif current_mac then
+                    -- Parse details for current mac
+                    -- RX: 6.0 MBit/s -> 6.0 MBit/s
+                    local rx = string.match(line, "RX:%s*([%d%.]+%s*M?Bit/s)")
+                    if rx then current_client.rx_rate = rx end
+                    
+                    local tx = string.match(line, "TX:%s*([%d%.]+%s*M?Bit/s)")
+                    if tx then current_client.tx_rate = tx end
+                    
+                    -- Sometimes signal is on a separate line
+                    local signal = string.match(line, "Signal:%s*([-%d]+)%s*dBm")
+                    if signal then current_client.signal = tonumber(signal) end
                 end
-                
-                current_mac = mac
-                current_client = {
-                    mac = mac,
-                    signal = 0,
-                    rx_rate = "-",
-                    tx_rate = "-"
-                }
-                
-                -- Attempt to parse signal on same line
-                local signal = string.match(line, "([-%d]+)%s*dBm")
-                if signal then current_client.signal = tonumber(signal) end
-                
-            elseif current_mac then
-                -- Parse details for current mac
-                -- RX: 6.0 MBit/s -> 6.0 MBit/s
-                local rx = string.match(line, "RX:%s*([%d%.]+%s*M?Bit/s)")
-                if rx then current_client.rx_rate = rx end
-                
-                local tx = string.match(line, "TX:%s*([%d%.]+%s*M?Bit/s)")
-                if tx then current_client.tx_rate = tx end
-                
-                -- Sometimes signal is on a separate line
-                local signal = string.match(line, "Signal:%s*([-%d]+)%s*dBm")
-                if signal then current_client.signal = tonumber(signal) end
             end
+            -- Add last client
+            if current_mac then
+                table.insert(clients, current_client)
+            end
+            f_ap:close()
         end
-        -- Add last client
-        if current_mac then
-            table.insert(clients, current_client)
-        end
-        f_ap:close()
     end
 
     -- Enrich data
@@ -3036,7 +3038,6 @@ local methods = {
                         ap_channel = tonumber(device_channel) or 0
                     end
                 end)
-
                 -- 返回前端所需的 JSON 结构
                 local result = {
                     s_lan = {
