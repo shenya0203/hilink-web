@@ -1003,14 +1003,30 @@ const executeUpgrade = async () => {
       timeout: 300000 // 5分钟超时
     })
     
-    // 2. 触发升级
+    // 2. 阶段一：准备与校验 (apply=0)
+    // 此阶段会触发后端的固件合法性检查
     await apiClient.get('/action_upgrade.cgi', {
       params: {
+        apply: 0,
         reset_factory: upgradeResetFactory.value ? 1 : 0
       }
     })
-    
-    // 3. 进入升级流程
+
+    // 3. 阶段二：提交执行 (apply=1)
+    // 该阶段会触发系统重启和网络停止，响应极大概率会超时或连接重置。
+    // 我们采取“发起即进入进度条”策略，不再死等其响应。
+    apiClient.get('/action_upgrade.cgi', {
+      params: {
+        apply: 1,
+        reset_factory: upgradeResetFactory.value ? 1 : 0
+      }
+    }).catch(err => {
+      // 这里的错误（如超时）是预料之中的，因为系统已开始升级动作导致网络中断
+      console.warn('Upgrade apply request finished with expected interruption:', err)
+    })
+
+    // 4. 立即进入升级等待流程，不依赖上一个请求的完成
+    isFactoryResetMode.value = upgradeResetFactory.value // 关键：记录同步恢复出厂状态，用于后续清理逻辑
     isUploading.value = false
     isUpgrading.value = true
     upgradeProgress.value = 0
@@ -1094,15 +1110,19 @@ const checkDeviceOnline = async () => {
     // 直接修改状态文本，让用户在弹窗里看到变化，不需要 alert 阻塞
     upgradeStatus.value = t('system.upgradeComplete') 
     
-    // 3. 静默跳转
-    // 延迟 2 秒以确保：
-    // a. 用户看到了 100% 进度和“完成”文本
-    // b. 给浏览器留出响应时间，避免在跳转时执行未清理的闭包
-    setTimeout(() => {
-      // 在 URL 中注入随机数和时间戳，强制 Nginx 和浏览器放弃缓存
-      const buster = Math.random().toString(36).substring(7);
-      window.location.replace(`/?t=${Date.now()}&v=${buster}#/system`);
-    }, 2000)
+    // 3. 统一跳转逻辑
+    if (isFactoryResetMode.value) {
+      // 如果勾选了恢复出厂，则执行清理逻辑并跳转到根目录 (登录页)
+      // 直接复用 finishReboot 封装好的逻辑
+      finishReboot()
+    } else {
+      // 延迟 2 秒后跳转，确保用户看到了 100% 进度和“完成”文本
+      setTimeout(() => {
+        // 在 URL 中注入随机数和时间戳，强制 Nginx 和浏览器放弃缓存
+        const buster = Math.random().toString(36).substring(7);
+        window.location.replace(`/?t=${Date.now()}&v=${buster}#/system`);
+      }, 2000)
+    }
     
   } catch (e) {
     // 只有失败才重置 isChecking，允许下一轮周期探测
@@ -1234,16 +1254,30 @@ const factoryReset = () => {
 const executeFactoryReset = async () => {
   showFactoryResetConfirmModal.value = false
   try {
-    // 发送 API 前先锁定状态，防止重复点击
+    // 阶段 1：准备阶段 (apply=0)
+    // 仅确认请求，后端会立即返回成功
     await apiClient.get('/action_reset.cgi', {
-      params: { act: 'factory' }
+      params: { act: 'factory', apply: 0 }
     })
     
-    // 开始 90s 的等待流程
+    // 开始 90s 的等待流程 (UI 锁定与倒计时)
     startRebootProcess(90, t('system.resetting'), true)
+
+    // 延迟一小段时间再发送真正的重启指令，确保前端 UI 已妥善切换
+    setTimeout(async () => {
+      try {
+        // 阶段 2：执行阶段 (apply=1)
+        await apiClient.get('/action_reset.cgi', {
+          params: { act: 'factory', apply: 1 }
+        })
+      } catch (e) {
+        // 这里的错误通常可以忽略，因为系统可能已经开始重启导致连接中断
+        console.warn('Apply factory reset triggered, connection might be closing:', e)
+      }
+    }, 500)
     
   } catch (err) {
-    console.error('恢复出厂失败:', err)
+    console.error('恢复出厂准备失败:', err)
     alert(t('system.factoryResetFailed') + ': ' + err.message)
   }
 }

@@ -486,9 +486,12 @@ function _M.set_edge_proto_access_csv(content)
 end
 
 -- 18. Upgrade Firmware
-function _M.upgrade_firmware(reset_factory)
-    ngx.log(ngx.INFO, "Triggering firmware upgrade via ubus... reset_factory=" .. tostring(reset_factory))
-    local result = ubus_call("hilink", "upgrade_firmware", { reset_factory = reset_factory })
+function _M.upgrade_firmware(apply, reset_factory)
+    ngx.log(ngx.INFO, "Triggering firmware upgrade via ubus... apply=" .. tostring(apply) .. ", reset_factory=" .. tostring(reset_factory))
+    local result = ubus_call("hilink", "upgrade_firmware", { 
+        apply = tonumber(apply) or 0,
+        reset_factory = tonumber(reset_factory) or 0 
+    })
     if result and result.result then
         return true
     else
@@ -506,9 +509,9 @@ function _M.get_edge_values()
 end
 
 -- 20. Factory Reset
-function _M.factory_reset()
-    ngx.log(ngx.INFO, "Triggering factory reset via ubus...")
-    local result = ubus_call("hilink", "factory_reset", {})
+function _M.factory_reset(apply)
+    ngx.log(ngx.INFO, "Triggering factory reset via ubus (apply=" .. tostring(apply) .. ")...")
+    local result = ubus_call("hilink", "factory_reset", { apply = tonumber(apply) or 1 })
     if result and result.result then
         return true
     else

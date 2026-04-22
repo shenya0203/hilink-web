@@ -941,7 +941,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.023",
+    soft_ver = "V1.024",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -3581,41 +3581,88 @@ local methods = {
         -- 恢复出厂设置
         factory_reset = {
             function(req, msg)
-                log_info("Factory reset requested...")
+                local apply = tonumber(msg.apply) or 1
+                log_info("Factory reset requested (apply=" .. apply .. ")")
+                
+                if apply == 0 then
+                    log_info("Factory reset check passed, waiting for apply=1 trigger.")
+                    reply(req, {result = true})
+                    return
+                end
+
+                -- 执行阶段
+                log_info("Executing factory reset now...")
                 reply(req, {result = true})
                 -- 实际应该调用: os.execute("firstboot -y && reboot")
-                os.execute("(sleep 2;/etc/init.d/network stop;umount /dev/mtdblock6;firstboot -y ; reboot) &")
+                -- 两阶段模式下不再需要 sleep 2，直接执行
+                os.execute("(/etc/init.d/edge stop;/etc/init.d/socket stop;/etc/init.d/mqtt_app stop;/etc/init.d/cloud stop;/etc/init.d/modem-monitor stop;/etc/init.d/network stop; umount /dev/mtdblock6; firstboot -y; reboot) &")
             end,
-            {}
+            { apply = ubus.INT32 }
         },
 
         -- 固件升级
         upgrade_firmware = {
             function(req, msg)
-                log_info("Firmware upgrade requested...")
+                local apply = tonumber(msg.apply) or 0
                 local reset_factory = tonumber(msg.reset_factory) or 0
-                log_info("Reset factory option: " .. tostring(reset_factory))
+                log_info("Firmware upgrade requested (apply=" .. apply .. ", reset_factory=" .. reset_factory .. ")")
 
-                --固件合法性检查
-                if not check_firmware_validity(msg.firmware) then
-                    reply(req, {result = false, error = "Invalid firmware"})
+                if apply == 0 then
+                    -- 准备阶段：校验固件合法性
+                    if not check_firmware_validity("/tmp/firmware.bin") then
+                        log_info("Firmware validation failed.")
+                        reply(req, {result = false, error = "Invalid firmware"})
+                        return
+                    end
+                    log_info("Firmware validation passed.")
+                    reply(req, {result = true})
                     return
                 end
+
+                -- 执行阶段
+                log_info("Executing firmware upgrade now...")
                 
+                -- 立即返回成功响应给前端，确保响应在网络关闭前发出
                 reply(req, {result = true})
                 
-                -- 延时执行 sysupgrade，确保 reply 能发送出去
-                -- 假设固件已由前端上传至 /tmp/firmware.bin
-                local cmd = "(sleep 2;echo \"0 0 0 0\" > /proc/sys/kernel/printk;/etc/init.d/network stop;/etc/init.d/cron stop;sysupgrade "
-                if reset_factory == 1 then
-                    cmd = cmd .. "-n -q "
+                -- 构建升级命令 (后台静默执行)
+                -- 1. 停止所有 Lua 定时器（防止在后台进程运行时继续干扰系统）
+                if work_led_timer then
+                    work_led_timer:cancel()
+                    work_led_timer = nil
                 end
-                cmd = cmd .. "/tmp/firmware.bin > /dev/null 2>&1) &"
+                if led_blink_timer then
+                    led_blink_timer:cancel()
+                    led_blink_timer = nil
+                end
+
+                -- 2. 拼接完整的系统清理与升级命令
+                -- 先等待 1 秒让 ubus 响应包离开网卡，然后停止所有服务并执行 sysupgrade
+                local cmd_parts = {
+                    "sleep 1",
+                    "echo \"0 0 0 0\" > /proc/sys/kernel/printk",
+                    "/etc/init.d/edge stop",
+                    "/etc/init.d/socket stop",
+                    "/etc/init.d/mqtt_app stop",
+                    "/etc/init.d/cloud stop",
+                    "/etc/init.d/modem-monitor stop",
+                    "/etc/init.d/cron stop",
+                    "/etc/init.d/network stop"
+                }
                 
-                log_info("Executing upgrade command: " .. cmd)
-                os.execute(cmd)
+                local sys_cmd = "sysupgrade "
+                if reset_factory == 1 then
+                    sys_cmd = sys_cmd .. "-n "
+                end
+                sys_cmd = sys_cmd .. "/tmp/firmware.bin"
+                table.insert(cmd_parts, sys_cmd)
+
+                local final_cmd = "( " .. table.concat(cmd_parts, " ; ") .. " ) > /dev/null 2>&1 &"
+                
+                log_info("Executing upgrade sequence in background: " .. final_cmd)
+                os.execute(final_cmd)
             end,
-            { reset_factory = ubus.INT32 }
+            { apply = ubus.INT32, reset_factory = ubus.INT32 }
         },
 
         -- 重启服务
@@ -3674,7 +3721,6 @@ local methods = {
                 table.insert(cmd_parts, "/etc/init.d/edge restart")
                 table.insert(cmd_parts, "/etc/init.d/mqtt_app restart")
                 table.insert(cmd_parts, "/etc/init.d/socket restart")
-                table.insert(cmd_parts, "/etc/init.d/uart restart")
                 table.insert(cmd_parts, "/etc/init.d/cloud restart")
                 table.insert(cmd_parts, "/etc/init.d/cron restart")
 
@@ -3714,7 +3760,6 @@ local methods = {
                         end
                     end
 
-                    log_info("get_edge_values formatted: " .. cjson.encode(values))
                     -- 注入系统从机数据
                     values["System_Sla..System"] = get_system_slave_data()
                     reply(req, { result = true, data = values })

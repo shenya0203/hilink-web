@@ -585,7 +585,8 @@ local function handle_reset(args)
     local act = args.act
     
     if act == "factory" then
-        local success, msg = ubus_adapter.factory_reset()
+        local apply = tonumber(args.apply) or 1
+        local success, msg = ubus_adapter.factory_reset(apply)
         if success then
             ngx.say(cjson.encode({ err = 0 }))
         else
@@ -601,9 +602,10 @@ end
 local function handle_upgrade(args)
     ngx.log(ngx.ERR, "[DEBUG] handle_upgrade triggered")
     local reset_factory = tonumber(args.reset_factory) or 0
+    local apply = tonumber(args.apply) or 1 -- 默认值为1以保持对旧前端调用方式的一定兼容性
     
     -- 调用 ubus 触发升级
-    local success, msg = ubus_adapter.upgrade_firmware(reset_factory)
+    local success, msg = ubus_adapter.upgrade_firmware(apply, reset_factory)
     
     if success then
         send_success()
