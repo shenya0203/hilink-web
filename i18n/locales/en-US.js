@@ -258,7 +258,8 @@ export default {
         password: 'Device Password',
         serverAddress: 'Server Address',
         serverPort: 'Server Port',
-        hilinkcloud: "HiLink Cloud"
+        hilinkcloud: "HiLink Cloud",
+        restartRequired: 'Cloud configuration requires a device restart to take effect.',
     },
 
     // Edge Computing Page

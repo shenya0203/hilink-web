@@ -820,13 +820,29 @@
               <span v-if="pointTimeoutError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointTimeoutError }}</span>
             </div>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault">
-            <label>{{ t('edge.collectFormula') }}:</label>
-            <input v-model="pointForm.collectFormula" type="text" />
+          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.collectFormula') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="pointForm.collectFormula" 
+                type="text" 
+                placeholder="=(%s+1)/2"
+                :style="{ color: pointCollectFormulaError ? 'red' : '', borderColor: pointCollectFormulaError ? 'red' : '' }"
+              />
+              <span v-if="pointCollectFormulaError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointCollectFormulaError }}</span>
+            </div>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault">
-            <label>{{ t('edge.controlFormula') }}:</label>
-            <input v-model="pointForm.controlFormula" type="text" />
+          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.controlFormula') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="pointForm.controlFormula" 
+                type="text" 
+                placeholder="=(%s-1)*2"
+                :style="{ color: pointControlFormulaError ? 'red' : '', borderColor: pointControlFormulaError ? 'red' : '' }"
+              />
+              <span v-if="pointControlFormulaError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointControlFormulaError }}</span>
+            </div>
           </div>
           <div class="form-group" v-if="!pointForm.isDefault">
             <label>{{ t('edge.reportOnChange') }}:</label>
@@ -836,8 +852,11 @@
             <label style="margin-top: 5px;">{{ t('edge.changeRange') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <input 
-                v-model.number="pointForm.changeRange" 
+                v-model="pointForm.changeRange" 
                 type="number" 
+                step="0.001"
+                min="0"
+                max="100"
                 placeholder="2" 
                 :style="{ color: pointChangeRangeError ? 'red' : '', borderColor: pointChangeRangeError ? 'red' : '' }"
               />
@@ -1070,7 +1089,8 @@ import {
   isValidReportPeriod, 
   isValidTopic,
   isValidMqttTopic,
-  isValidTimeout
+  isValidTimeout,
+  isValidFormula
 } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 
@@ -1817,6 +1837,8 @@ const pointDetailError = ref('')
 const pointTimeoutError = ref('')
 const pointRegisterAddressError = ref('')
 const pointChangeRangeError = ref('')
+const pointCollectFormulaError = ref('')
+const pointControlFormulaError = ref('')
 
 // 数据点表单验证状态计算属性
 const hasPointFormErrors = computed(() => {
@@ -1825,7 +1847,9 @@ const hasPointFormErrors = computed(() => {
     !!pointDetailError.value || 
     !!pointRegisterAddressError.value || 
     !!pointChangeRangeError.value ||
-    !!pointTimeoutError.value
+    !!pointTimeoutError.value ||
+    !!pointCollectFormulaError.value ||
+    !!pointControlFormulaError.value
 })
 
 // 监听数据点表单字段变化
@@ -1879,6 +1903,26 @@ watch(() => pointForm.value.timeout, () => {
       pointTimeoutError.value = t('edge.invalidTimeout')
     } else {
       pointTimeoutError.value = ''
+    }
+  }
+})
+
+watch(() => pointForm.value.collectFormula, () => {
+  if (showPointModal.value) {
+    if (!isValidFormula(pointForm.value.collectFormula)) {
+      pointCollectFormulaError.value = t('edge.invalidFormula')
+    } else {
+      pointCollectFormulaError.value = ''
+    }
+  }
+})
+
+watch(() => pointForm.value.controlFormula, () => {
+  if (showPointModal.value) {
+    if (!isValidFormula(pointForm.value.controlFormula)) {
+      pointControlFormulaError.value = t('edge.invalidFormula')
+    } else {
+      pointControlFormulaError.value = ''
     }
   }
 })

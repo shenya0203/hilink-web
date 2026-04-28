@@ -42,7 +42,7 @@
       <div class="modal">
         <div class="modal-header"><h3>{{ t('common.saveSuccess') }}</h3></div>
         <div class="modal-body">
-          <p>{{ t('socket.restartRequired') }}</p>
+          <p>{{ t('cloud.restartRequired') }}</p>
           <div class="modal-actions">
             <button class="btn-restart" @click="handleRestart">{{ t('system.restartNow') }}</button>
             <button class="btn-continue" @click="handleContinue">{{ t('socket.continueConfig') }}</button>

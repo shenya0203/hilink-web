@@ -375,12 +375,12 @@ local function format_edge_value(val, data_type, precision)
     
     -- 1:Bit, 4:Unsigned, 5:Signed, 18:Bool 等整数类
     -- 预处理：如果是整数类，先取整
-    if data_type == 1 or data_type == 4 or data_type == 5 or data_type == 6 or data_type == 7 or data_type == 8 or data_type == 9  or data_type == 18 then
-        num_val = math.floor(num_val)
-    else
+    --if data_type == 1 or data_type == 4 or data_type == 5 or data_type == 6 or data_type == 7 or data_type == 8 or data_type == 9  or data_type == 18 then
+    --    num_val = math.floor(num_val)
+    --else
         num_val = math_round(val, precision)
         -- 移除手动截断逻辑，保留浮点原始精度，以便后续 string.format 执行标准的四舍五入
-    end
+    --end
     
     -- 强制格式化为指定精度字符串（自动补0）
     local fmt = "%." .. precision .. "f"
@@ -941,7 +941,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.024",
+    soft_ver = "V1.026",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1306,28 +1306,21 @@ local edge_points_csv = "V,V1.0,N7X0,;\nSC,Device1,1,2,1,100,0,0,192.168.0.21:21
 -- 14. 协议转换点位数据 (CSV格式)
 local edge_proto_access_csv = "S,1,6,10,ModBusTCP\nC,node01,Device1,18,00001"
 
-local function get_communication_enable(tunnel)
-    log_info("查找目标: " .. tunnel)
-    
+local function get_communication_enable(tunnel)    
     -- 遍历第一层 (SOCK, MQTT, CLOUD)
     for key, data in pairs(comm_tunnel_config) do
-        log_info("key: " .. key.." data: "..tostring(data))
         -- 情况1: data 是一个列表/数组 (例如 SOCK, MQTT)
         -- 我们通过判断是否存在索引 [1] 来确定它是不是列表
         if type(data) == "table" and data[1] ~= nil then
             for _, item in ipairs(data) do
                 if item.name == tunnel then
-                    log_info("在列表 " .. key .. " 中找到: " .. item.name)
                     return item.enable
                 end
             end
             
         -- 情况2: data 是单个对象 (例如 CLOUD)
         elseif type(data) == "table" and data.name == tunnel then
-            log_info("找到单项配置: " .. data.name)
             return data.enable
-        else
-            log_info("未找到: " .. tunnel.." key: "..key)
         end
     end
 
@@ -2315,13 +2308,21 @@ local function set_network_config_values(args)
             end)
         end
 
-        -- 设置设备启用状态
+        -- 设置 AP 启用状态的改写建议
         if ap_enable then
             local disabled = (ap_enable == "1") and "0" or "1"
+            
+            -- 1. 确保物理设备总是处于启用状态 (或者至少在有STA或AP启用时把它置为0)
             cursor:foreach("wireless", "wifi-device", function(section)
-                local device_name = section[".name"]
-                cursor:set("wireless", device_name, "disabled", disabled)
-                log_info("Set wireless." .. device_name .. ".disabled = " .. disabled)
+                cursor:set("wireless", section[".name"], "disabled", "0")
+            end)
+            
+            -- 2. 仅更改 mode 为 'ap' 的接口的 disabled 状态
+            cursor:foreach("wireless", "wifi-iface", function(section)
+                if section.mode == "ap" then
+                    cursor:set("wireless", section[".name"], "disabled", disabled)
+                    log_info("Set wireless AP interface " .. section[".name"] .. " disabled = " .. disabled)
+                end
             end)
         end
 
@@ -3012,7 +3013,7 @@ local methods = {
                 cursor:foreach("wireless", "wifi-iface", function(section)
                     if section.mode == "ap" and section.network == "lan" then
                         -- AP 启用状态：如果wifi-device没有disabled，则认为启用
-                        local device_disabled = get_uci("wireless." .. section.device .. ".disabled") or "1"
+                        local device_disabled = section.disabled or "0"
                         ap_enable = (device_disabled ~= "1") and 1 or 0
 
                         -- 读取AP配置
@@ -3135,6 +3136,8 @@ local methods = {
                 local wwan_gateway = get_uci("network.wwan.gateway") or ""
                 local wwan_dns_enable = get_uci("network.wwan.peerdns") or 1  --0 手动设置 1 自动获取
 
+                
+
                 -- Get UCI cursor for wireless config
                 local uci_cursor = require("uci").cursor()
                 uci_cursor:foreach("wireless", "wifi-iface", function(section)
@@ -3159,7 +3162,8 @@ local methods = {
 
                 local wwan_dns = {}
                 local f = nil
-                if wwan_dns_enable == 0 then
+
+                if wwan_dns_enable == 0 or wwan_dns_enable == "0" then
                     f = io.popen("uci get network.wwan.dns 2>/dev/null")
                 else
                     f = io.popen("uci get network.wwan._dns 2>/dev/null")
@@ -3595,7 +3599,7 @@ local methods = {
                 reply(req, {result = true})
                 -- 实际应该调用: os.execute("firstboot -y && reboot")
                 -- 两阶段模式下不再需要 sleep 2，直接执行
-                os.execute("(/etc/init.d/edge stop;/etc/init.d/socket stop;/etc/init.d/mqtt_app stop;/etc/init.d/cloud stop;/etc/init.d/modem-monitor stop;/etc/init.d/network stop; umount /dev/mtdblock6; firstboot -y; reboot) &")
+                os.execute("(/etc/init.d/edge stop;/etc/init.d/socket stop;/etc/init.d/mqtt_app stop;/etc/init.d/cloud stop;/etc/init.d/modem-monitor stop;/etc/init.d/network stop; umount /dev/mtdblock6;sync; firstboot -y; reboot) &")
             end,
             { apply = ubus.INT32 }
         },
@@ -3807,10 +3811,38 @@ local methods = {
                         if lock then
                             lock:write(os.time())
                             lock:close()
-                            -- 异步执行扫描命令
-                            local wifi_iface = get_wifi_ifname_by_mode("ap") or "wlan0"
-                            log_info("wifi_scan: start".. "/usr/bin/iwinfo " .. wifi_iface .. " scan > " .. SCAN_RESULT_FILE)
-                            os.execute("/usr/bin/iwinfo " .. wifi_iface .. " scan > " .. SCAN_RESULT_FILE .. " 2>/dev/null &")
+                            -- 异步执行动态扫描脚本 (由于AP和STA可能都关闭导致没有网卡，需要动态创建)
+                            local default_iface = get_wifi_ifname_by_mode("sta") or ""
+                            local scan_cmd = string.format([[
+                                (
+                                    IFACE="%s"
+                                    TEMP_IFACE=""
+                                    # 检查默认或常见的无线接口是否已存在
+                                    if [ -n "$IFACE" ] && ip link show $IFACE >/dev/null 2>&1; then
+                                        true
+                                    else
+                                        # 全部网卡都Down了，执行方案A：动态创建虚拟网卡
+                                        PHY=$(iw phy | awk '/^Wiphy/ {print $2}' | head -n 1)
+                                        if [ -n "$PHY" ]; then
+                                            iw phy $PHY interface add wlan_scan type station
+                                            ifconfig wlan_scan up
+                                            sleep 1
+                                            IFACE="wlan_scan"
+                                            TEMP_IFACE="wlan_scan"
+                                        fi
+                                    fi
+                                    /usr/bin/iwinfo $IFACE scan > %s 2>/dev/null
+                                    
+                                    # 扫描完毕，销毁临时网卡
+                                    if [ -n "$TEMP_IFACE" ]; then
+                                        iw dev $TEMP_IFACE del
+                                    fi
+                                ) &
+                            ]], default_iface, SCAN_RESULT_FILE)
+                            
+                            log_info("wifi_scan: dynamic start (fallback to single PHY logic)")
+                            log_info("scan_cmd: "..scan_cmd)
+                            os.execute(scan_cmd)
                             result = { result = true, status = "started" }
                         else
                             result = { result = false, msg = "cannot create lock file" }

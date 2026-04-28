@@ -271,7 +271,8 @@ export default {
         password: '设备密码',
         serverAddress: '服务器地址',
         serverPort: '服务器端口',
-        hilinkcloud: "海凌科云"
+        hilinkcloud: "海凌科云",
+        restartRequired: '云平台配置需要重启设备才能生效。',
     },
 
     // 边缘计算页面
@@ -457,6 +458,7 @@ export default {
         invalidTopic: '格式错误 (1-200字节 ASCII, 无空格/#/+/$//, 最多7层)',
         invalidSubTopic: '订阅主题长度须1-32字节，禁止空格和括号',
         invalidPubTopic: '发布主题长度须1-32字节，禁止空格和括号',
+        invalidFormula: '公式格式错误 (需以 = 开头，仅支持数字、运算符、括号、%s，禁止使用空格)',
         slaveAddressDuplicate: '从机地址重复',
         slaveNameDuplicate: '从机名称重复',
         pointsLimitReached: '点位数量已达上限(1000)，无法继续添加',

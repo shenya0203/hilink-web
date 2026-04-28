@@ -260,14 +260,26 @@ export const isValidRegisterAddress = (address) => {
  */
 export const isValidChangeRange = (range) => {
     if (range === '' || range === null || range === undefined) return false;
+    
+    // 1. 数值范围校验
     const r = Number(range);
     if (isNaN(r) || r < 0 || r > 100) return false;
     
-    // 精度校验：最多支持3位小数
-    const str = String(range);
+    // 2. 精度格式校验 (基于原始字符串)
+    const str = String(range).trim().toLowerCase();
+    
+    // 如果包含科学计数法 (如 1e-7 或 1e3)
+    if (str.includes('e')) {
+        const multiplied = r * 1000;
+        return Math.abs(multiplied - Math.round(multiplied)) < 1e-9;
+    }
+
+    // 普通小数点格式校验
     if (str.includes('.')) {
-        const decimals = str.split('.')[1];
-        if (decimals.length > 3) return false;
+        const parts = str.split('.');
+        if (parts.length === 2 && parts[1].length > 3) {
+            return false;
+        }
     }
     return true;
 };
@@ -365,4 +377,63 @@ export const isSameSubnet = (ip1, ip2, mask) => {
         }
     }
     return true;
+};
+/**
+ * 验证计算公式
+ * 规则：
+ * 1. 允许为空
+ * 2. 必须以 = 开头
+ * 3. 允许字符：0-9, ., +, -, *, /, %, (, ), %s, 空格
+ * 4. 禁止其他字母，禁止科学计数法 (e/E)
+ * 5. 括号必须匹配
+ */
+export const isValidFormula = (formula) => {
+    if (formula === undefined || formula === null || formula === '') return true;
+    
+    // 1. 基础规则：必须以 = 开头，禁止空格
+    if (!formula.startsWith('=')) return false;
+    if (formula.includes(' ')) return false;
+
+    const expr = formula.substring(1);
+    if (expr.length === 0) return false;
+
+    // 2. 检查除 %s 以外的字母
+    const noVarExpr = expr.replace(/%s/g, '1'); // 将 %s 替换为数字 1 方便后续语法检查
+    if (/[a-zA-Z]/.test(noVarExpr.replace(/[0-9]/g, ''))) return false;
+
+    // 3. 检查合法字符集
+    const validCharRegex = /^[\d\.\+\-\*\/\%\(\)]+$/;
+    if (!validCharRegex.test(noVarExpr)) return false;
+
+    // 4. 除0及取模0检查
+    if (expr.includes('/0') || expr.includes('%0')) return false;
+
+    // 5. 结构检查 (基于已替换变量的 noVarExpr)
+    const operators = ['+', '-', '*', '/', '%'];
+    const binaryOperators = ['+', '*', '/', '%'];
+
+    if (binaryOperators.includes(noVarExpr[0])) return false;
+    if (operators.includes(noVarExpr[noVarExpr.length - 1])) return false;
+
+    let balance = 0;
+    for (let i = 0; i < noVarExpr.length; i++) {
+        const char = noVarExpr[i];
+        const nextChar = noVarExpr[i + 1];
+
+        if (char === '(') balance++;
+        if (char === ')') balance--;
+        if (balance < 0) return false;
+
+        if (operators.includes(char)) {
+            if (nextChar && operators.includes(nextChar)) return false;
+            if (nextChar === ')') return false;
+        }
+
+        if (char === '(') {
+            if (nextChar && binaryOperators.includes(nextChar)) return false;
+            if (nextChar === ')') return false;
+        }
+    }
+
+    return balance === 0;
 };

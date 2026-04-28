@@ -33,7 +33,6 @@ export function useServiceControl() {
 
         const poll = () => {
             attempts++
-            console.log(`Polling service recovery... attempt ${attempts}, url: ${requestUrl}`)
 
             // 使用 fetch 而不是 apiClient，避免拦截器影响
             // 请求一个轻量级接口（favicon 或状态接口）
@@ -70,11 +69,10 @@ export function useServiceControl() {
                     }
                 })
                 .catch(err => {
-                    console.log('Service not ready yet:', err.message)
                     // 取消基于 TimeoutError 的强行刷新，只有当服务端真真正正返回 401 等状态时才刷新
                     // 这样可以彻底杜绝由于网络物理断开重启导致 fetch 失败（ERR_CONNECTION_REFUSED / TimeoutError）
                     // 却被提前强制 reload 而显示“连接已中断”原生的丑陋浏览器异常界面。
-                    
+
                     // 继续轮询
                     if (attempts < maxAttempts) {
                         setTimeout(poll, pollInterval)
@@ -102,21 +100,21 @@ export function useServiceControl() {
             // 该请求不执行重启动作，仅确认后端在线，确保握手完成
             await apiClient.get('/action_restart_service.cgi?apply=0')
             console.log('Service restart prepared successfully')
-            
+
             // 3. 第二步：发送“执行”指令 (apply=1)
             // 后端收到此指令后将立即重启服务。该请求通常会因为 Nginx 关闭而导致 Network Error，这是正常现象。
             // 我们不使用 await，或者直接忽略其报错，立即进入探测阶段
             apiClient.get('/action_restart_service.cgi?apply=1').catch(err => {
                 console.log('Execute restart triggered expected network drop:', err)
             })
-            
+
             console.log('Service restart command sequence finished, starting recovery polling...')
-            
+
             // 4. 开始轮询探测服务恢复
             pollServiceRecovery(targetPort)
         } catch (err) {
             console.log('Caught error during restart sequence:', err)
-            
+
             // 如果在第一阶就报错，说明系统本身通信有问题
             const message = err && err.message ? err.message : ''
             console.error('Failed to prepare service restart:', err)

@@ -1113,7 +1113,6 @@ const loadData = async () => {
       fetchNetworkLanConfigData()
     ])
     
-    console.log('=== 网络配置页面数据加载 ===')
     
     if (netConfig) {
       Object.assign(config.value, {
@@ -1157,9 +1156,6 @@ const loadData = async () => {
 
     // 从 LAN 配置 API 获取 LAN 数据
     if (lanConfig) {
-      console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-      console.log(lanConfig)
-      console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
       config.value.s_lan = {
         ip: lanConfig.s_lan?.ip || '',
         netmask: lanConfig.s_lan?.netmask || '',
@@ -1190,7 +1186,6 @@ const loadData = async () => {
     // 保存原始LAN IP用于检测变化
     originalLanIp.value = config.value.s_lan.ip
 
-    console.log('最终配置对象:', config.value)
     
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
@@ -1261,7 +1256,7 @@ const saveConfig = async () => {
     params.push(`n_ap.hidden=${c.n_ap.hidden}`)
 
     const queryString = params.join('&')
-    console.log('Saving network config:', queryString)
+    //console.log('Saving network config:', queryString)
     
     await updateConfig('network', queryString)
     showRestartModal.value = true
