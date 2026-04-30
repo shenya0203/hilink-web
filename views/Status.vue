@@ -107,6 +107,14 @@
               <td>{{ networkInfo.lte?.cimi }}</td>
             </tr>
             <tr>
+              <td class="title">{{ t('status.iccid_0') }}:</td>
+              <td>{{ networkInfo.lte?.iccid_0 }}</td>
+            </tr>
+            <tr>
+              <td class="title">{{ t('status.imsi_0') }}:</td>
+              <td>{{ networkInfo.lte?.imsi_0 }}</td>
+            </tr>
+            <tr>
               <td class="title">{{ t('status.signalValue') }}:</td>
               <td>{{ networkInfo.lte?.csq }}</td>
             </tr>

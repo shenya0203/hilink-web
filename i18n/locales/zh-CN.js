@@ -99,6 +99,8 @@ export default {
         imei: 'IMEI',
         iccid: 'ICCID',
         cimi: 'CIMI',
+        iccid_0: "外置ICCID",
+        imsi_0: "外置IMSI",
         signalValue: '信号值',
         signalStrength: '信号强度',
         netmask: '子网掩码',

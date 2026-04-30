@@ -97,6 +97,8 @@ export default {
         imei: 'IMEI',
         iccid: 'ICCID',
         cimi: 'CIMI',
+        iccid_0: "External ICCID",
+        ims_0: "External IMSI",
         signalValue: 'Signal Value',
         signalStrength: 'Signal Strength',
         netmask: 'NetMask',
