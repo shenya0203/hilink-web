@@ -5,14 +5,16 @@ local DEVICE = "/dev/ttyUSB1"
 local INTERFACE = "lte"
 local INFO_FILE = "/tmp/modem_info.json"
 local CHECK_INTERVAL = 10
-local FAIL_THRESHOLD = 5 -- 长周期重拨阈值
+local FAIL_THRESHOLD = 10 -- 长周期重拨阈值
 local SWITCH_FAIL_LIMIT = 3 -- 模式3自动切卡阈值
 
 -- 全局串口句柄
 local G_SERIAL_FD = nil
 
 -- --- 全局状态 ---
+-- --- 全局状态 ---
 local state = {
+    modem_simnum = 0,
     current_slot = -1,
     last_slot = -1,
     online_since = 0,
@@ -23,11 +25,25 @@ local state = {
     slots = {
         ["0"] = { iccid = "N/A", imsi = "N/A" },
         ["1"] = { iccid = "N/A", imsi = "N/A" }
+    },
+    -- 周期内采集到的实时数据
+    data = {
+        sim_ready = "absent",
+        mwan_stat = "offline",
+        sig_str = "No Signal",
+        local_ip = "0.0.0.0",
+        net_reg_status = "Unknown",
+        diag_msg = ""
     }
 }
 
 -- --- 解析函数：日志记录 ---
-local function log(msg)
+local last_logs = {}
+local function log(msg, key)
+    if key then
+        if last_logs[key] == msg then return end
+        last_logs[key] = msg
+    end
     os.execute(string.format("logger -t 'Modem-Monitor-Lua' %q", tostring(msg)))
 end
 
@@ -84,11 +100,13 @@ local function send_at(cmd, timeout_sec)
     end
     local output = table.concat(results, " ")
     
+    local log_msg
     if #output == 0 then
-        log(string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd))
+        log_msg = string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd)
     else
-        log(string.format("AT >> %s | << %s", cmd, output))
+        log_msg = string.format("AT >> %s | << %s", cmd, output)
     end
+    log(log_msg, cmd)
     return output
 end
 
@@ -123,151 +141,248 @@ end
 -- --- 执行卡槽切换 ---
 local function perform_slot_switch(target)
     log(string.format("!!! TRIGGER: Software Switch to SIM%d !!!", target))
+    os.execute(string.format("ubus call network.interface.%s down", INTERFACE))
     state.is_internal_switching = true
     send_at("AT+CFUN=0")
     os.execute("sleep 1")
     send_at("AT+SIMCROSS=" .. target)
     os.execute("sleep 1")
     send_at("AT+CFUN=1")
-    os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
     state.net_offline_count = 0
     state.fail_count = 0
     os.execute("sleep 5")
+    os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
+end
+
+-- --- 采集指定卡槽的元数据 (ICCID/IMSI) ---
+local function collect_slot_metadata(slot_id)
+    if not slot_id or slot_id == -1 then return end
+    local sid_str = tostring(slot_id)
+    
+    -- ICCID
+    local iccid_resp = send_at("AT+ICCID")
+    local iccid = iccid_resp and iccid_resp:match(":%s*([%dA-Z]+)")
+    if iccid then state.slots[sid_str].iccid = iccid end
+
+    -- IMSI (CIMI)
+    local imsi_resp = send_at("AT+CIMI")
+    local imsi = imsi_resp and imsi_resp:match("%d+")
+    if imsi then state.slots[sid_str].imsi = imsi end
+end
+
+-- --- 初始化相关函数 ---
+local function read_modem_config()
+    local f_uci = io.popen(string.format("uci -q get network.%s.modem_simnum", INTERFACE))
+    state.modem_simnum = tonumber(f_uci and f_uci:read("*l")) or 0
+    if f_uci then f_uci:close() end
+end
+
+local function initial_sim_slot_setup()
+    while state.current_slot == -1 do
+        perform_slot_switch(1)
+        local resp_slot = send_at("AT+SIMCROSS?")
+        state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
+    end
+
+    if state.current_slot ~= -1 then
+        state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
+    end
+
+    collect_slot_metadata(state.current_slot)
+end
+
+local function init_service()
+    init_serial_port()
+    read_modem_config()
+    initial_sim_slot_setup()
+    --切到外置卡槽0
+    if state.modem_simnum == 0 or state.modem_simnum == 2 or state.modem_simnum == 3 then
+        perform_slot_switch(0)
+    end
+
+    perform_slot_switch(0)
+    log(string.format("Service Started. Mode:%d Device:%s", state.modem_simnum, DEVICE))
+end
+
+-- --- 循环内部核心逻辑函数 ---
+
+-- 1. 物理层侦测与业务逻辑切卡
+local function process_sim_slot_detection()
+    local resp_slot = send_at("AT+SIMCROSS?")
+    state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
+
+    -- 强制卡槽逻辑 (模式1：仅内置卡槽1, 模式2：仅外置卡槽0)
+    if state.modem_simnum == 1 and state.current_slot == 0 then
+        perform_slot_switch(1)
+        return true
+    elseif state.modem_simnum == 2 and state.current_slot == 1 then
+        perform_slot_switch(0)
+        return true
+    end
+    return false
+end
+
+-- 2. 处理卡槽变动事件日志
+local function handle_sim_slot_change_event()
+    if state.last_slot ~= -1 and state.current_slot ~= state.last_slot then
+        if state.is_internal_switching then
+            log(string.format("Slot Switch Confirmed: New Slot %d [System]", state.current_slot))
+            state.is_internal_switching = false
+        else
+            log(string.format("EVENT: External/Hardware SIM swap detected! Now on Slot %d", state.current_slot))
+        end
+    end
+    state.last_slot = state.current_slot
+end
+
+-- 3. 基础状态感知
+local function collect_modem_status()
+    local cpin_resp = send_at("AT+CPIN?")
+    state.data.sim_ready = (cpin_resp and cpin_resp:find("READY")) and "ready" or "absent"
+    state.data.mwan_stat = get_mwan3_status()
+    
+    if state.imei == "N/A" then
+        state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
+    end
+end
+
+-- 4. 增强数据采集 (信号, IP, 注册状态, 元数据更新)
+local function collect_network_data()
+    -- 重置瞬态数据
+    state.data.sig_str = "No Signal"
+    state.data.local_ip = "0.0.0.0"
+    state.data.net_reg_status = "Unknown"
+
+    if state.data.sim_ready == "ready" then
+        -- 信号强度 (CSQ)
+        local csq_resp = send_at("AT+CSQ")
+        local csq_val = csq_resp and csq_resp:match("%+CSQ:%s*(%d+)")
+        if csq_val and tonumber(csq_val) ~= 99 then
+            state.data.sig_str = (-113 + tonumber(csq_val) * 2) .. " dBm"
+        end
+
+        -- 注册状态 (CEREG)
+        local cereg_resp = send_at("AT+CEREG?")
+        local cereg_stat = cereg_resp and cereg_resp:match("%+CEREG:%s*%d+,(%d+)")
+        if cereg_stat == "1" then
+            state.data.net_reg_status = "Registered (Home)"
+        elseif cereg_stat == "5" then
+            state.data.net_reg_status = "Registered (Roaming)"
+        else
+            state.data.net_reg_status = "Not Registered (" .. (cereg_stat or "N/A") .. ")"
+        end
+
+        -- IP 地址 (CGPADDR)
+        local ip_resp = send_at("AT+CGPADDR=1")
+        local ip_val = ip_resp and ip_resp:match(':%s*%d+,"([^"]+)"')
+        if ip_val and ip_val ~= "0.0.0.0" then
+            state.data.local_ip = ip_val
+        end
+
+        -- 卡槽元数据更新
+        collect_slot_metadata(state.current_slot)
+        return false
+    else
+        -- SIM 缺失时的特殊处理 (模式0且在卡槽0时强制切到内置卡槽1)
+        if state.modem_simnum == 0 and state.current_slot == 0 then
+            perform_slot_switch(1)
+            return true
+        end
+    end
+    return false
+end
+
+-- 5. 故障计数与诊断日志
+local function update_failure_counters()
+    state.data.diag_msg = string.format("Cycle: [Mode:%d] [Slot:%d] [Net:%s]", 
+        state.modem_simnum, state.current_slot, state.data.mwan_stat)
+    
+    if state.data.mwan_stat == "offline" then
+        state.fail_count = state.fail_count + 1
+        state.data.diag_msg = state.data.diag_msg .. string.format(" [Redial-Fail:%d/%d]", state.fail_count, FAIL_THRESHOLD)
+    else
+        state.fail_count = 0
+    end
+    log(state.data.diag_msg, "cycle_diag")
+end
+
+-- 6. JSON 数据上报
+local function report_status_json()
+    local full_status_text = state.data.net_reg_status
+    if state.data.mwan_stat == "online" then 
+        full_status_text = full_status_text .. " (Online)" 
+    end
+
+    local status_out = {
+        imei = state.imei,
+        iccid = state.slots["1"].iccid,
+        imsi = state.slots["1"].imsi,
+        iccid_0 = state.slots["0"].iccid,
+        imsi_0 = state.slots["0"].imsi,
+        signal = state.data.sig_str,
+        local_ip = state.data.local_ip,
+        status = full_status_text,
+        sim_status = state.data.sim_ready,
+        updated = os.date("%H:%M:%S")
+    }
+
+    local f_json = io.open(INFO_FILE, "w")
+    if f_json then 
+        f_json:write(json_encode(status_out))
+        f_json:close()
+    end
+end
+
+-- 7. 重拨与切卡修复逻辑
+local function handle_redial_and_switch_logic()
+    if state.data.mwan_stat == "offline" and state.fail_count >= FAIL_THRESHOLD then
+        log("Fail threshold reached. Triggering recovery...")
+        
+        -- 目前仅执行日志记录和特定模式下的切卡
+        if state.modem_simnum == 3 then -- 双卡备份模式
+            state.net_offline_count = state.net_offline_count + 1
+            if state.net_offline_count >= SWITCH_FAIL_LIMIT then
+                log("Backup switch triggered!")
+                state.net_offline_count = 0
+                perform_slot_switch(state.current_slot == 0 and 1 or 0)
+            end
+        elseif state.modem_simnum == 0 and state.current_slot == 0 then
+            log("Mode 0 fallback to SIM1 triggered.")
+            perform_slot_switch(1)
+        end
+        
+        state.fail_count = 0
+    end
 end
 
 -- --- 主循环守护 ---
 local function monitor_main()
-    init_serial_port()
-
-    local f_uci = io.popen(string.format("uci -q get network.%s.modem_simnum", INTERFACE))
-    local modem_simnum = tonumber(f_uci and f_uci:read("*l")) or 0
-    if f_uci then f_uci:close() end
-    
-    sync_modem_hardware(modem_simnum)
-    
-    log(string.format("Service Started. Mode:%d Device:%s", modem_simnum, DEVICE))
+    init_service()
 
     while true do
-        -- 1. 物理层侦测
-        local resp_slot = send_at("AT+SIMCROSS?")
-        state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
-        
-        if state.last_slot ~= -1 and state.current_slot ~= state.last_slot then
-            if state.is_internal_switching then
-                log(string.format("Slot Switch Confirmed: New Slot %d [System]", state.current_slot))
-                state.is_internal_switching = false
-            else
-                log(string.format("EVENT: External/Hardware SIM swap detected! Now on Slot %d", state.current_slot))
-            end
-        end
-        state.last_slot = state.current_slot
+        local skip_this_cycle = false
 
-        -- 2. 状态感知
-        local cpin_resp = send_at("AT+CPIN?")
-        local sim_ready = (cpin_resp and cpin_resp:find("READY")) and "ready" or "absent"
-        local mwan_stat = get_mwan3_status()
-        
-        if state.imei == "N/A" then
-            state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
+        -- 阶段 1: 物理感知与模式强制矫正
+        if process_sim_slot_detection() then
+            skip_this_cycle = true
         end
 
-        -- 3. 网络增强数据采集 (信号, IP, 注册状态)
-        local sig_str = "No Signal"
-        local local_ip = "0.0.0.0"
-        local net_reg_status = "Unknown"
+        if not skip_this_cycle then
+            -- 阶段 2: 事件记录与基础状态
+            handle_sim_slot_change_event()
+            collect_modem_status()
 
-        if sim_ready == "ready" then
-            -- 信号采集
-            local csq_val = send_at("AT+CSQ"):match("%+CSQ:%s*(%d+)")
-            if csq_val and tonumber(csq_val) ~= 99 then
-                sig_str = (-113 + tonumber(csq_val) * 2) .. " dBm"
-            end
-
-            -- 注册状态解析 (CEREG)
-            local cereg_stat = send_at("AT+CEREG?"):match("%+CEREG:%s*%d+,(%d+)")
-            if cereg_stat == "1" then
-                net_reg_status = "Registered (Home)"
-            elseif cereg_stat == "5" then
-                net_reg_status = "Registered (Roaming)"
-            else
-                net_reg_status = "Not Registered (" .. (cereg_stat or "N/A") .. ")"
-            end
-
-            -- IP 解析
-            local ip_val = send_at("AT+CGPADDR=1"):match(':%s*%d+,"([^"]+)"')
-            if ip_val and ip_val ~= "0.0.0.0" then
-                local_ip = ip_val
-            end
-
-            -- 卡槽元数据更新 (ICCID & IMSI)
-            if state.current_slot ~= -1 then
-                local sid_str = tostring(state.current_slot)
-                
-                -- ICCID
-                local iccid = send_at("AT+ICCID"):match(":%s*([%dA-Z]+)")
-                if iccid then state.slots[sid_str].iccid = iccid end
-                
-                -- IMSI (CIMI)
-                local imsi = send_at("AT+CIMI"):match("%d+")
-                if imsi then state.slots[sid_str].imsi = imsi end
+            -- 阶段 3: 详细数据采集
+            if collect_network_data() then
+                skip_this_cycle = true
             end
         end
 
-        -- 4. 业务逻辑决策
-        local diag_msg = string.format("Cycle: [Mode:%d] [Slot:%d] [Net:%s]", modem_simnum, state.current_slot, mwan_stat)
-        if modem_simnum == 3 then
-            if state.current_slot == 0 and mwan_stat == "offline" then
-                state.net_offline_count = state.net_offline_count + 1
-                diag_msg = diag_msg .. string.format(" [Backup-Fail:%d/%d]", state.net_offline_count, SWITCH_FAIL_LIMIT)
-                if state.net_offline_count >= SWITCH_FAIL_LIMIT then
-                    log("Backup triggered: Fallback to SIM1")
-                    perform_slot_switch(1)
-                end
-            else
-                state.net_offline_count = 0
-            end
-        elseif modem_simnum == 1 and state.current_slot == 0 then
-            perform_slot_switch(1)
-        elseif modem_simnum == 2 and state.current_slot == 1 then
-            perform_slot_switch(0)
-        end
-
-        if mwan_stat == "offline" then
-            state.fail_count = state.fail_count + 1
-            diag_msg = diag_msg .. string.format(" [Redial-Fail:%d/%d]", state.fail_count, FAIL_THRESHOLD)
-        else
-            state.fail_count = 0
-        end
-        log(diag_msg)
-
-        -- 5. JSON 数据上报
-        local active_sid_str = tostring(state.current_slot)
-        local cur_slot_meta = state.slots[active_sid_str] or {iccid="N/A", imsi="N/A"}
-        
-        local full_status_text = net_reg_status
-        if mwan_stat == "online" then full_status_text = full_status_text .. " (Online)" end
-
-        local status_out = {
-            imei = state.imei,
-            iccid = cur_slot_meta.iccid,
-            imsi = cur_slot_meta.imsi, -- 新增报送字段
-            signal = sig_str,
-            local_ip = local_ip,
-            status = full_status_text,
-            sim_status = sim_ready,
-            updated = os.date("%H:%M:%S")
-        }
-        local f_json = io.open(INFO_FILE, "w")
-        if f_json then 
-            f_json:write(json_encode(status_out))
-            f_json:close()
-        end
-
-        -- 6. 重拨拉起
-        if mwan_stat == "offline" and state.fail_count >= FAIL_THRESHOLD then
-            log("Threshold reached. Triggering ubus up...")
-            os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
-            state.fail_count = 0
+        if not skip_this_cycle then
+            -- 阶段 4: 统计、上报与自动化维护
+            update_failure_counters()
+            report_status_json()
+            handle_redial_and_switch_logic()
         end
 
         os.execute("sleep " .. CHECK_INTERVAL)
@@ -275,3 +390,4 @@ local function monitor_main()
 end
 
 monitor_main()
+

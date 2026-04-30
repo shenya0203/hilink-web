@@ -941,7 +941,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.026",
+    soft_ver = "V1.027",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -957,7 +957,7 @@ local network_status = {
         dns = "", sdns = "", netmask = ""
     },
     lte = {
-        ver = "", iccid = "",
+        ver = "", iccid = "", iccid_0 = "", imsi_0 = "",
         imei = "", csq = 21, mode = "4G", oper = 1, sim = 1,
         cimi = "", lte_sta = "DisConnect", lte_ip = "",
         lte_netmask = "", lte_dns = "", lte_sdns = ""
@@ -2132,6 +2132,13 @@ local function set_network_config_values(args)
         log_info("Set network.lte.modem_auth = " .. lte_auth)
     end
 
+    -- 处理 LTE LAN 转发控制
+    local lte_allow_forward = args["n_cell.allow_lan_forward"]
+    if lte_allow_forward ~= nil then
+        cursor:set("network", "lte", "allow_lan_forward", tostring(lte_allow_forward))
+        log_info("Set network.lte.allow_lan_forward = " .. lte_allow_forward)
+    end
+
     -- 设置 LTE DNS
     if lte_dns_mode ~= nil then
         cursor:set("network", "lte", "peerdns", lte_dns_mode)
@@ -2529,6 +2536,8 @@ local function collect_network_status()
             ver = "", 
             iccid = "",
             imei = "", 
+            iccid_0 = "",
+            imsi_0 = "",
             csq = 0, 
             mode = "", 
             oper = "", 
@@ -2608,15 +2617,15 @@ local function collect_network_status()
             if info.local_ip ~= "0.0.0.0" then
                 net_status.lte.lte_ip = info.local_ip
             end
+            net_status.lte.iccid = info.iccid
+            net_status.lte.cimi = info.imsi
+            net_status.lte.iccid_0 = info.iccid_0
+            net_status.lte.imsi_0 = info.imsi_0
 
             if is_ready then
-                net_status.lte.iccid = info.iccid
-                net_status.lte.cimi = info.imsi
                 net_status.lte.mode = info.network_type
                 net_status.lte.oper = info.sim_operator
             else
-                net_status.lte.iccid = "N/A"
-                net_status.lte.cimi = "N/A"
                 net_status.lte.mode = "N/A"
                 net_status.lte.oper = "N/A"
                 net_status.lte.csq = "N/A"
@@ -2861,6 +2870,8 @@ local function get_system_slave_data()
 
     local imei = ""
     local iccid = ""
+    local iccid_0 = ""
+    local imsi_0 = ""
     local csq = 0
     local modem_info_str = read_file_content("/tmp/modem_info.json")
     if modem_info_str then
@@ -2868,6 +2879,9 @@ local function get_system_slave_data()
         if ok then
             imei = info.imei or ""
             iccid = info.iccid or ""
+            iccid_0 = info.iccid_0 or ""
+            imsi_0 = info.imsi_0 or ""
+
             if info.signal then
                 local dbm = tonumber(string.match(info.signal, "([-%d]+)"))
                 if dbm then
@@ -3086,6 +3100,7 @@ local methods = {
                 local lte_pswd = get_uci("network.lte.modem_passwd") or ""
                 local lte_auth = get_uci("network.lte.modem_auth") or 0
                 local lte_simnum = get_uci("network.lte.modem_simnum") or 0
+                local lte_allow_lan_forward = get_uci("network.lte.allow_lan_forward") or 1
 
                 -- Read DNS
                 local wan_dns = {}
@@ -3196,7 +3211,8 @@ local methods = {
                     cell = {
                         sim_switch = lte_simnum,
                         apn = { addr = lte_apn, user = lte_user, pswd = lte_pswd, auth = lte_auth },
-                        dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""}
+                        dns_mode = lte_dns_enable, dns_ip = {lte_dns[1] or "", lte_dns[2] or ""},
+                        allow_lan_forward = tonumber(lte_allow_lan_forward) or 0
                     },
                     n_wifi = {
                         enable = wifi_enable,
