@@ -4,10 +4,15 @@ local socket = require("socket")
 local cjson = require("cjson")
 
 -- ================= 配置区 =================
-local SERVER_IP = "192.168.254.245"
+local SERVER_IP = "192.168.68.197"
 local SERVER_PORT = 998
-local AT_PORT = "/dev/ttyUSB1"
+local AT_PORT = "/dev/ttyUSB3"
 local G_SERIAL_FD = nil
+
+-- 错误代码常量 (用于与上位机沟通)
+local ERR_LAN_SPEED = "LAN_SPEED_ERROR"
+local ERR_WAN_SPEED = "WAN_SPEED_ERROR"
+local ERR_WAN_IP    = "WAN_IP_ERROR"
 -- ==========================================
 
 -- 工具函数：执行Shell并获取输出
@@ -47,12 +52,20 @@ end
 
 -- 打开 AT 串口
 local function open_at_port()
-    if G_SERIAL_FD then G_SERIAL_FD:close() end
+    if G_SERIAL_FD then 
+        G_SERIAL_FD:close() 
+        G_SERIAL_FD = nil 
+    end
+    log("打开 AT 串口 " .. tostring(AT_PORT))
+    os.execute(string.format("stty -F %s 115200 raw -echo min 0 time 1 2>/dev/null", AT_PORT))
     G_SERIAL_FD = io.open(AT_PORT, "r+")
     if not G_SERIAL_FD then
         log("警告: 无法打开 AT 串口 " .. AT_PORT)
         return false
     end
+    
+    log("AT 串口打开成功")
+    G_SERIAL_FD:setvbuf("no")
     return true
 end
 
@@ -94,13 +107,46 @@ local function send_at(cmd, timeout_sec)
     return output
 end
 
--- 卡槽切换逻辑：0=外置，1=内置
+-- 带有重试机制的 AT 命令获取工具
+local function get_at_with_retry(cmd, label, max_tries)
+    for i=1, max_tries do
+        local res = send_at(cmd)
+        if res and res ~= "" and not res:find("ERROR") then
+            return res
+        end
+        log(string.format("Get %s failed (Attempt %d/%d)", label, i, max_tries))
+        if i < max_tries then os.execute("sleep 2") end
+    end
+    return "ERROR"
+end
+
+-- 卡槽切换逻辑：0=外置，1=内置 (增加验证与重试)
 local function perform_slot_switch(target)
-    log("Switching SIM to slot: " .. tostring(target))
-    send_at("AT+CFUN=0")
-    send_at("AT+SIMCROSS=" .. tostring(target))
-    send_at("AT+CFUN=1")
-    os.execute("sleep 3")
+    for i=1, 2 do
+        log(string.format("Switching SIM to slot: %d (Attempt %d/2)", target, i))
+        send_at("AT+CFUN=0")
+        send_at("AT+SIMCROSS=" .. tostring(target))
+        send_at("AT+CFUN=1")
+        
+        -- 用户建议增加1秒间隔 (原3秒 -> 4秒)
+        os.execute("sleep 4")
+
+        -- 闭环验证：使用正则提取数值，防止因空格差异导致校验失败
+        local status_raw = send_at("AT+SIMCROSS?") or ""
+        local current_val = status_raw:match("%+SIMCROSS%s*:%s*(%d+)")
+
+        if current_val and tonumber(current_val) == target then
+            log(string.format("Slot %d verified successfully.", target))
+            return true
+        else
+            log(string.format("Verification FAILED! Current: '%s', Expected: '+SIMCROSS:%d'", status_raw, target))
+            if i < 2 then 
+                log("Retrying switch after 2s delay...")
+                os.execute("sleep 2") 
+            end
+        end
+    end
+    return false
 end
 
 -- ================= 网络接收模块 =================
@@ -169,31 +215,40 @@ function do_test_serial(req)
 end
 
 function do_test_lte()
-    if not is_modem_present() then
-        return {cmd="test_lte", result="fail", detail="USB_NOT_FOUND"}
-    end
-
     open_at_port()
     
-    -- 获取外置槽位
-    perform_slot_switch(0)
-    os.execute("sleep 2")
-    local cpin_ext_raw = send_at("AT+CPIN?") or ""
-    local sim_ext = {
-        ready = cpin_ext_raw:find("READY") ~= nil,
-        iccid = send_at("AT+CCID") or "ERROR"
-    }
+    local sim_ext = { ready = false, iccid = "ERROR" }
+    local sim_int = { ready = false, iccid = "ERROR" }
 
-    -- 获取内置槽位
-    perform_slot_switch(1)
-    os.execute("sleep 2")
-    local cpin_int_raw = send_at("AT+CPIN?") or ""
-    local sim_int = {
-        ready = cpin_int_raw:find("READY") ~= nil,
-        iccid = send_at("AT+CCID") or "ERROR"
-    }
+    -- 1. 获取外置槽位 (Slot 0)
+    if perform_slot_switch(0) then
+        os.execute("sleep 2")
+        local cpin_ext_raw = send_at("AT+CPIN?") or ""
+        sim_ext.ready = cpin_ext_raw:find("READY") ~= nil
+        --当sim 卡 不是ready状态时， 不需要获取iccid
+        if sim_ext.ready then
+            sim_ext.iccid = get_at_with_retry("AT+ICCID", "EXT_ICCID", 3)
+        else
+            sim_ext.iccid = "ERROR"
+        end
+    end
+
+    -- 2. 获取内置槽位 (Slot 1)
+    if perform_slot_switch(1) then
+        os.execute("sleep 2")
+        local cpin_int_raw = send_at("AT+CPIN?") or ""
+        sim_int.ready = cpin_int_raw:find("READY") ~= nil
+        if sim_int.ready then
+            sim_int.iccid = get_at_with_retry("AT+ICCID", "INT_ICCID", 3)
+        else
+            sim_int.iccid = "ERROR"
+        end
+    end
     
-    if G_SERIAL_FD then G_SERIAL_FD:close() end
+    if G_SERIAL_FD then 
+        G_SERIAL_FD:close() 
+        G_SERIAL_FD = nil 
+    end
 
     local is_pass = (sim_ext.ready and sim_int.ready) and "pass" or "fail"
 
@@ -206,12 +261,120 @@ function do_test_lte()
 end
 
 function do_test_net()
-    local out = exec_cmd("swconfig dev switch0 port 1 show")
-    if out:match("link: up") then
-        return {cmd="test_net", result="pass"}
-    else
-        return {cmd="test_net", result="fail"}
+    local res = {}
+    res.cmd = "test_net"
+    local logs = {}
+
+    -- 1. LAN口测试 (Port 1)
+    -- 检查协商速率是否为 100M
+    local out_lan = exec_cmd("swconfig dev switch0 port 1 show")
+    if not out_lan:match("speed:100baseT") then
+        table.insert(logs, ERR_LAN_SPEED)
     end
+
+    -- 2. WAN口物理层测试 (Port 0)
+    -- 检查协商速率是否为 100M
+    local out_wan = exec_cmd("swconfig dev switch0 port 0 show")
+    if not out_wan:match("speed:100baseT") then
+        table.insert(logs, ERR_WAN_SPEED)
+    end
+
+    -- 3. WAN口网络层测试 (eth0.2)
+    -- 检查是否获取到 IPv4 地址
+    local out_ip = exec_cmd("ifconfig eth0.2")
+    if not out_ip:match("inet addr:%d+%.%d+%.%d+%.%d+") then
+        table.insert(logs, ERR_WAN_IP)
+    end
+
+    -- 4. 汇总结果
+    if #logs == 0 then
+        res.result = "pass"
+    else
+        res.result = "fail"
+        res.log = logs
+    end
+
+    return res
+end
+
+function port_init()
+    --Failsafe模式下 需要把网口初始化
+    --端口测试方案， 使用LAN口和 上位机通信， 如果通信且端口的协商速率时100M 说明正常
+    --WAN口测试方案， 配置交换芯片，将WAN口分隔为vlan2 同时让wan口通过udhcpc获取IP 获取到IP且协商速率是100M， 说明正常
+    exec_cmd("swconfig dev switch0 set enable_vlan 1")
+    exec_cmd("swconfig dev switch0 set alternate_vlan_disable 0")
+    exec_cmd("swconfig dev switch0 vlan 1 set ports \"1 2 3 4 6t\"")
+    exec_cmd("swconfig dev switch0 vlan 2 set ports \"0 6t\"")
+    exec_cmd("swconfig dev switch0 port 1 set pvid 1")
+    exec_cmd("swconfig dev switch0 port 2 set pvid 1")
+    exec_cmd("swconfig dev switch0 port 3 set pvid 1")
+    exec_cmd("swconfig dev switch0 port 4 set pvid 1")
+    exec_cmd("swconfig dev switch0 port 0 set pvid 2")
+    exec_cmd("swconfig dev switch0 set apply 1")
+    exec_cmd("ip link add link eth0 name eth0.2 type vlan id 2")
+    exec_cmd("ip link set eth0.2 up")
+    exec_cmd("(udhcpc -i eth0.2 -n -q -T 5 -t 3000 ) >/dev/null 2>&1 &")
+end
+
+function lte_init()
+    local modem_status = "OK"
+    local boot_iccid = "ERROR"
+    local boot_imsi = "ERROR"
+    local boot_imei = "ERROR"
+
+    -- 驱动挂载
+    --[[ 测试时注释掉
+    exec_cmd("modprobe /lib/modules/5.4.238/option.ko")
+    exec_cmd("modprobe /lib/modules/5.4.238/usb-serial.ko")
+    exec_cmd("modprobe /lib/modules/5.4.238/cdc_ncm.ko")
+    exec_cmd("modprobe /lib/modules/5.4.238/cdc_ether.ko")
+    exec_cmd("mknod /dev/ttyUSB1 c 188 1")
+    exec_cmd("mknod /dev/ttyUSB3 c 188 3")
+    exec_cmd("mknod /dev/ttyUSB5 c 188 5")
+    ]]--
+
+    -- 1. 检查 USB 设备是否存在
+    if not is_modem_present() then
+        log("Error: 4G Modem USB ID 19d1:1003 not found!")
+        modem_status = "USB_ERROR"
+    else
+        -- 2. 存在则尝试获取 AT 信息
+        if open_at_port() then
+            -- A. 获取 IMEI (尝试3次)
+            boot_imei = get_at_with_retry("AT+CGSN", "IMEI", 3)
+            
+            -- B. 切换到内置卡槽 (Slot 1) 并验证
+            if perform_slot_switch(1) then
+                -- 等待 SIM 卡就绪 (尝试3次)
+                local ready = false
+                for i=1, 3 do
+                    local cpin = send_at("AT+CPIN?", 2)
+                    if cpin and cpin:find("READY") then
+                        ready = true
+                        break
+                    end
+                    log(string.format("Waiting for SIM READY (Attempt %d/3)...", i))
+                    os.execute("sleep 2")
+                end
+
+                if ready then
+                    -- 获取 ICCID 和 IMSI (各尝试3次)
+                    boot_iccid = get_at_with_retry("AT+ICCID", "ICCID", 3)
+                    boot_imsi = get_at_with_retry("AT+CIMI", "IMSI", 3)
+                else
+                    log("Error: Built-in SIM not ready after switch and retries")
+                    modem_status = "SIM_NOT_READY"
+                end
+            else
+                log("Error: Critical failure in slot switching verification")
+                modem_status = "SLOT_SWITCH_ERROR"
+            end
+        else
+            modem_status = "PORT_ERROR"
+        end
+    end
+
+    return modem_status, boot_iccid, boot_imsi, boot_imei
 end
 
 -- ================= 主控循环 =================
@@ -224,48 +387,13 @@ function main()
     local boot_iccid = "ERROR"
     local boot_imsi = "ERROR"
     local modem_status = "OK"
-
-    -- 1. 检查 USB 设备是否存在
-    if not is_modem_present() then
-        log("Error: 4G Modem USB ID 19d1:1003 not found!")
-        modem_status = "USB_ERROR"
-    else
-        -- 2. 存在则尝试获取 AT 信息
-        if open_at_port() then
-            -- A. 获取 IMEI
-            boot_imei = send_at("AT+CGSN") or "ERROR"
-            
-            -- B. 切换到内置卡槽 (Slot 1) 获取 ICCID/IMSI
-            perform_slot_switch(1)
-            
-            -- 等待 SIM 卡就绪 (最多尝试 5 次)
-            local ready = false
-            for i=1, 5 do
-                local cpin = send_at("AT+CPIN?", 2)
-                if cpin and cpin:find("READY") then
-                    ready = true
-                    break
-                end
-                os.execute("sleep 2")
-            end
-
-            if ready then
-                boot_iccid = send_at("AT+CCID") or "ERROR"
-                boot_imsi = send_at("AT+CIMI") or "ERROR"
-            else
-                log("Error: Built-in SIM not ready after switch")
-                modem_status = "SIM_NOT_READY"
-            end
-            
-            if G_SERIAL_FD then G_SERIAL_FD:close() end
-        else
-            modem_status = "PORT_ERROR"
-        end
-    end
+    --网口初始化
+    --port_init()
+    modem_status,boot_iccid,boot_imsi,boot_imei = lte_init()
 
     while true do
         local tcp = socket.tcp()
-        tcp:settimeout(5)
+        tcp:settimeout(2)
         
         log("Connecting to " .. SERVER_IP .. ":" .. SERVER_PORT)
         local res, err = tcp:connect(SERVER_IP, SERVER_PORT)
@@ -308,8 +436,7 @@ function main()
                 elseif req.cmd == "test_led" then
                     resp = {cmd="test_led", result="pass"}
                 elseif req.cmd == "write_tuple" then
-                    local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f",
-                                req.DN, req.PjK, req.PdK, req.PdS, req.DS)
+                    local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f", req.DN, req.PjK, req.PdK, req.PdS, req.DS)
                     if os.execute(cmd) == 0 then
                         os.execute("firstboot -y")
                         tcp:send(cjson.encode({cmd="write_tuple", result="pass"}) .. "\n")

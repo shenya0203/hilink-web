@@ -116,7 +116,7 @@ class DeviceCard(ctk.CTkFrame):
 class FactoryApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Hilink 工业产测全自动上位机 V3.0")
+        self.title("Hilink 工业产测全自动上位机 V1.0")
         self.geometry("1000x700")
         ctk.set_appearance_mode("dark")
         
@@ -171,7 +171,7 @@ class FactoryApp(ctk.CTk):
             threading.Thread(target=self.handle_client, args=(conn, addr), daemon=True).start()
 
     def handle_client(self, conn, addr):
-        conn.settimeout(10)
+        conn.settimeout(20)
         try:
             # 1. 等待注册报文
             raw_data = self.receive_json(conn)
@@ -209,9 +209,11 @@ class FactoryApp(ctk.CTk):
             if not chunk: return None
             buffer += chunk
             try:
+                print("JSON 数据:", buffer)
                 # 处理粘包/半包逻辑（这里假设一次收一个完整JSON）
                 return json.loads(buffer)
             except:
+                print("等待完整的 JSON 数据...")
                 continue
 
     def send_json(self, session, data):
@@ -234,18 +236,24 @@ class FactoryApp(ctk.CTk):
 
             # Step 2: 自动化固件测试
             session.current_step = "基础功能测试"
+            print("正在进行 Net 测试...")
             # Net 测试
             self.send_json(session, {"cmd": "test_net"})
             resp = self.receive_json(session.socket)
+            print("Net 测试结果:", resp)
             session.results["test_net"] = (resp.get("result") == "pass")
 
             # LTE 测试
+            print("正在进行 LTE 测试...")
             self.send_json(session, {"cmd": "test_lte"})
             resp = self.receive_json(session.socket)
+            print("LTE 测试结果:", resp)
             session.results["test_lte"] = (resp.get("result") == "pass")
 
             # Serial 测试 (加密)
+            print("Serial 测试 (加密)...")
             payload = CryptoHelper.encrypt_b64("FACTORY_TEST_DATA_2024")
+            print("加密后数据:", payload)
             self.send_json(session, {"cmd": "test_serial", "data": payload})
             resp = self.receive_json(session.socket)
             session.results["test_serial"] = (resp.get("data") is not None)

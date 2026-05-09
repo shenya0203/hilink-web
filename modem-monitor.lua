@@ -106,7 +106,7 @@ local function send_at(cmd, timeout_sec)
     else
         log_msg = string.format("AT >> %s | << %s", cmd, output)
     end
-    log(log_msg, cmd)
+    --log(log_msg, cmd)
     return output
 end
 
@@ -303,7 +303,7 @@ local function update_failure_counters()
     else
         state.fail_count = 0
     end
-    log(state.data.diag_msg, "cycle_diag")
+    --log(state.data.diag_msg, "cycle_diag")
 end
 
 -- 6. JSON 数据上报

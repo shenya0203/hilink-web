@@ -154,6 +154,14 @@ end
 
 
 local function check_is_online(iface_name)
+    if iface_name == "lte" then
+        --判断网络配置是否是eth_only,这个配置在
+        local net_select = get_uci("mwan3.globals.net_select") or 0
+        if net_select == 2 or net_select == "2" then
+            return false
+        end
+    end
+
     local path = "/var/run/mwan3/iface_state/" .. iface_name
     local f = io.open(path, "r")
     
@@ -941,7 +949,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.027",
+    soft_ver = "V1.029",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -4019,49 +4027,68 @@ local methods = {
     }
 }
 
-sync_nginx_settings()
-load_edge_point_configs() -- 启动时加载一次边缘计算点位配置
-
 -- ==========================================================
--- 注册 ubus 对象并启动事件循环
+-- 程序主入口 (带全局异常捕获)
 -- ==========================================================
+local function main_service()
+    sync_nginx_settings()
+    load_edge_point_configs() -- 启动时加载一次边缘计算点位配置
 
-conn:add(methods)
+    -- ==========================================================
+    -- 注册 ubus 对象并启动事件循环
+    -- ==========================================================
 
-log_info("=========================================")
-log_info("Hilink ubus daemon started successfully")
-log_info("Object: hilink")
-log_info("=========================================")
-log_info("Available methods:")
-for obj_name, obj_methods in pairs(methods) do
-    for method_name, _ in pairs(obj_methods) do
-        log_info("  - " .. obj_name .. "." .. method_name)
+    conn:add(methods)
+
+    log_info("=========================================")
+    log_info("Hilink ubus daemon started successfully")
+    log_info("Object: hilink")
+    log_info("=========================================")
+    log_info("Available methods:")
+    for obj_name, obj_methods in pairs(methods) do
+        for method_name, _ in pairs(obj_methods) do
+            log_info("  - " .. obj_name .. "." .. method_name)
+        end
     end
+    log_info("=========================================")
+
+    -- ==========================================================
+    -- WORK 状态指示灯 (GPIO4) 闪烁逻辑
+    -- ==========================================================
+    local led_state = 0
+    local work_led_timer
+
+    local function toggle_work_led()
+        led_state = (led_state == 0) and 1 or 0
+        os.execute(string.format("echo %d > /sys/class/leds/system:work:status/brightness", led_state))
+        work_led_timer:set(1000) -- 每隔1000ms尝试翻转状态
+    end
+
+    -- 初始状态置为灭
+    os.execute("echo none > /sys/class/leds/system:work:status/trigger")
+    os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
+    -- 启动定时器，1s后开始第一次翻转
+    work_led_timer = uloop.timer(toggle_work_led)
+    work_led_timer:set(1000)
+
+    os.execute("/etc/init.d/nginx_hlk restart")
+
+    -- 初始化网络状态灯
+    update_net_led_logic()
+
+    uloop.run()
 end
-log_info("=========================================")
 
--- ==========================================================
--- WORK 状态指示灯 (GPIO4) 闪烁逻辑
--- ==========================================================
-local led_state = 0
-local work_led_timer
+-- 执行受保护的主函数
+local status, err = xpcall(main_service, function(msg)
+    return debug.traceback(msg)
+end)
 
-local function toggle_work_led()
-    led_state = (led_state == 0) and 1 or 0
-    os.execute(string.format("echo %d > /sys/class/leds/system:work:status/brightness", led_state))
-    work_led_timer:set(1000) -- 每隔1000ms尝试翻转状态
+if not status then
+    log_info("=========================================")
+    log_info("FATAL ERROR DETECTED IN MAIN LOOP")
+    log_info(err)
+    log_info("=========================================")
+    -- 强制退出以触发 procd 重启，但保留了错误栈到日志
+    os.exit(1)
 end
-
--- 初始状态置为灭
-os.execute("echo none > /sys/class/leds/system:work:status/trigger")
-os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
--- 启动定时器，1s后开始第一次翻转
-work_led_timer = uloop.timer(toggle_work_led)
-work_led_timer:set(1000)
-
-os.execute("/etc/init.d/nginx_hlk restart")
-
--- 初始化网络状态灯
-update_net_led_logic()
-
-uloop.run()
