@@ -1,13 +1,13 @@
 #!/usr/bin/lua
 
-local socket = require("socket")
-local cjson = require("cjson")
+local socket        = require("socket")
+local cjson         = require("cjson")
 
 -- ================= 配置区 =================
-local SERVER_IP = "192.168.68.197"
-local SERVER_PORT = 998
-local AT_PORT = "/dev/ttyUSB3"
-local G_SERIAL_FD = nil
+local SERVER_IP     = "192.168.68.197"
+local SERVER_PORT   = 998
+local AT_PORT       = "/dev/ttyUSB3"
+local G_SERIAL_FD   = nil
 
 -- 错误代码常量 (用于与上位机沟通)
 local ERR_LAN_SPEED = "LAN_SPEED_ERROR"
@@ -52,9 +52,9 @@ end
 
 -- 打开 AT 串口
 local function open_at_port()
-    if G_SERIAL_FD then 
-        G_SERIAL_FD:close() 
-        G_SERIAL_FD = nil 
+    if G_SERIAL_FD then
+        G_SERIAL_FD:close()
+        G_SERIAL_FD = nil
     end
     log("打开 AT 串口 " .. tostring(AT_PORT))
     os.execute(string.format("stty -F %s 115200 raw -echo min 0 time 1 2>/dev/null", AT_PORT))
@@ -63,7 +63,7 @@ local function open_at_port()
         log("警告: 无法打开 AT 串口 " .. AT_PORT)
         return false
     end
-    
+
     log("AT 串口打开成功")
     G_SERIAL_FD:setvbuf("no")
     return true
@@ -76,7 +76,7 @@ local function send_at(cmd, timeout_sec)
 
     -- Drain buffer
     while G_SERIAL_FD:read(1) do end
-    
+
     G_SERIAL_FD:write(cmd .. "\r\n")
     G_SERIAL_FD:flush()
 
@@ -89,7 +89,7 @@ local function send_at(cmd, timeout_sec)
             if response:find("OK") or response:find("ERROR") then break end
         end
     end
-    
+
     local results = {}
     for line in response:gmatch("[^\r\n]+") do
         if not line:find(cmd, 1, true) then
@@ -98,7 +98,7 @@ local function send_at(cmd, timeout_sec)
         end
     end
     local output = table.concat(results, " ")
-    
+
     if #output == 0 then
         log(string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd))
     else
@@ -109,7 +109,7 @@ end
 
 -- 带有重试机制的 AT 命令获取工具
 local function get_at_with_retry(cmd, label, max_tries)
-    for i=1, max_tries do
+    for i = 1, max_tries do
         local res = send_at(cmd)
         if res and res ~= "" and not res:find("ERROR") then
             return res
@@ -122,12 +122,12 @@ end
 
 -- 卡槽切换逻辑：0=外置，1=内置 (增加验证与重试)
 local function perform_slot_switch(target)
-    for i=1, 2 do
+    for i = 1, 2 do
         log(string.format("Switching SIM to slot: %d (Attempt %d/2)", target, i))
         send_at("AT+CFUN=0")
         send_at("AT+SIMCROSS=" .. tostring(target))
         send_at("AT+CFUN=1")
-        
+
         -- 用户建议增加1秒间隔 (原3秒 -> 4秒)
         os.execute("sleep 4")
 
@@ -140,9 +140,9 @@ local function perform_slot_switch(target)
             return true
         else
             log(string.format("Verification FAILED! Current: '%s', Expected: '+SIMCROSS:%d'", status_raw, target))
-            if i < 2 then 
+            if i < 2 then
                 log("Retrying switch after 2s delay...")
-                os.execute("sleep 2") 
+                os.execute("sleep 2")
             end
         end
     end
@@ -156,13 +156,13 @@ local function receive_json_stream(tcp)
     local escape = false
     local json_str = ""
     local started = false
-    
+
     while true do
         local char, err = tcp:receive(1)
         if not char then return nil, err end
-        
+
         json_str = json_str .. char
-        
+
         if not in_string then
             if char == '{' then
                 depth = depth + 1
@@ -181,7 +181,7 @@ local function receive_json_stream(tcp)
                 escape = false
             end
         end
-        
+
         if started and depth == 0 then
             return json_str
         end
@@ -195,19 +195,19 @@ function do_test_serial(req)
     local port_name = req.port or "ttyS0"
     local port_path = "/dev/" .. port_name
     local req_data = req.data or ""
-    
+
     local f_out = io.open(port_path, "w")
     if f_out then
         f_out:write(req_data)
         f_out:flush()
         f_out:close()
     else
-        return {cmd="test_serial", result="fail", detail="Cannot open " .. port_name}
+        return { cmd = "test_serial", result = "fail", detail = "Cannot open " .. port_name }
     end
-    
+
     local reply_data = exec_cmd("timeout 1 cat " .. port_path)
     reply_data = reply_data:gsub("%s+", "")
-    
+
     return {
         cmd = "test_serial",
         data = reply_data
@@ -216,7 +216,7 @@ end
 
 function do_test_lte()
     open_at_port()
-    
+
     local sim_ext = { ready = false, iccid = "ERROR" }
     local sim_int = { ready = false, iccid = "ERROR" }
 
@@ -244,10 +244,10 @@ function do_test_lte()
             sim_int.iccid = "ERROR"
         end
     end
-    
-    if G_SERIAL_FD then 
-        G_SERIAL_FD:close() 
-        G_SERIAL_FD = nil 
+
+    if G_SERIAL_FD then
+        G_SERIAL_FD:close()
+        G_SERIAL_FD = nil
     end
 
     local is_pass = (sim_ext.ready and sim_int.ready) and "pass" or "fail"
@@ -331,7 +331,7 @@ function lte_init()
     exec_cmd("mknod /dev/ttyUSB1 c 188 1")
     exec_cmd("mknod /dev/ttyUSB3 c 188 3")
     exec_cmd("mknod /dev/ttyUSB5 c 188 5")
-    ]]--
+    ]] --
 
     -- 1. 检查 USB 设备是否存在
     if not is_modem_present() then
@@ -342,12 +342,12 @@ function lte_init()
         if open_at_port() then
             -- A. 获取 IMEI (尝试3次)
             boot_imei = get_at_with_retry("AT+CGSN", "IMEI", 3)
-            
+
             -- B. 切换到内置卡槽 (Slot 1) 并验证
             if perform_slot_switch(1) then
                 -- 等待 SIM 卡就绪 (尝试3次)
                 local ready = false
-                for i=1, 3 do
+                for i = 1, 3 do
                     local cpin = send_at("AT+CPIN?", 2)
                     if cpin and cpin:find("READY") then
                         ready = true
@@ -381,7 +381,7 @@ end
 
 function main()
     log("Factory Daemon Started.")
-    
+
     local boot_mac = get_mac_address()
     local boot_imei = "ERROR"
     local boot_iccid = "ERROR"
@@ -389,15 +389,15 @@ function main()
     local modem_status = "OK"
     --网口初始化
     --port_init()
-    modem_status,boot_iccid,boot_imsi,boot_imei = lte_init()
+    modem_status, boot_iccid, boot_imsi, boot_imei = lte_init()
 
     while true do
         local tcp = socket.tcp()
         tcp:settimeout(2)
-        
+
         log("Connecting to " .. SERVER_IP .. ":" .. SERVER_PORT)
         local res, err = tcp:connect(SERVER_IP, SERVER_PORT)
-        
+
         if res then
             -- 3. 注册设备 (上报所有采集到的状态)
             local reg_info = {
@@ -411,7 +411,7 @@ function main()
             }
             tcp:send(cjson.encode(reg_info) .. "\n")
             log("Reg info sent: " .. cjson.encode(reg_info))
-            
+
             -- 4. 阻塞接收指令并处理
             tcp:settimeout(nil)
             while true do
@@ -420,11 +420,11 @@ function main()
                     log("Connection lost: " .. tostring(err))
                     break
                 end
-                
+
                 log("Recv: " .. raw_str)
                 local req = cjson.decode(raw_str)
                 local resp = {}
-                
+
                 if req.cmd == "test_net" then
                     resp = do_test_net()
                 elseif req.cmd == "test_lte" then
@@ -432,22 +432,23 @@ function main()
                 elseif req.cmd == "test_serial" then
                     resp = do_test_serial(req)
                 elseif req.cmd == "test_wdog" then
-                    resp = {cmd="test_wdog", result="pass"}
+                    resp = { cmd = "test_wdog", result = "pass" }
                 elseif req.cmd == "test_led" then
-                    resp = {cmd="test_led", result="pass"}
+                    resp = { cmd = "test_led", result = "pass" }
                 elseif req.cmd == "write_tuple" then
-                    local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f", req.DN, req.PjK, req.PdK, req.PdS, req.DS)
+                    local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f", req.DN, req.PjK,
+                        req.PdK, req.PdS, req.DS)
                     if os.execute(cmd) == 0 then
                         os.execute("firstboot -y")
-                        tcp:send(cjson.encode({cmd="write_tuple", result="pass"}) .. "\n")
+                        tcp:send(cjson.encode({ cmd = "write_tuple", result = "pass" }) .. "\n")
                         log("Seal completed! Triggering Watchdog hard reset...")
                         os.execute("killall feed_wdog.sh")
                         while true do socket.sleep(10) end
                     else
-                        resp = {cmd="write_tuple", result="fail"}
+                        resp = { cmd = "write_tuple", result = "fail" }
                     end
                 end
-                
+
                 if resp.cmd then
                     local out_json = cjson.encode(resp)
                     tcp:send(out_json .. "\n")

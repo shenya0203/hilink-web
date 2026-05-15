@@ -805,6 +805,7 @@ const wifiScanModal = ref({
 const scanInterval = ref(null)
 const scanAttempts = ref(0)
 const showHiddenSsidHint = ref(false)
+const retryTimer = ref(null) // 用于自动重试的定时器
 
 // 配置对象
 const config = ref({
@@ -1103,8 +1104,15 @@ const hasMainTabError = (mainTabName) => {
 // 加载所有数据
 const loadData = async () => {
   try {
+    // 确保重试时仍处于加载状态且无错误提示
     loading.value = true
     error.value = null
+
+    // 清理可能存在的旧定时器
+    if (retryTimer.value) {
+      clearTimeout(retryTimer.value)
+      retryTimer.value = null
+    }
 
     const [status, networkFlex, netConfig, lanConfig] = await Promise.all([
       fetchStatusData(),
@@ -1113,85 +1121,93 @@ const loadData = async () => {
       fetchNetworkLanConfigData()
     ])
     
+    // 如果任何一个接口获取失败 (返回 null)，则记录警告并延迟重试
+    if (status === null || networkFlex === null || netConfig === null || lanConfig === null) {
+      const failedApis = []
+      if (status === null) failedApis.push('status')
+      if (networkFlex === null) failedApis.push('networkFlex')
+      if (netConfig === null) failedApis.push('netConfig')
+      if (lanConfig === null) failedApis.push('lanConfig')
+      
+      console.warn(`[NetworkConfig] 以下接口获取失败: ${failedApis.join(', ')}。2秒后将自动发起重试...`)
+      
+      // 保持转圈状态，2秒后重试
+      retryTimer.value = setTimeout(loadData, 2000)
+      return
+    }
     
-    if (netConfig) {
-      Object.assign(config.value, {
-        net_select: String(netConfig.net_select),
-        probe_period: String(netConfig.keepalive_period),
-        probe_server1: netConfig.keepalive_addr[0],
-        probe_server2: netConfig.keepalive_addr[1],
-        eth_mode: String(netConfig.eth0.ip_mode),
-        eth_dns_mode: String(netConfig.eth0.dns_mode),
-        eth_ip: netConfig.eth0.sip,
-        eth_netmask: netConfig.eth0.mip,
-        eth_gw: netConfig.eth0.gip,
-        eth_dns: netConfig.eth0.dns_ip[0],
-        eth_sdns: netConfig.eth0.dns_ip[1],
-        // WiFi (使用模拟数据或默认值)
-        n_wifi: {
-          enable: String(netConfig.n_wifi?.enable ?? 0),
-          encryption: String(netConfig.n_wifi?.encryption ?? 1)
-        },
-        s_wifi: {
-          ssid: netConfig.s_wifi?.ssid ?? '',
-          password: netConfig.s_wifi?.password ?? ''
-        },
-        wifi_ip_mode: String(netConfig.n_wifi?.ip_mode ?? 1),
-        wifi_ip: netConfig.s_wifi?.ip ?? '',
-        wifi_netmask: netConfig.s_wifi?.netmask ?? '',
-        wifi_gw: netConfig.s_wifi?.gw ?? '',
-        wifi_dns_mode: String(netConfig.n_wifi?.dns_mode ?? 1),
-        wifi_dns: netConfig.s_wifi?.dns_ip?.[0] ?? '',
-        wifi_sdns: netConfig.s_wifi?.dns_ip?.[1] ?? '',
-        lte_sim: String(netConfig.cell.sim_switch),
-        lte_apn: netConfig.cell.apn.addr || '',
-        lte_user: netConfig.cell.apn.user || '',
-        lte_pwd: netConfig.cell.apn.pswd || '',
-        lte_auth: String(netConfig.cell.apn.auth),
-        lte_dns_mode: String(netConfig.cell.dns_mode),
-        lte_dns: netConfig.cell.dns_ip[0],
-        lte_sdns: netConfig.cell.dns_ip[1]
-      })
+    // 能运行到这里说明全部接口成功
+    Object.assign(config.value, {
+      net_select: String(netConfig.net_select),
+      probe_period: String(netConfig.keepalive_period),
+      probe_server1: netConfig.keepalive_addr[0],
+      probe_server2: netConfig.keepalive_addr[1],
+      eth_mode: String(netConfig.eth0.ip_mode),
+      eth_dns_mode: String(netConfig.eth0.dns_mode),
+      eth_ip: netConfig.eth0.sip,
+      eth_netmask: netConfig.eth0.mip,
+      eth_gw: netConfig.eth0.gip,
+      eth_dns: netConfig.eth0.dns_ip[0],
+      eth_sdns: netConfig.eth0.dns_ip[1],
+      // WiFi (使用数据或默认值)
+      n_wifi: {
+        enable: String(netConfig.n_wifi?.enable ?? 0),
+        encryption: String(netConfig.n_wifi?.encryption ?? 1)
+      },
+      s_wifi: {
+        ssid: netConfig.s_wifi?.ssid ?? '',
+        password: netConfig.s_wifi?.password ?? ''
+      },
+      wifi_ip_mode: String(netConfig.n_wifi?.ip_mode ?? 1),
+      wifi_ip: netConfig.s_wifi?.ip ?? '',
+      wifi_netmask: netConfig.s_wifi?.netmask ?? '',
+      wifi_gw: netConfig.s_wifi?.gw ?? '',
+      wifi_dns_mode: String(netConfig.n_wifi?.dns_mode ?? 1),
+      wifi_dns: netConfig.s_wifi?.dns_ip?.[0] ?? '',
+      wifi_sdns: netConfig.s_wifi?.dns_ip?.[1] ?? '',
+      lte_sim: String(netConfig.cell.sim_switch),
+      lte_apn: netConfig.cell.apn.addr || '',
+      lte_user: netConfig.cell.apn.user || '',
+      lte_pwd: netConfig.cell.apn.pswd || '',
+      lte_auth: String(netConfig.cell.apn.auth),
+      lte_dns_mode: String(netConfig.cell.dns_mode),
+      lte_dns: netConfig.cell.dns_ip[0],
+      lte_sdns: netConfig.cell.dns_ip[1]
+    })
+
+    // 执行到这里 netConfig 和 lanConfig 肯定都不为 null
+    config.value.s_lan = {
+      ip: lanConfig.s_lan?.ip || '',
+      netmask: lanConfig.s_lan?.netmask || '',
+      dhcp_start: lanConfig.s_lan?.dhcp_start || '',
+      dhcp_end: lanConfig.s_lan?.dhcp_end || ''
+    }
+    config.value.n_lan = {
+      dhcp_enable: lanConfig.n_lan?.dhcp_enable !== undefined ? String(lanConfig.n_lan.dhcp_enable) : '',
+      dhcp_lease: lanConfig.n_lan?.dhcp_lease !== undefined ? String(lanConfig.n_lan.dhcp_lease) : ''
     }
 
-    // 从 LAN 配置 API 获取 LAN 数据
-    if (lanConfig) {
-      config.value.s_lan = {
-        ip: lanConfig.s_lan?.ip || '',
-        netmask: lanConfig.s_lan?.netmask || '',
-        dhcp_start: lanConfig.s_lan?.dhcp_start || '',
-        dhcp_end: lanConfig.s_lan?.dhcp_end || ''
-      }
-      config.value.n_lan = {
-        dhcp_enable: lanConfig.n_lan?.dhcp_enable !== undefined ? String(lanConfig.n_lan.dhcp_enable) : '',
-        dhcp_lease: lanConfig.n_lan?.dhcp_lease !== undefined ? String(lanConfig.n_lan.dhcp_lease) : ''
-      }
-
-      // AP 配置容错处理
-      config.value.n_ap = {
-        enable: String(lanConfig.n_ap?.enable ?? 0),
-        encryption: String(lanConfig.n_ap?.encryption ?? 1),
-        channel: String(lanConfig.n_ap?.channel ?? 0),
-        hidden: String(lanConfig.n_ap?.hidden ?? 0)
-      }
-      config.value.s_ap = {
-        ssid: lanConfig.s_ap?.ssid ?? '',
-        password: lanConfig.s_ap?.password ?? ''
-      }
-    } else {
-      // 如果API调用失败，保持配置项为空，防止误导用户
-      console.warn('Network LAN config missing or API failed')
+    config.value.n_ap = {
+      enable: String(lanConfig.n_ap?.enable ?? 0),
+      encryption: String(lanConfig.n_ap?.encryption ?? 1),
+      channel: String(lanConfig.n_ap?.channel ?? 0),
+      hidden: String(lanConfig.n_ap?.hidden ?? 0)
+    }
+    config.value.s_ap = {
+      ssid: lanConfig.s_ap?.ssid ?? '',
+      password: lanConfig.s_ap?.password ?? ''
     }
 
     // 保存原始LAN IP用于检测变化
     originalLanIp.value = config.value.s_lan.ip
 
+    // 全部成功后，关闭转圈
+    loading.value = false
     
   } catch (err) {
-    error.value = t('common.loadError') + ': ' + err.message
-    console.error('配置加载错误:', err)
-  } finally {
-    loading.value = false
+    console.error('[NetworkConfig] 加载处理过程中抛出异常，准备重试:', err)
+    // 如果发生 JS 运行异常，同样进行等待重试
+    retryTimer.value = setTimeout(loadData, 2000)
   }
 }
 
@@ -1390,6 +1406,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (retryTimer.value) {
+    clearTimeout(retryTimer.value)
+    retryTimer.value = null
+  }
 })
 </script>
 

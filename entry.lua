@@ -9,14 +9,12 @@ local ubus_adapter = require "ubus_adapter" -- Import the adapter
 -- 标准 JSON 响应封装
 local function send_json(data)
     local json_str = cjson.encode(data)
-    ngx.log(ngx.ERR, "[DEBUG] send_json response: ", json_str)
     ngx.say(json_str)
     ngx.exit(ngx.HTTP_OK)
 end
 
 -- 发送错误响应
 local function send_error(msg)
-    ngx.log(ngx.ERR, "[DEBUG] send_error: ", msg)
     ngx.say(cjson.encode({ err = 1, msg = msg }))
     ngx.exit(ngx.HTTP_OK)
 end
@@ -65,11 +63,8 @@ end
 
 local function save_file_to_system(path, content)
     local file = io.open(path, "w+")
-    if not file then 
-        ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
-        return false, "Cannot open file" 
-    else
-        ngx.log(ngx.ERR, "[DEBUG] Open file: ", path)
+    if not file then
+        return false, "Cannot open file"
     end
     file:write(content)
     file:close()
@@ -82,7 +77,7 @@ local function parse_multipart(body)
         filename = nil,
         content = nil
     }
-    
+
     -- 1. 获取请求头中的 Content-Type 以提取真实的 boundary
     local content_type = ngx.req.get_headers()["Content-Type"] or ngx.req.get_headers()["content-type"]
     local boundary = nil
@@ -100,15 +95,14 @@ local function parse_multipart(body)
     local filename = string.match(body, filename_pattern)
     if filename then
         result.filename = filename
-        ngx.log(ngx.ERR, "[DEBUG] Parsed filename: ", filename)
     end
-    
+
     -- 3. 提取文件内容 (在两个空行之后，到下一个 boundary 之前)
     -- multipart 格式: boundary\r\nheaders\r\n\r\ncontent\r\n--boundary
     local content_start = string.find(body, "\r\n\r\n")
     if content_start then
         local content = string.sub(body, content_start + 4)
-        
+
         -- 4. 去除尾部的 boundary
         if boundary and boundary ~= "" then
             -- 真实 boundary 在 body 里是以 -- 开头的，例如 \r\n--boundary...
@@ -117,13 +111,10 @@ local function parse_multipart(body)
             local boundary_start = string.find(content, full_boundary, 1, true)
             if boundary_start then
                 content = string.sub(content, 1, boundary_start - 1)
-            else
-                ngx.log(ngx.ERR, "[WARN] Could not find plain boundary: ", full_boundary)
             end
         else
             -- 降级方案：如果没有在请求头拿到 boundary，为了防止误杀证书里中间的 \r\n--
             -- 退回到从后往前找最后一个匹配
-            ngx.log(ngx.ERR, "[WARN] boundary not found in Content-Type, using fallback")
             local last_match = nil
             local start_idx = 1
             while true do
@@ -136,12 +127,12 @@ local function parse_multipart(body)
                 content = string.sub(content, 1, last_match - 1)
             end
         end
-        
+
         result.content = content
     else
         result.content = body
     end
-    
+
     return result
 end
 
@@ -154,14 +145,13 @@ local function get_cert_directory(filename, cert_type)
         MQTT1 = "/etc/config/cert/MQTT1/",
         MQTT2 = "/etc/config/cert/MQTT2/"
     }
-    
+
     local dir = dir_map[filename]
     if not dir then
         -- 默认目录
         dir = "/etc/config/cert/"
     end
-    
-    ngx.log(ngx.ERR, "[DEBUG] Certificate directory for ", filename, ": ", dir)
+
     return dir
 end
 
@@ -181,17 +171,16 @@ end
 local function save_cert_file(filename, cert_name, content)
     local dir = get_cert_directory(filename, cert_name)
     local path = dir .. cert_name
-    
+
     -- 确保目录存在
     --os.execute("mkdir -p " .. dir)
-    
+
     -- 如果存在 则需要删除文件内容重写文件
     local file = io.open(path, "w+")
-    if not file then 
+    if not file then
         ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
-        return false, "Cannot open file" 
+        return false, "Cannot open file"
     end
-    ngx.log(ngx.ERR, "[DEBUG] Saving certificate to: ", path)
     file:write(content)
     file:close()
     return true
@@ -201,7 +190,6 @@ end
 local function notify_core_process(module_name)
     -- 模拟 Ubus 调用
     -- os.execute("ubus call edge_core reload { module = '".. module_name .."' }")
-    ngx.log(ngx.INFO, "IPC Notify: Reloading " .. module_name)
 end
 
 -- ==========================================================
@@ -210,77 +198,63 @@ end
 
 -- 处理 /download_cert_bundle.cgi
 local function handle_download_cert_bundle(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_download_cert_bundle args: ", cjson.encode(args))
     local service = args.service
     if not service then
         send_error("Missing service parameter")
         return
     end
-    
+
     local response = ubus_adapter.download_cert_bundle(service)
     if not response then
         send_error("Failed to fetch cert bundle")
         return
     end
-    
+
     send_json(response)
 end
 
 -- 处理 /download_nv.cgi (获取静态配置)
 local function handle_download_nv(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_download_nv args: ", cjson.encode(args))
     local name = args.name
     local response = {}
 
     if name == "misc" then
         response = ubus_adapter.get_misc_config()
-        
     elseif name == "network" then
         response = ubus_adapter.get_network_config()
-
     elseif name == "network_lan" then
         response = ubus_adapter.get_network_lan_config()
-
     elseif name == "comm_tunnel" then
         response = ubus_adapter.get_comm_tunnel_config()
-        
     elseif name == "uart" then
         response = ubus_adapter.get_uart_config()
-        
     elseif name == "offline_cache" then
         response = ubus_adapter.get_offline_cache_config()
-    
     elseif name == "edge" then
         response = ubus_adapter.get_edge_config()
-        
     elseif name == "edge_report" then
         response = ubus_adapter.get_edge_report_config()
-        
     elseif name == "edge_access" then
         response = ubus_adapter.get_edge_access_config()
-        
     elseif name == "edge_link_ctrl" then
         response = ubus_adapter.get_edge_link_ctrl_config()
     end
 
     -- Ensure response is not nil
     if not response then response = {} end
-    
+
     send_json(response)
 end
 
 -- 处理 /download_flex.cgi (获取动态状态)
 local function handle_download_flex(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_download_flex args: ", cjson.encode(args))
     local name = args.name
     local response = {}
 
     if name == "status" then
         response = ubus_adapter.get_status()
-        
     elseif name == "network" then
         response = ubus_adapter.get_network_status()
-        
     elseif name == "edge_values" then
         response = ubus_adapter.get_edge_values()
     end
@@ -293,9 +267,8 @@ end
 
 -- 处理 /update_nv.cgi (保存配置)
 local function handle_update_nv(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_update_nv args: ", cjson.encode(args))
     local file = args.file
-    
+
     if not file then
         send_error("Missing file parameter")
         return
@@ -303,7 +276,7 @@ local function handle_update_nv(args)
 
     -- Call adapter to save config
     local success = ubus_adapter.set_config(file, args)
-    
+
     if success then
         -- Notify core process if needed
         notify_core_process(file)
@@ -315,10 +288,9 @@ end
 
 -- 处理 /download_file.cgi (下载文件)
 local function handle_download_file(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_download_file args: ", cjson.encode(args))
     local name = args.name
     local content = ""
-    
+
     if name == "edge" then
         content = read_file("/etc/config/device/points.csv")
         if not content or content == "" then content = "V,V1.0,N7X0,;" end
@@ -328,7 +300,7 @@ local function handle_download_file(args)
     end
 
     ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
-    
+
     -- 直接输出文本内容，非 JSON
     ngx.header.content_type = "text/plain"
     ngx.print(content)
@@ -337,18 +309,17 @@ end
 
 -- 处理 /download_multi_file.cgi (批量下载文件)
 local function handle_download_multi_file(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_download_multi_file args: ", cjson.encode(args))
     local names = args.name
     local response = {}
-    
+
     -- Ensure names is a table (array)
     if type(names) ~= "table" then
         names = { names }
     end
-    
+
     local is_template = false
     local target_files = {}
-    
+
     for _, name in ipairs(names) do
         if name == "template" then
             is_template = true
@@ -356,7 +327,7 @@ local function handle_download_multi_file(args)
             table.insert(target_files, name)
         end
     end
-    
+
     if is_template then
         for _, file_name in ipairs(target_files) do
             local path = "/etc/config/device/template/" .. file_name .. ".json"
@@ -376,13 +347,12 @@ local function handle_download_multi_file(args)
             end
         end
     end
-    
+
     send_json(response)
 end
 
 -- 处理 /upload/* (文件上传)
 local function handle_upload(uri)
-    ngx.log(ngx.ERR, "[DEBUG] handle_upload uri: ", uri)
     local body = get_request_body()
     if not body then
         send_error("Empty body")
@@ -391,11 +361,9 @@ local function handle_upload(uri)
 
     -- 解析 multipart form-data 获取 filename 和内容
     local parsed = parse_multipart(body)
-    local target_name = parsed.filename  -- SOCK0, SOCK1, MQTT0, MQTT1
+    local target_name = parsed.filename -- SOCK0, SOCK1, MQTT0, MQTT1
     local content = parsed.content or body
-    
-    ngx.log(ngx.ERR, "[DEBUG] Parsed target: ", target_name or "nil")
-    
+
     if string.find(uri, "/upload/edge") then
         -- 3.2 边缘计算点位 CSV
         --[[
@@ -404,7 +372,7 @@ local function handle_upload(uri)
             SC,Device1,234,2,1,100,0,0,192.168.0.222:2100,Device1,;
             C,Device1,Device1_state,,18,0,0,0,0,0,0,,State,0,0,0,0,0,0,,;
             V开头的 表示虚拟设备
-        ]]--
+        ]] --
 
         if ubus_adapter.set_edge_proto_access_csv(content) then
             -- Note: set_edge_proto_access_csv in daemon already saves and reloads
@@ -413,11 +381,10 @@ local function handle_upload(uri)
             send_error("Failed to save edge points via ubus")
         end
         return -- Response already sent
-        
     elseif string.find(uri, "/upload/nv1") or string.find(uri, "/upload/nv2") then
         -- 3.3 Socket 链接同步 (Filename: link) 或 上报策略 (Filename: edge_report)
         local clean_json = strip_binary_prefix(content)
-        
+
         if string.find(clean_json, "tcpc") then
             save_tpc_config(clean_json)
             notify_core_process("link_sync")
@@ -427,12 +394,12 @@ local function handle_upload(uri)
             --先删除所有的edge_report文件
             os.execute("rm -f /etc/config/device/edge_report/*.json")
             -- os.execute("rm -f /etc/config/device/template/*.json") -- 不要删除模板文件，这是独立的上传逻辑
-            
+
             local data = cjson.decode(clean_json)
             if data and data.group then
                 os.execute("mkdir -p /etc/config/device/edge_report")
                 -- Optional: Clear existing files? For now, we just overwrite/add.
-                
+
                 for _, g in ipairs(data.group) do
                     if g.name then
                         local f = io.open("/etc/config/device/edge_report/" .. g.name .. ".json", "w+")
@@ -448,7 +415,7 @@ local function handle_upload(uri)
     elseif string.find(uri, "/upload/template") then
         -- 3.4 上报模板
         -- save_file_to_system("/etc/config/device/report_template.json", content)
-        
+
         os.execute("mkdir -p /etc/config/device/template")
         -- Content format: Report0:{...}\nReport1:{...}
         for key, val in string.gmatch(content, "([^:]+):(%b{})") do
@@ -462,42 +429,33 @@ local function handle_upload(uri)
                 end
             end
         end
-        
+
         notify_core_process("report_template")
-        
     elseif string.find(uri, "/upload/conver_csv") then
         -- 4.2 协议转换 CSV
         os.execute("mkdir -p /etc/config/device/edge_access")
         save_file_to_system("/etc/config/device/edge_access/edge_proto_access", content)
         notify_core_process("proto_map")
-        
     elseif string.find(uri, "/upload/scert") then
         -- 服务器证书上传 (根据 filename 区分 SOCK0/SOCK1/MQTT0/MQTT1)
-        ngx.log(ngx.ERR, "[DEBUG] Uploading server certificate for: ", target_name or "unknown")
         if target_name then
             save_cert_file(target_name, "server_cert.pem", content)
         end
         notify_core_process("server_cert")
-        
     elseif string.find(uri, "/upload/ccert") then
         -- 客户端证书上传 (根据 filename 区分 SOCK0/SOCK1/MQTT0/MQTT1)
-        ngx.log(ngx.ERR, "[DEBUG] Uploading client certificate for: ", target_name or "unknown")
         if target_name then
             save_cert_file(target_name, "client_cert.pem", content)
         end
         notify_core_process("client_cert")
-        
     elseif string.find(uri, "/upload/ckey") then
         -- 客户端私钥上传 (根据 filename 区分 SOCK0/SOCK1/MQTT0/MQTT1)
-        ngx.log(ngx.ERR, "[DEBUG] Uploading client key for: ", target_name or "unknown")
         if target_name then
             save_cert_file(target_name, "client_key.pem", content)
         end
         notify_core_process("client_key")
-
     elseif string.find(uri, "/upload/firmware") then
         -- 固件上传
-        ngx.log(ngx.ERR, "[DEBUG] Uploading firmware")
         -- 保存到 /tmp/firmware.bin
         save_file_to_system("/tmp/firmware.bin", content)
     end
@@ -507,7 +465,6 @@ end
 
 -- 处理 /action_restart.cgi
 local function handle_restart()
-    ngx.log(ngx.ERR, "[DEBUG] handle_restart triggered")
     -- 立即返回成功，然后重启
     ngx.say(cjson.encode({ err = 0 }))
     ngx.flush(true)
@@ -520,7 +477,6 @@ end
 local function handle_restart_service()
     local args = ngx.req.get_uri_args(0)
     local apply = tonumber(args.apply) or 1
-    ngx.log(ngx.ERR, "[DEBUG] handle_restart_service triggered (apply=" .. apply .. ")")
     local success, msg = ubus_adapter.restart_service(apply)
     if success then
         send_success()
@@ -531,10 +487,9 @@ end
 
 -- 处理 /action_tf.cgi (TF卡操作)
 local function handle_tf_action(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_tf_action args: ", cjson.encode(args))
     local act = args.act
     local response = {}
-    
+
     if act == "getinfo" then
         -- 获取TF卡信息
         response = ubus_adapter.get_tf_info()
@@ -549,17 +504,16 @@ local function handle_tf_action(args)
     else
         response = { err = 1, msg = "Unknown action" }
     end
-    
+
     send_json(response)
 end
 
 -- 处理 /action_time.cgi (时间操作)
 local function handle_time_action(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_time_action args: ", cjson.encode(args))
     local act = args.act
     local timestamp = tonumber(args.time)
     local response = {}
-    
+
     if act == "sync" or act == "set" then
         if timestamp then
             -- 设置系统时间
@@ -575,15 +529,14 @@ local function handle_time_action(args)
     else
         response = { err = 1, msg = "Unknown action" }
     end
-    
+
     send_json(response)
 end
 
 -- 处理 /action_reset.cgi (恢复出厂)
 local function handle_reset(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_reset args: ", cjson.encode(args))
     local act = args.act
-    
+
     if act == "factory" then
         local apply = tonumber(args.apply) or 1
         local success, msg = ubus_adapter.factory_reset(apply)
@@ -600,13 +553,12 @@ end
 
 -- 处理 /action_upgrade.cgi (固件升级)
 local function handle_upgrade(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_upgrade triggered")
     local reset_factory = tonumber(args.reset_factory) or 0
     local apply = tonumber(args.apply) or 1 -- 默认值为1以保持对旧前端调用方式的一定兼容性
-    
+
     -- 调用 ubus 触发升级
     local success, msg = ubus_adapter.upgrade_firmware(apply, reset_factory)
-    
+
     if success then
         send_success()
     else
@@ -616,7 +568,6 @@ end
 
 -- 处理 /action_wifi.cgi (WiFi扫描)
 local function handle_wifi_scan(args)
-    ngx.log(ngx.ERR, "[DEBUG] handle_wifi_scan args: ", cjson.encode(args))
     local act = args.act
 
     if not act then
@@ -642,63 +593,43 @@ local uri = ngx.var.uri
 local method = ngx.req.get_method()
 local args = ngx.req.get_uri_args(0) -- 获取 GET 参数
 
-ngx.log(ngx.ERR, "[DEBUG] Incoming Request: ", method, " ", uri)
-if next(args) then
-    ngx.log(ngx.ERR, "[DEBUG] Request Args: ", cjson.encode(args))
-end
-
 -- 路由分发
 if uri == "/download_cert_bundle.cgi" then
     handle_download_cert_bundle(args)
-
 elseif uri == "/download_nv.cgi" then
     handle_download_nv(args)
-
 elseif uri == "/download_flex.cgi" then
     handle_download_flex(args)
-
 elseif uri == "/update_nv.cgi" then
     handle_update_nv(args)
-
 elseif uri == "/download_file.cgi" then
     handle_download_file(args)
-
 elseif uri == "/download_multi_file.cgi" then
     handle_download_multi_file(args)
-
 elseif uri == "/action_restart.cgi" then
     handle_restart()
-
 elseif uri == "/action_restart_service.cgi" then
     handle_restart_service()
-
 elseif uri == "/action_tf.cgi" then
     handle_tf_action(args)
-
 elseif uri == "/action_time.cgi" then
     handle_time_action(args)
-
 elseif uri == "/action_reset.cgi" then
     handle_reset(args)
-
 elseif uri == "/action_upgrade.cgi" then
     handle_upgrade(args)
-
 elseif uri == "/action_wifi.cgi" then
-    ngx.log(ngx.ERR, "[DEBUG] handle_wifi_scan args: ", cjson.encode(args))
     handle_wifi_scan(args)
 
--- 匹配 /upload/ 开头的 URI
+    -- 匹配 /upload/ 开头的 URI
 elseif string.sub(uri, 1, 8) == "/upload/" then
     if method == "POST" then
         handle_upload(uri)
     else
         send_error("Method not allowed")
     end
-
 else
     ngx.status = 404
     ngx.say("Not Found")
     ngx.exit(404)
 end
-

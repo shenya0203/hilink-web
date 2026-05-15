@@ -10,4 +10,4 @@ export const DEFAULT_DEVICE_IP = '192.168.18.254';
 export const FEATURE_TF_CARD_ENABLED = false;
 
 // 设备型号 (显示在页面右上角)
-export const APP_DEVICE_MODEL = 'HLK-N720';
+export const APP_DEVICE_MODEL = 'HLK-IR01';

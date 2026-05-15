@@ -5,7 +5,7 @@ local DEVICE = "/dev/ttyUSB1"
 local INTERFACE = "lte"
 local INFO_FILE = "/tmp/modem_info.json"
 local CHECK_INTERVAL = 10
-local FAIL_THRESHOLD = 10 -- 长周期重拨阈值
+local FAIL_THRESHOLD = 10   -- 长周期重拨阈值
 local SWITCH_FAIL_LIMIT = 3 -- 模式3自动切卡阈值
 
 -- 全局串口句柄
@@ -18,7 +18,7 @@ local state = {
     current_slot = -1,
     last_slot = -1,
     online_since = 0,
-    fail_count = 0, -- 网络层重拨计数
+    fail_count = 0,        -- 网络层重拨计数
     net_offline_count = 0, -- 业务层切卡计数
     imei = "N/A",
     is_internal_switching = false,
@@ -90,7 +90,7 @@ local function send_at(cmd, timeout_sec)
             if response:find("OK") or response:find("ERROR") then break end
         end
     end
-    
+
     local results = {}
     for line in response:gmatch("[^\r\n]+") do
         if not line:find(cmd, 1, true) then
@@ -99,7 +99,7 @@ local function send_at(cmd, timeout_sec)
         end
     end
     local output = table.concat(results, " ")
-    
+
     local log_msg
     if #output == 0 then
         log_msg = string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd)
@@ -131,7 +131,8 @@ local function get_mwan3_status()
     if not f then return "offline" end
     local content = f:read("*a")
     f:close()
-    local lte_section = content:match("interface " .. INTERFACE .. ".-interface") or content:match("interface " .. INTERFACE .. ".*")
+    local lte_section = content:match("interface " .. INTERFACE .. ".-interface") or
+        content:match("interface " .. INTERFACE .. ".*")
     if lte_section and lte_section:find("online") then
         return "online"
     end
@@ -158,7 +159,7 @@ end
 local function collect_slot_metadata(slot_id)
     if not slot_id or slot_id == -1 then return end
     local sid_str = tostring(slot_id)
-    
+
     -- ICCID
     local iccid_resp = send_at("AT+ICCID")
     local iccid = iccid_resp and iccid_resp:match(":%s*([%dA-Z]+)")
@@ -240,7 +241,7 @@ local function collect_modem_status()
     local cpin_resp = send_at("AT+CPIN?")
     state.data.sim_ready = (cpin_resp and cpin_resp:find("READY")) and "ready" or "absent"
     state.data.mwan_stat = get_mwan3_status()
-    
+
     if state.imei == "N/A" then
         state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
     end
@@ -294,12 +295,13 @@ end
 
 -- 5. 故障计数与诊断日志
 local function update_failure_counters()
-    state.data.diag_msg = string.format("Cycle: [Mode:%d] [Slot:%d] [Net:%s]", 
+    state.data.diag_msg = string.format("Cycle: [Mode:%d] [Slot:%d] [Net:%s]",
         state.modem_simnum, state.current_slot, state.data.mwan_stat)
-    
+
     if state.data.mwan_stat == "offline" then
         state.fail_count = state.fail_count + 1
-        state.data.diag_msg = state.data.diag_msg .. string.format(" [Redial-Fail:%d/%d]", state.fail_count, FAIL_THRESHOLD)
+        state.data.diag_msg = state.data.diag_msg ..
+            string.format(" [Redial-Fail:%d/%d]", state.fail_count, FAIL_THRESHOLD)
     else
         state.fail_count = 0
     end
@@ -309,8 +311,8 @@ end
 -- 6. JSON 数据上报
 local function report_status_json()
     local full_status_text = state.data.net_reg_status
-    if state.data.mwan_stat == "online" then 
-        full_status_text = full_status_text .. " (Online)" 
+    if state.data.mwan_stat == "online" then
+        full_status_text = full_status_text .. " (Online)"
     end
 
     local status_out = {
@@ -327,7 +329,7 @@ local function report_status_json()
     }
 
     local f_json = io.open(INFO_FILE, "w")
-    if f_json then 
+    if f_json then
         f_json:write(json_encode(status_out))
         f_json:close()
     end
@@ -337,7 +339,7 @@ end
 local function handle_redial_and_switch_logic()
     if state.data.mwan_stat == "offline" and state.fail_count >= FAIL_THRESHOLD then
         log("Fail threshold reached. Triggering recovery...")
-        
+
         -- 目前仅执行日志记录和特定模式下的切卡
         if state.modem_simnum == 3 then -- 双卡备份模式
             state.net_offline_count = state.net_offline_count + 1
@@ -350,7 +352,7 @@ local function handle_redial_and_switch_logic()
             log("Mode 0 fallback to SIM1 triggered.")
             perform_slot_switch(1)
         end
-        
+
         state.fail_count = 0
     end
 end
@@ -358,6 +360,7 @@ end
 -- --- 主循环守护 ---
 local function monitor_main()
     init_service()
+    local first = true
 
     while true do
         local skip_this_cycle = false
@@ -385,9 +388,13 @@ local function monitor_main()
             handle_redial_and_switch_logic()
         end
 
+        if first then
+            first = false
+            os.execute("/etc/init.d/mwan3 restart")
+        end
+
         os.execute("sleep " .. CHECK_INTERVAL)
     end
 end
 
 monitor_main()
-
