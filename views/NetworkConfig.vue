@@ -338,6 +338,18 @@
             </span>
           </div>
         </div>
+        <div class="form-group" style="margin-left: 170px;">
+          <label style="display: flex; align-items: center; gap: 8px; width: auto; text-align: left; cursor: pointer; margin-top: 0; font-weight: 500;">
+            <input type="checkbox" v-model="config.internal_forward_disable" true-value="1" false-value="0" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
+            {{ t('network.internalForwardDisable') }}
+          </label>
+        </div>
+        <div class="form-group" style="margin-left: 170px; margin-top: -10px;">
+          <label style="display: flex; align-items: center; gap: 8px; width: auto; text-align: left; cursor: pointer; margin-top: 0; font-weight: 500;">
+            <input type="checkbox" v-model="config.external_forward_disable" true-value="1" false-value="0" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
+            {{ t('network.externalForwardDisable') }}
+          </label>
+        </div>
       </div>
     </form>
 
@@ -847,6 +859,8 @@ const config = ref({
   lte_dns_mode: '',
   lte_dns: '',
   lte_sdns: '',
+  internal_forward_disable: '1',
+  external_forward_disable: '0',
   // LAN
   s_lan: {
     ip: '',
@@ -1172,7 +1186,9 @@ const loadData = async () => {
       lte_auth: String(netConfig.cell.apn.auth),
       lte_dns_mode: String(netConfig.cell.dns_mode),
       lte_dns: netConfig.cell.dns_ip[0],
-      lte_sdns: netConfig.cell.dns_ip[1]
+      lte_sdns: netConfig.cell.dns_ip[1],
+      internal_forward_disable: String(netConfig.cell.internal_forward_disable ?? 1),
+      external_forward_disable: String(netConfig.cell.external_forward_disable ?? 0)
     })
 
     // 执行到这里 netConfig 和 lanConfig 肯定都不为 null
@@ -1254,6 +1270,8 @@ const saveConfig = async () => {
     params.push(`n_cell.dns_mode=${c.lte_dns_mode}`)
     params.push(`s_cell.dns_ip[0]=${c.lte_dns}`)
     params.push(`s_cell.dns_ip[1]=${c.lte_sdns}`)
+    params.push(`n_cell.internal_forward_disable=${c.internal_forward_disable}`)
+    params.push(`n_cell.external_forward_disable=${c.external_forward_disable}`)
 
     // LAN 参数
     params.push(`s_lan.ip=${c.s_lan.ip}`)

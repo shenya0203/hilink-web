@@ -630,6 +630,8 @@ export default {
         username: 'Username',
         password: 'Password',
         authMethod: 'Auth Method',
+        internalForwardDisable: 'Disallow internal SIM shared internet',
+        externalForwardDisable: 'Disallow external SIM shared internet',
         // Modal
         restartRequired: 'Network configuration requires a device restart to take effect.',
         lanIpChangedRestart: 'LAN IP has been modified. After device restart, please manually change your computer IP segment and access the management page using the new IP [{{newIp}}].',

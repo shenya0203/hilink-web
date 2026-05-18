@@ -652,6 +652,8 @@ export default {
         username: '用户名',
         password: '密码',
         authMethod: '鉴权方式',
+        internalForwardDisable: '不允许内置卡共享上网',
+        externalForwardDisable: '不允许外置卡共享上网',
         // 弹窗
         restartRequired: '网络配置需要重启设备才能生效。',
         lanIpChangedRestart: '检测到 LAN IP 已修改。设备重启后，请手动修改电脑 IP 段并使用新 IP [{{newIp}}] 重新访问管理页面。',

@@ -13,6 +13,13 @@ local G_SERIAL_FD   = nil
 local ERR_LAN_SPEED = "LAN_SPEED_ERROR"
 local ERR_WAN_SPEED = "WAN_SPEED_ERROR"
 local ERR_WAN_IP    = "WAN_IP_ERROR"
+
+-- WiFi 产测配置 (Failsafe 模式，参数来自产测需求文档)
+local WIFI_SSID         = "xuxu"
+local WIFI_PSK          = "12345678"
+local WIFI_RSSI_THRES   = -70     -- PASS/FAIL 阈值 (dBm)，待硬件工程师标定
+local WIFI_TIMEOUT      = 15      -- 单次连接超时 (秒)
+local WIFI_MAX_RETRIES  = 3       -- 最大重试次数
 -- ==========================================
 
 -- 工具函数：执行Shell并获取输出
@@ -297,6 +304,147 @@ function do_test_net()
     return res
 end
 
+-- WiFi 产测 (依据 MT7628_WiFi产测需求文档 v1.0)
+function do_test_wifi(req)
+    req = req or {}
+    local ssid      = req.ssid or WIFI_SSID
+    local psk       = req.psk  or WIFI_PSK
+    local threshold = tonumber(req.rssi_threshold) or WIFI_RSSI_THRES
+
+    local function wifi_fail(code, rssi_val, detail)
+        local r = { cmd = "test_wifi", result = "fail", code = code, rssi = rssi_val or "N/A" }
+        if detail then r.detail = detail end
+        return r
+    end
+
+    -- Step 1: 环境检查 -- iw / wpa_supplicant 工具是否存在
+    if exec_cmd("which iw 2>/dev/null"):find("iw") == nil then
+        return wifi_fail("DRIVER_ERROR", nil, "iw not found")
+    end
+    if exec_cmd("which wpa_supplicant 2>/dev/null"):find("wpa_supplicant") == nil then
+        return wifi_fail("DRIVER_ERROR", nil, "wpa_supplicant not found")
+    end
+
+    -- Step 2: 加载 mt76 驱动 (insmod 按依赖顺序，Failsafe 下 modprobe 不可用)
+    local kern_ver = exec_cmd("uname -r"):gsub("%s+", "")
+    local mod_base = "/lib/modules/" .. kern_ver .. "/"
+    local mod_list = {
+        "cfg80211.ko", "mac80211.ko",
+        "mt76.ko", "mt76x02-lib.ko", "mt76x02-common.ko",
+        "mt7603e.ko"
+    }
+    for _, m in ipairs(mod_list) do
+        exec_cmd("insmod " .. mod_base .. m .. " 2>/dev/null")
+    end
+
+    -- 等待 wlan 接口出现 (最多10秒)
+    local iface = nil
+    for _ = 1, 10 do
+        local out = exec_cmd("iw dev 2>/dev/null")
+        iface = out:match("Interface%s+(%w+)")
+        if iface then break end
+        os.execute("sleep 1")
+    end
+    if not iface then
+        return wifi_fail("DRIVER_ERROR", nil, "interface not found after insmod")
+    end
+    log("WiFi iface detected: " .. iface)
+
+    -- Step 3: 激活接口
+    exec_cmd("ifconfig " .. iface .. " up")
+    os.execute("sleep 1")
+
+    -- Step 4: 生成 wpa_supplicant 配置 -> /tmp/wpa_supplicant.conf
+    local wpa_conf = string.format([[
+ctrl_interface=/tmp/wpa_supplicant
+update_config=1
+network={
+    ssid="%s"
+    psk="%s"
+    key_mgmt=WPA-PSK
+}
+]], ssid, psk)
+
+    local function write_wpa_conf()
+        local f = io.open("/tmp/wpa_supplicant.conf", "w")
+        if f then f:write(wpa_conf) f:close() end
+    end
+    write_wpa_conf()
+
+    -- Step 5: 扫描确认目标 AP 可见 (区分射频故障 vs 配置问题)
+    local scan_out = exec_cmd("iw dev " .. iface .. " scan 2>/dev/null")
+    if not scan_out:find("SSID: " .. ssid) then
+        exec_cmd("ifconfig " .. iface .. " down")
+        exec_cmd("rm -f /tmp/wpa_supplicant.conf")
+        return wifi_fail("NO_AP")
+    end
+
+    -- Step 6: 启动 wpa_supplicant 连接 (超时15秒，最多重试3次)
+    local connected = false
+    for attempt = 1, WIFI_MAX_RETRIES do
+        -- 清理上一次尝试的残留进程/socket/接口状态
+        exec_cmd("killall wpa_supplicant 2>/dev/null")
+        exec_cmd("rm -rf /tmp/wpa_supplicant 2>/dev/null")
+        exec_cmd("ifconfig " .. iface .. " down; ifconfig " .. iface .. " up")
+        os.execute("sleep 1")
+        write_wpa_conf()
+
+        exec_cmd("wpa_supplicant -i " .. iface .. " -c /tmp/wpa_supplicant.conf -B 2>/dev/null")
+
+        local t0 = os.time()
+        while os.difftime(os.time(), t0) < WIFI_TIMEOUT do
+            local link = exec_cmd("iw dev " .. iface .. " link 2>/dev/null")
+            if link:find("Connected to") then
+                connected = true
+                break
+            end
+            os.execute("sleep 1")
+        end
+        if connected then break end
+        log("WiFi assoc attempt " .. attempt .. " failed, retrying...")
+    end
+
+    if not connected then
+        exec_cmd("killall wpa_supplicant 2>/dev/null")
+        exec_cmd("rm -rf /tmp/wpa_supplicant 2>/dev/null")
+        exec_cmd("rm -f /tmp/wpa_supplicant.conf")
+        exec_cmd("ifconfig " .. iface .. " down")
+        return wifi_fail("ASSOC_TIMEOUT")
+    end
+
+    -- Step 7: 采集 RSSI (等2秒稳定后连续采样5次，间隔500ms，取中位数)
+    os.execute("sleep 2")
+    local samples = {}
+    for i = 1, 5 do
+        local link = exec_cmd("iw dev " .. iface .. " link 2>/dev/null")
+        local dbm = link:match("signal:%s*(-?%d+)")
+        if dbm then table.insert(samples, tonumber(dbm)) end
+        if i < 5 then os.execute("sleep 0.5") end
+    end
+
+    -- Step 8: 清理环境
+    exec_cmd("killall wpa_supplicant 2>/dev/null")
+    exec_cmd("rm -rf /tmp/wpa_supplicant 2>/dev/null")
+    exec_cmd("rm -f /tmp/wpa_supplicant.conf")
+    exec_cmd("ifconfig " .. iface .. " down")
+
+    -- Step 9: 判定 RSSI vs 阈值
+    if #samples == 0 then
+        return wifi_fail("WEAK_SIGNAL")
+    end
+    table.sort(samples)
+    local median = samples[math.ceil(#samples / 2)]
+
+    local r = { cmd = "test_wifi", rssi = median }
+    if median >= threshold then
+        r.result = "pass"
+    else
+        r.result = "fail"
+        r.code  = "WEAK_SIGNAL"
+    end
+    return r
+end
+
 function port_init()
     --Failsafe模式下 需要把网口初始化
     --端口测试方案， 使用LAN口和 上位机通信， 如果通信且端口的协商速率时100M 说明正常
@@ -431,6 +579,8 @@ function main()
                     resp = do_test_lte()
                 elseif req.cmd == "test_serial" then
                     resp = do_test_serial(req)
+                elseif req.cmd == "test_wifi" then
+                    resp = do_test_wifi(req)
                 elseif req.cmd == "test_wdog" then
                     resp = { cmd = "test_wdog", result = "pass" }
                 elseif req.cmd == "test_led" then
