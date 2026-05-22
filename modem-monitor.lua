@@ -4,7 +4,9 @@
 local DEVICE = "/dev/ttyUSB1"
 local INTERFACE = "lte"
 local INFO_FILE = "/tmp/modem_info.json"
-local CHECK_INTERVAL = 10
+local STATUS_FILE = "/tmp/modem_status.json"
+local BLOCK_FILE = "/tmp/internal_sim_blocked.json"
+local CHECK_INTERVAL = 6
 local FAIL_THRESHOLD = 10   -- 长周期重拨阈值
 local SWITCH_FAIL_LIMIT = 3 -- 模式3自动切卡阈值
 
@@ -22,6 +24,8 @@ local state = {
     net_offline_count = 0, -- 业务层切卡计数
     imei = "N/A",
     is_internal_switching = false,
+    session_id = os.time() % 100000, -- 初始随时间戳，后递增
+    internal_blocked = false,        -- 流量超限标记
     slots = {
         ["0"] = { iccid = "N/A", imsi = "N/A" },
         ["1"] = { iccid = "N/A", imsi = "N/A" }
@@ -52,10 +56,63 @@ local function json_encode(t)
     local first = true
     for k, v in pairs(t) do
         if not first then s = s .. "," end
-        s = s .. string.format("%q:%q", k, tostring(v))
+        local val_str
+        if type(v) == "number" or type(v) == "boolean" then
+            val_str = tostring(v)
+        else
+            val_str = string.format("%q", tostring(v))
+        end
+        s = s .. string.format("%q:%s", k, val_str)
         first = false
     end
     return s .. "}"
+end
+
+-- --- 辅助函数：原子写入 JSON ---
+local function atomic_write_json(path, data_table)
+    local tmp_path = path .. ".tmp"
+    local f = io.open(tmp_path, "w")
+    if f then
+        f:write(json_encode(data_table))
+        f:close()
+        os.execute(string.format("mv %s %s", tmp_path, path))
+    end
+end
+
+-- --- 辅助函数：获取底层网卡名 ---
+local function get_netif_base()
+    local f = io.popen("ubus call network.interface." .. INTERFACE .. " status 2>/dev/null")
+    if not f then return "eth1" end
+    local content = f:read("*a")
+    f:close()
+    local dev = content:match('"l3_device"%s*:%s*"([^"]+)"') or content:match('"device"%s*:%s*"([^"]+)"')
+    return dev or "eth1"
+end
+
+-- --- 辅助函数：检查内置卡阻断状态 ---
+local function check_internal_block()
+    local f = io.open(BLOCK_FILE, "r")
+    if not f then
+        log("No block file found")
+        state.internal_blocked = false
+        return
+    end
+    local content = f:read("*a")
+    f:close()
+
+    if content:find('"blocked"%s*:%s*true') then
+        log("NOTICE: Internal SIM block detected!")
+        if not state.internal_blocked then
+            log("ALERT: Internal SIM block detected!")
+        end
+        state.internal_blocked = true
+    else
+        log("NOTICE: Internal SIM block cleared.")
+        if state.internal_blocked then
+            log("NOTICE: Internal SIM block cleared.")
+        end
+        state.internal_blocked = false
+    end
 end
 
 -- --- 串口初始化 ---
@@ -151,6 +208,7 @@ local function perform_slot_switch(target)
     send_at("AT+CFUN=1")
     state.net_offline_count = 0
     state.fail_count = 0
+    state.session_id = state.session_id + 1 -- 会话ID递增
     os.execute("sleep 5")
     os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
 end
@@ -197,11 +255,11 @@ local function init_service()
     read_modem_config()
     initial_sim_slot_setup()
     --切到外置卡槽0
-    if state.modem_simnum == 0 or state.modem_simnum == 2 or state.modem_simnum == 3 then
-        perform_slot_switch(0)
-    end
-
+    --if state.modem_simnum == 0 or state.modem_simnum == 2 or state.modem_simnum == 3 then
     perform_slot_switch(0)
+    --end
+
+    --perform_slot_switch(0)
     log(string.format("Service Started. Mode:%d Device:%s", state.modem_simnum, DEVICE))
 end
 
@@ -213,13 +271,14 @@ local function process_sim_slot_detection()
     state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
 
     -- 强制卡槽逻辑 (模式1：仅内置卡槽1, 模式2：仅外置卡槽0)
-    if state.modem_simnum == 1 and state.current_slot == 0 then
+    if state.modem_simnum == 1 and state.current_slot == 0 and not state.internal_blocked then --内置卡被阻断
         perform_slot_switch(1)
         return true
     elseif state.modem_simnum == 2 and state.current_slot == 1 then
         perform_slot_switch(0)
         return true
     end
+
     return false
 end
 
@@ -240,7 +299,14 @@ end
 local function collect_modem_status()
     local cpin_resp = send_at("AT+CPIN?")
     state.data.sim_ready = (cpin_resp and cpin_resp:find("READY")) and "ready" or "absent"
-    state.data.mwan_stat = get_mwan3_status()
+
+    local new_mwan_stat = get_mwan3_status()
+    -- 规则：每次 ECM 重新拨号成功后递增 session_id
+    --if state.data.mwan_stat == "offline" and new_mwan_stat == "online" then
+    --    log("Dial-up success detected. Incrementing session_id.")
+    --    state.session_id = state.session_id + 1
+    --end
+    state.data.mwan_stat = new_mwan_stat
 
     if state.imei == "N/A" then
         state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
@@ -285,7 +351,7 @@ local function collect_network_data()
         return false
     else
         -- SIM 缺失时的特殊处理 (模式0且在卡槽0时强制切到内置卡槽1)
-        if state.modem_simnum == 0 and state.current_slot == 0 then
+        if state.modem_simnum == 0 and state.current_slot == 0 and not state.internal_blocked then
             perform_slot_switch(1)
             return true
         end
@@ -308,14 +374,32 @@ local function update_failure_counters()
     --log(state.data.diag_msg, "cycle_diag")
 end
 
--- 6. JSON 数据上报
-local function report_status_json()
-    local full_status_text = state.data.net_reg_status
-    if state.data.mwan_stat == "online" then
-        full_status_text = full_status_text .. " (Online)"
+-- 6. 状态上报 (双文件上报：兼容旧版 + C程序专用)
+local function report_all_status()
+    local mwan_online = (state.data.mwan_stat == "online")
+
+    -- 映射属性 (sim_source)
+    local sim_source = "unknown"
+    if state.current_slot == 0 then
+        sim_source = "external"
+    elseif state.current_slot == 1 then
+        sim_source = "internal"
     end
 
-    local status_out = {
+    -- 映射拨号状态 (dial_status)
+    local dial_status = "disconnected"
+    if mwan_online then
+        dial_status = "connected"
+    elseif state.fail_count > 0 then
+        dial_status = "connecting"
+    elseif state.fail_count >= FAIL_THRESHOLD then
+        dial_status = "failed"
+    end
+
+    -- a. 兼容文件 modem_info.json (用于 Web UI 等)
+    local full_status_text = state.data.net_reg_status
+    if mwan_online then full_status_text = full_status_text .. " (Online)" end
+    local info_out = {
         imei = state.imei,
         iccid = state.slots["1"].iccid,
         imsi = state.slots["1"].imsi,
@@ -327,30 +411,63 @@ local function report_status_json()
         sim_status = state.data.sim_ready,
         updated = os.date("%H:%M:%S")
     }
+    atomic_write_json(INFO_FILE, info_out)
 
-    local f_json = io.open(INFO_FILE, "w")
-    if f_json then
-        f_json:write(json_encode(status_out))
-        f_json:close()
-    end
+    -- b. 专用状态文件 modem_status.json (用于 C 程序流量统计)
+    local sid_str = tostring(state.current_slot or "-1")
+    local status_out = {
+        sim_source = sim_source,
+        dial_status = dial_status,
+        netif = get_netif_base(),
+        iccid = state.slots[sid_str] and state.slots[sid_str].iccid or "N/A",
+        imsi = state.slots[sid_str] and state.slots[sid_str].imsi or "N/A",
+        imei = state.imei,
+        session_id = state.session_id,
+        updated_at = os.time()
+    }
+    atomic_write_json(STATUS_FILE, status_out)
 end
 
 -- 7. 重拨与切卡修复逻辑
 local function handle_redial_and_switch_logic()
+    -- 首先检查阻断强制执行：如果当前是内置卡且被阻断，立即切走
+    if state.modem_simnum ~= 1 and state.current_slot == 1 then
+        log("CRITICAL: Internal SIM blocked! Forcing switch to External SIM...")
+        if state.internal_blocked then
+            --如果  mode_simnum == 1 仅内置卡 时 是不能切换到外置卡的
+            if state.modem_simnum == 1 then
+                --这里虽然停留在内置卡拨号上 但又不能让他联网
+                return
+            end
+        end
+        perform_slot_switch(0)
+        return
+    end
+
     if state.data.mwan_stat == "offline" and state.fail_count >= FAIL_THRESHOLD then
         log("Fail threshold reached. Triggering recovery...")
 
-        -- 目前仅执行日志记录和特定模式下的切卡
         if state.modem_simnum == 3 then -- 双卡备份模式
             state.net_offline_count = state.net_offline_count + 1
             if state.net_offline_count >= SWITCH_FAIL_LIMIT then
-                log("Backup switch triggered!")
-                state.net_offline_count = 0
-                perform_slot_switch(state.current_slot == 0 and 1 or 0)
+                local next_slot = (state.current_slot == 0) and 1 or 0
+                -- 拦截：如果要跳往内置卡但被阻断
+                if next_slot == 1 and state.internal_blocked then
+                    log("Switch to SIM1 (Internal) ABORTED: SIM is blocked.")
+                else
+                    log("Backup switch triggered!")
+                    state.net_offline_count = 0
+                    perform_slot_switch(next_slot)
+                end
             end
         elseif state.modem_simnum == 0 and state.current_slot == 0 then
-            log("Mode 0 fallback to SIM1 triggered.")
-            perform_slot_switch(1)
+            -- 模式 0 故障回退内置卡，同样需要拦截
+            if state.internal_blocked then
+                log("Fallback to SIM1 DENIED: SIM is blocked.")
+            else
+                log("Mode 0 fallback to SIM1 triggered.")
+                perform_slot_switch(1)
+            end
         end
 
         state.fail_count = 0
@@ -365,6 +482,9 @@ local function monitor_main()
     while true do
         local skip_this_cycle = false
 
+        -- 阶段 0: 外部指令感知 (阻断检查)
+        check_internal_block()
+
         -- 阶段 1: 物理感知与模式强制矫正
         if process_sim_slot_detection() then
             skip_this_cycle = true
@@ -372,7 +492,7 @@ local function monitor_main()
 
         if not skip_this_cycle then
             -- 阶段 2: 事件记录与基础状态
-            handle_sim_slot_change_event()
+            --handle_sim_slot_change_event()
             collect_modem_status()
 
             -- 阶段 3: 详细数据采集
@@ -384,7 +504,7 @@ local function monitor_main()
         if not skip_this_cycle then
             -- 阶段 4: 统计、上报与自动化维护
             update_failure_counters()
-            report_status_json()
+            report_all_status()
             handle_redial_and_switch_logic()
         end
 

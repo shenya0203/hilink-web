@@ -1,25 +1,25 @@
 #!/usr/bin/lua
 
-local socket        = require("socket")
-local cjson         = require("cjson")
+local socket           = require("socket")
+local cjson            = require("cjson")
 
 -- ================= 配置区 =================
-local SERVER_IP     = "192.168.68.197"
-local SERVER_PORT   = 998
-local AT_PORT       = "/dev/ttyUSB3"
-local G_SERIAL_FD   = nil
+local SERVER_IP        = "192.168.68.197"
+local SERVER_PORT      = 998
+local AT_PORT          = "/dev/ttyUSB3"
+local G_SERIAL_FD      = nil
 
 -- 错误代码常量 (用于与上位机沟通)
-local ERR_LAN_SPEED = "LAN_SPEED_ERROR"
-local ERR_WAN_SPEED = "WAN_SPEED_ERROR"
-local ERR_WAN_IP    = "WAN_IP_ERROR"
+local ERR_LAN_SPEED    = "LAN_SPEED_ERROR"
+local ERR_WAN_SPEED    = "WAN_SPEED_ERROR"
+local ERR_WAN_IP       = "WAN_IP_ERROR"
 
 -- WiFi 产测配置 (Failsafe 模式，参数来自产测需求文档)
-local WIFI_SSID         = "xuxu"
-local WIFI_PSK          = "12345678"
-local WIFI_RSSI_THRES   = -70     -- PASS/FAIL 阈值 (dBm)，待硬件工程师标定
-local WIFI_TIMEOUT      = 15      -- 单次连接超时 (秒)
-local WIFI_MAX_RETRIES  = 3       -- 最大重试次数
+local WIFI_SSID        = "xuxu"
+local WIFI_PSK         = "12345678"
+local WIFI_RSSI_THRES  = -70 -- PASS/FAIL 阈值 (dBm)，待硬件工程师标定
+local WIFI_TIMEOUT     = 15  -- 单次连接超时 (秒)
+local WIFI_MAX_RETRIES = 3   -- 最大重试次数
 -- ==========================================
 
 -- 工具函数：执行Shell并获取输出
@@ -78,7 +78,7 @@ end
 
 -- 发送 AT 指令
 local function send_at(cmd, timeout_sec)
-    timeout_sec = timeout_sec or 3
+    timeout_sec = timeout_sec or 1 -- 缩短默认等待时间至 1s
     if not G_SERIAL_FD then return nil end
 
     -- Drain buffer
@@ -99,13 +99,22 @@ local function send_at(cmd, timeout_sec)
 
     local results = {}
     for line in response:gmatch("[^\r\n]+") do
-        if not line:find(cmd, 1, true) then
-            line = line:gsub("^%s*(.-)%s*$", "%1")
-            if #line > 0 then table.insert(results, line) end
+        line = line:gsub("^%s*(.-)%s*$", "%1")
+        if #line > 0 and not line:find(cmd, 1, true) then
+            -- 仅当存在其他有效数据行时，才过滤掉单纯的 OK 和 ERROR 行
+            if line ~= "OK" and line ~= "ERROR" then
+                table.insert(results, line)
+            end
         end
     end
-    local output = table.concat(results, " ")
 
+    -- 如果没有有效数据行，但收到了 OK/ERROR，则返回它们作为状态反馈
+    if #results == 0 then
+        if response:find("OK") then return "OK" end
+        if response:find("ERROR") then return "ERROR" end
+    end
+
+    local output = table.concat(results, " ")
     if #output == 0 then
         log(string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd))
     else
@@ -234,7 +243,8 @@ function do_test_lte()
         sim_ext.ready = cpin_ext_raw:find("READY") ~= nil
         --当sim 卡 不是ready状态时， 不需要获取iccid
         if sim_ext.ready then
-            sim_ext.iccid = get_at_with_retry("AT+ICCID", "EXT_ICCID", 3)
+            local raw_iccid = get_at_with_retry("AT+ICCID", "EXT_ICCID", 3)
+            sim_ext.iccid = raw_iccid:match(":%s*(%w+)") or raw_iccid
         else
             sim_ext.iccid = "ERROR"
         end
@@ -246,7 +256,8 @@ function do_test_lte()
         local cpin_int_raw = send_at("AT+CPIN?") or ""
         sim_int.ready = cpin_int_raw:find("READY") ~= nil
         if sim_int.ready then
-            sim_int.iccid = get_at_with_retry("AT+ICCID", "INT_ICCID", 3)
+            local raw_iccid = get_at_with_retry("AT+ICCID", "INT_ICCID", 3)
+            sim_int.iccid = raw_iccid:match(":%s*(%w+)") or raw_iccid
         else
             sim_int.iccid = "ERROR"
         end
@@ -263,7 +274,11 @@ function do_test_lte()
         cmd = "test_lte",
         result = is_pass,
         sim_ext = sim_ext,
-        sim_int = sim_int
+        sim_int = sim_int,
+        logs = {
+            sim_ext = sim_ext,
+            sim_int = sim_int
+        }
     }
 end
 
@@ -306,9 +321,9 @@ end
 
 -- WiFi 产测 (依据 MT7628_WiFi产测需求文档 v1.0)
 function do_test_wifi(req)
-    req = req or {}
+    req             = req or {}
     local ssid      = req.ssid or WIFI_SSID
-    local psk       = req.psk  or WIFI_PSK
+    local psk       = req.psk or WIFI_PSK
     local threshold = tonumber(req.rssi_threshold) or WIFI_RSSI_THRES
 
     local function wifi_fail(code, rssi_val, detail)
@@ -329,12 +344,11 @@ function do_test_wifi(req)
     local kern_ver = exec_cmd("uname -r"):gsub("%s+", "")
     local mod_base = "/lib/modules/" .. kern_ver .. "/"
     local mod_list = {
-        "cfg80211.ko", "mac80211.ko",
-        "mt76.ko", "mt76x02-lib.ko", "mt76x02-common.ko",
         "mt7603e.ko"
     }
     for _, m in ipairs(mod_list) do
-        exec_cmd("insmod " .. mod_base .. m .. " 2>/dev/null")
+        log("modprobe " .. mod_base .. m)
+        exec_cmd("modprobe " .. mod_base .. m .. " 2>/dev/null")
     end
 
     -- 等待 wlan 接口出现 (最多10秒)
@@ -357,7 +371,6 @@ function do_test_wifi(req)
     -- Step 4: 生成 wpa_supplicant 配置 -> /tmp/wpa_supplicant.conf
     local wpa_conf = string.format([[
 ctrl_interface=/tmp/wpa_supplicant
-update_config=1
 network={
     ssid="%s"
     psk="%s"
@@ -367,7 +380,10 @@ network={
 
     local function write_wpa_conf()
         local f = io.open("/tmp/wpa_supplicant.conf", "w")
-        if f then f:write(wpa_conf) f:close() end
+        if f then
+            f:write(wpa_conf)
+            f:close()
+        end
     end
     write_wpa_conf()
 
@@ -419,7 +435,7 @@ network={
         local link = exec_cmd("iw dev " .. iface .. " link 2>/dev/null")
         local dbm = link:match("signal:%s*(-?%d+)")
         if dbm then table.insert(samples, tonumber(dbm)) end
-        if i < 5 then os.execute("sleep 0.5") end
+        if i < 5 then os.execute("sleep 1") end
     end
 
     -- Step 8: 清理环境
@@ -440,7 +456,8 @@ network={
         r.result = "pass"
     else
         r.result = "fail"
-        r.code  = "WEAK_SIGNAL"
+        r.code   = "WEAK_SIGNAL"
+        r.logs   = "RSSI: " .. median .. " < " .. threshold
     end
     return r
 end
@@ -471,7 +488,6 @@ function lte_init()
     local boot_imei = "ERROR"
 
     -- 驱动挂载
-    --[[ 测试时注释掉
     exec_cmd("modprobe /lib/modules/5.4.238/option.ko")
     exec_cmd("modprobe /lib/modules/5.4.238/usb-serial.ko")
     exec_cmd("modprobe /lib/modules/5.4.238/cdc_ncm.ko")
@@ -479,7 +495,6 @@ function lte_init()
     exec_cmd("mknod /dev/ttyUSB1 c 188 1")
     exec_cmd("mknod /dev/ttyUSB3 c 188 3")
     exec_cmd("mknod /dev/ttyUSB5 c 188 5")
-    ]] --
 
     -- 1. 检查 USB 设备是否存在
     if not is_modem_present() then
@@ -507,7 +522,8 @@ function lte_init()
 
                 if ready then
                     -- 获取 ICCID 和 IMSI (各尝试3次)
-                    boot_iccid = get_at_with_retry("AT+ICCID", "ICCID", 3)
+                    local raw_iccid = get_at_with_retry("AT+ICCID", "ICCID", 3)
+                    boot_iccid = raw_iccid:match(":%s*(%w+)") or raw_iccid
                     boot_imsi = get_at_with_retry("AT+CIMI", "IMSI", 3)
                 else
                     log("Error: Built-in SIM not ready after switch and retries")
@@ -536,7 +552,7 @@ function main()
     local boot_imsi = "ERROR"
     local modem_status = "OK"
     --网口初始化
-    --port_init()
+    port_init()
     modem_status, boot_iccid, boot_imsi, boot_imei = lte_init()
 
     while true do
@@ -582,8 +598,20 @@ function main()
                 elseif req.cmd == "test_wifi" then
                     resp = do_test_wifi(req)
                 elseif req.cmd == "test_wdog" then
+                    --看门狗测试 ，收到命令停止喂看门狗 设备会重启，上位机 判断看门狗正常的逻辑
                     resp = { cmd = "test_wdog", result = "pass" }
+                    --主动关闭tcp连接
+                    log("Closing TCP connection...")
+                    tcp:close()
+                    socket.sleep(5)
+                    --停止喂看门狗
+                    log("Stopping watchdog...")
+                    os.execute("mem 0x10000060 0x50154444;gpioset gpiochip0 0=0")
+                    --使用死循环卡住
+                    log("Waiting for watchdog reset...")
+                    while true do socket.sleep(1) end
                 elseif req.cmd == "test_led" then
+                    --LED灯测试 本地控制LED闪烁, 控制完后 直接返回 让产测人员自行判断是否在闪烁
                     resp = { cmd = "test_led", result = "pass" }
                 elseif req.cmd == "write_tuple" then
                     local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f", req.DN, req.PjK,
@@ -603,6 +631,14 @@ function main()
                     local out_json = cjson.encode(resp)
                     tcp:send(out_json .. "\n")
                     log("Send: " .. out_json)
+                    if resp.result == "fail" then
+                        log("Closing TCP connection...")
+                        tcp:close()
+                        socket.sleep(1)
+                        --使用死循环卡住
+                        log("Waiting for watchdog reset...")
+                        while true do socket.sleep(1) end
+                    end
                 end
             end
         end

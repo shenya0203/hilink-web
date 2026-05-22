@@ -3,7 +3,6 @@ import threading
 import json
 import time
 import base64
-import queue
 from datetime import datetime
 import customtkinter as ctk
 from Crypto.Cipher import AES
@@ -11,9 +10,11 @@ from Crypto.Util.Padding import pad, unpad
 
 # ================= 配置与常量 =================
 SERVER_PORT = 998
-WATCHDOG_TIMEOUT = 40  # 看门狗重连超时（秒）
-AES_KEY = b'1234567890123456'  # 16字节密钥
-AES_IV = b'abcdefghij123456'   # 16字节偏移量
+WATCHDOG_TIMEOUT = 40  
+AES_KEY = b'1234567890123456'  
+AES_IV = b'abcdefghij123456'   
+
+RECONN_TIMEOUT = 100
 
 # ================= 业务逻辑类 =================
 
@@ -26,15 +27,13 @@ class CryptoHelper:
             ct_bytes = cipher.encrypt(pad(text.encode('utf-8'), AES.block_size))
             return base64.b64encode(ct_bytes).decode('utf-8')
         except:
-            return base64.b64encode(text.encode()).decode() # 降级方案
+            return base64.b64encode(text.encode()).decode() 
 
 class CloudAPI:
     """模拟云端接口"""
     @staticmethod
     def fetch_tuple(mac):
-        # 模拟网络延迟和可能的失败
         time.sleep(1)
-        # 假设 80% 概率获取成功
         import random
         if random.random() > 0.2:
             return {
@@ -52,76 +51,118 @@ class DeviceSession:
         self.mac = mac
         self.imei = imei
         self.iccid = iccid
-        self.status = "Connected"
         self.results = {}
         self.tuple_data = None
         self.last_seen = time.time()
-        self.current_step = "Idle"
         self.interactive_event = threading.Event()
         self.interactive_result = False
-        self.is_rebooting = False  # 是否处于看门狗重启等待期
+        self.is_rebooting = False  
+        self.reboot_start_time = 0 
         self.socket = None
         self.is_done = False
+        self.finish_time = None 
 
-    def log(self, msg):
-        print(f"[{self.mac}] {msg}")
 
 # ================= UI 组件 =================
 
-class DeviceCard(ctk.CTkFrame):
-    """设备测试卡片组件"""
+class DeviceTab(ctk.CTkFrame):
+    """单设备的完整的测试监控面板"""
     def __init__(self, master, session, on_led_confirm):
         super().__init__(master)
         self.session = session
         
+        self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
-        self.configure(fg_color=("#EAEAEA", "#2B2B2B"), corner_radius=10)
+        self.grid_rowconfigure(1, weight=1)
         
-        # MAC & 状态
-        self.label_info = ctk.CTkLabel(self, text=f"MAC: {session.mac}\nIMEI: {session.imei}", 
-                                      justify="left", font=("Consolas", 12))
-        self.label_info.grid(row=0, column=0, padx=15, pady=10, sticky="nw")
+        # 1. 顶部基础信息
+        info_text = f"MAC: {session.mac}    |    IMEI: {session.imei}"
+        if session.iccid:
+            info_text += f"    |    ICCID: {session.iccid}"
+        self.info_lbl = ctk.CTkLabel(self, text=info_text, font=("Consolas", 14, "bold"), text_color="#3B8ED0")
+        self.info_lbl.grid(row=0, column=0, columnspan=2, pady=(10, 15), padx=20, sticky="w")
         
-        # 进度/状态说明
-        self.label_status = ctk.CTkLabel(self, text="正在初始化...", text_color="#3B8ED0")
-        self.label_status.grid(row=0, column=1, padx=10, pady=10)
+        # 2. 左侧：测试项状态矩阵
+        self.tests_frame = ctk.CTkFrame(self, fg_color=("#F0F0F0", "#2B2B2B"))
+        self.tests_frame.grid(row=1, column=0, padx=(20, 10), pady=(0, 20), sticky="nsew")
         
-        # 各项结果点状显示 (Mock LED 墙)
-        self.res_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.res_frame.grid(row=0, column=2, padx=15)
+        self.test_items = {
+            "fetch_sn": "获取云端SN",
+            "test_net": "Net 测试",
+            "test_wifi": "WiFi 测试",
+            "test_lte": "LTE 测试",
+            "test_serial": "Serial 测试",
+            "test_led": "LED 人工确认",
+            "test_wdog": "看门狗测试",
+            "write_tuple": "写入五元组"
+        }
+        self.status_labels = {}
+        self.reason_labels = {}
         
-        # LED 确认按钮 (初始隐藏)
-        self.btn_led = ctk.CTkButton(self, text="确认LED闪烁?", width=100, 
-                                     command=lambda: on_led_confirm(session, True),
-                                     fg_color="#28a745", hover_color="#218838")
-        self.btn_led_fail = ctk.CTkButton(self, text="异常", width=60, 
-                                          command=lambda: on_led_confirm(session, False),
-                                          fg_color="#dc3545", hover_color="#c82333")
+        for i, (key, name) in enumerate(self.test_items.items()):
+            ctk.CTkLabel(self.tests_frame, text=name, width=120, anchor="w", font=("Microsoft YaHei", 12)).grid(row=i, column=0, padx=20, pady=8)
+            st_lbl = ctk.CTkLabel(self.tests_frame, text="等待中", text_color="gray", width=60)
+            st_lbl.grid(row=i, column=1, padx=10, pady=8)
+            rsn_lbl = ctk.CTkLabel(self.tests_frame, text="", text_color="#dc3545", anchor="w")
+            rsn_lbl.grid(row=i, column=2, padx=10, pady=8, sticky="we")
+            self.status_labels[key] = st_lbl
+            self.reason_labels[key] = rsn_lbl
 
-    def update_ui(self):
-        self.label_status.configure(text=f"当前阶段: {self.session.current_step}")
-        if self.session.current_step == "LED人工确认":
-            self.btn_led.grid(row=0, column=3, padx=5)
-            self.btn_led_fail.grid(row=0, column=4, padx=5)
-        else:
-            self.btn_led.grid_forget()
-            self.btn_led_fail.grid_forget()
+        # 挂载于 LED 行的确认按钮框 (默认隐藏)
+        self.led_frame = ctk.CTkFrame(self.tests_frame, fg_color="transparent")
+        self.btn_led = ctk.CTkButton(self.led_frame, text="确认LED闪烁?", command=lambda: on_led_confirm(session, True), fg_color="#28a745", hover_color="#218838", width=110)
+        self.btn_led_fail = ctk.CTkButton(self.led_frame, text="异常", command=lambda: on_led_confirm(session, False), fg_color="#dc3545", hover_color="#c82333", width=50)
+        self.btn_led.pack(side="left", padx=5)
+        self.btn_led_fail.pack(side="left", padx=5)
+
+        # 3. 右侧：专属独立日志区
+        self.log_box = ctk.CTkTextbox(self, font=("Consolas", 12))
+        self.log_box.grid(row=1, column=1, padx=(10, 20), pady=(0, 20), sticky="nsew")
+        # 尝试配置文本颜色标签
+        if hasattr(self.log_box, "_textbox"):
+            self.log_box._textbox.tag_config("error", foreground="#ff4d4d")
+            self.log_box._textbox.tag_config("success", foreground="#00cc44")
+            self.log_box._textbox.tag_config("warn", foreground="#ffcc00")
+            self.log_box._textbox.tag_config("info", foreground="#FFFFFF")
+
+    def sync_update_status(self, key, status, reason=""):
+        """此方法在主线程被调用以安全更新 UI"""
+        if key not in self.status_labels: return
+        colors = {"等待中": "gray", "进行中": "#3B8ED0", "Pass": "#28a745", "Fail": "#dc3545"}
         
-        if "test_net" in self.session.results:
-            color = "#28a745" if self.session.results.get("test_net") else "#dc3545"
-            self.label_status.configure(text_color=color)
+        self.status_labels[key].configure(text=status, text_color=colors.get(status, "white"))
+        
+        if reason:
+            self.reason_labels[key].configure(text=reason)
+            
+        if key == "test_led":
+            if status == "进行中":
+                # 展示确认按钮
+                self.led_frame.grid(row=list(self.test_items.keys()).index("test_led"), column=3, padx=10)
+            else:
+                self.led_frame.grid_forget()
+
+    def sync_append_log(self, msg, level="info"):
+        now = datetime.now().strftime("%H:%M:%S")
+        text_line = f"[{now}] {msg}\n"
+        self.log_box.insert("end", text_line)
+        if hasattr(self.log_box, "_textbox"):
+            # 获取最后插入一行的索引
+            last_line = self.log_box._textbox.index("end-1c linestart")
+            self.log_box._textbox.tag_add(level, last_line, "end-1c")
+        self.log_box.see("end")
 
 # ================= 主程序 =================
 
 class FactoryApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Hilink 工业产测全自动上位机 V1.0")
-        self.geometry("1000x700")
+        self.title("Hilink 工业产测全自动上位机 V2.0")
+        self.geometry("1100x750")
         ctk.set_appearance_mode("dark")
         
         self.sessions = {} # MAC -> DeviceSession
-        self.cards = {}    # MAC -> DeviceCard
+        self.tabs = {}     # MAC -> DeviceTab
         self.lock = threading.Lock()
         
         self.setup_ui()
@@ -139,25 +180,28 @@ class FactoryApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         
         # Header
-        self.header = ctk.CTkFrame(self, height=60, corner_radius=0)
+        self.header = ctk.CTkFrame(self, height=50, corner_radius=0)
         self.header.grid(row=0, column=0, sticky="nsew")
         self.title_label = ctk.CTkLabel(self.header, text="PRO-FACTORY 自动化生产测试平台", 
-                                       font=("Microsoft YaHei", 20, "bold"))
-        self.title_label.pack(side="left", padx=20, pady=15)
+                                       font=("Microsoft YaHei", 18, "bold"))
+        self.title_label.pack(side="left", padx=20, pady=10)
         
         self.stat_label = ctk.CTkLabel(self.header, text="在线设备: 0", font=("Consolas", 14))
         self.stat_label.pack(side="right", padx=20)
 
-        # Device List (Scrollable)
-        self.scroll_frame = ctk.CTkScrollableFrame(self, label_text="待测设备列表")
-        self.scroll_frame.grid(row=1, column=0, padx=20, pady=20, sticky="nsew")
-        
-        # Log Console
-        self.console = ctk.CTkTextbox(self, height=150, font=("Consolas", 12))
-        self.console.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
-        self.append_log("系统启动, 监听端口: " + str(SERVER_PORT))
+        # TabView
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.grid(row=1, column=0, padx=20, pady=(10, 20), sticky="nsew")
 
-    def append_log(self, msg):
+        # Global Log Console (精简版)
+        self.console = ctk.CTkTextbox(self, height=100, font=("Consolas", 12), fg_color="#1a1a1a")
+        self.console.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.append_global_log("系统启动, 监听端口: " + str(SERVER_PORT))
+
+    def append_global_log(self, msg):
+        self.after(0, self._sync_global_log, msg)
+        
+    def _sync_global_log(self, msg):
         now = datetime.now().strftime("%H:%M:%S")
         self.console.insert("end", f"[{now}] {msg}\n")
         self.console.see("end")
@@ -172,179 +216,322 @@ class FactoryApp(ctk.CTk):
 
     def handle_client(self, conn, addr):
         conn.settimeout(20)
+        # 启用激进的 TCP Keepalive (Windows 专用)
         try:
-            # 1. 等待注册报文
+            conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            # 3秒无数据开始探测，每1秒探测一次，探测5次失败则断开
+            conn.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 3000, 1000))
+        except:
+            pass
+        try:
             raw_data = self.receive_json(conn)
             if not raw_data or raw_data.get("cmd") != "device_register":
                 return
 
             mac = raw_data.get("mac")
             with self.lock:
-                if mac in self.sessions and self.sessions[mac].is_rebooting:
-                    # 原有设备重连（看门狗验证成功）
+                if mac in self.sessions:
                     session = self.sessions[mac]
-                    session.socket = conn
-                    session.is_rebooting = False
-                    session.status = "Reconnected"
-                    self.append_log(f"设备 {mac} 看门狗重启验证成功！")
-                    # 直接跳到烧写流程在测试循环里处理
+                    if session.is_rebooting:
+                        elapsed = time.time() - session.reboot_start_time
+                        if elapsed <= RECONN_TIMEOUT:
+                            session.results["test_wdog"] = True
+                            self.update_ui_state(mac, "test_wdog", "Pass")
+                            self.append_device_log(mac, f"看门狗重连成功: 耗时 {elapsed:.1f}s", "success")
+                        else:
+                            session.results["test_wdog"] = False
+                            self.update_ui_state(mac, "test_wdog", "Fail", "重连超时")
+                            self.append_device_log(mac, f"看门狗重连超时: 耗时 {elapsed:.1f}s", "error")
+                            self.finish_session(session, "看门狗超时")
+                        session.is_rebooting = False
+                        session.socket = conn
+                    else:
+                        session.socket = conn
+                        if session.finish_time is not None:
+                            # 已经完成的设备重复连接则忽略
+                            return
                 else:
-                    # 新设备接入
                     session = DeviceSession(mac, raw_data.get("imei"), raw_data.get("iccid"))
                     session.socket = conn
                     self.sessions[mac] = session
-                    self.after(0, self.add_device_ui, session)
-                    self.append_log(f"新设备接入: {mac}")
+                    self.after(0, self.add_device_tab, session)
+                    self.append_global_log(f"新设备接入: {mac}")
             
-            self.run_test_pipeline(session)
-            
+            # 不论新旧连接，如果是尚未完成状态，都执行测试管线
+            if not session.is_done:
+                self.run_test_pipeline(session)
+
+            # ----- 管线执行完毕或处于已完成状态，转入连接状态监控 -----
+            try:
+                while True:
+                    try:
+                        conn.settimeout(5.0)
+                        data = conn.recv(1024)
+                        if not data: # 收到空数据，表示对端正常关闭连接 (EOF)
+                            break
+                    except socket.timeout:
+                        # 重点：对于已经完成的设备，定期发送一个空行(Heartbeat)
+                        # 如果物理连接已断开，sendall 会立刻抛出异常
+                        try:
+                            conn.sendall(b"\n")
+                        except:
+                            break
+                        continue
+            except Exception:
+                pass
+            finally:
+                with self.lock:
+                    # 只有当不是因为重启导致的断开时，且 session 依然是当前这个时，才清理界面
+                    if mac in self.sessions and self.sessions[mac] is session:
+                        if not session.is_rebooting:
+                            del self.sessions[mac]
+                            self.after(0, self._sync_remove_tab, mac)
+                            self.append_global_log(f"设备 {mac} 连接已断开，自动清理测试看板。")
+
         except Exception as e:
-            print(f"Error handling {addr}: {e}")
+            self.append_global_log(f"连接处理异常 [{addr}]: {e}")
 
     def receive_json(self, conn):
-        # 简单的 JSON 流解析逻辑
         buffer = ""
         while True:
-            chunk = conn.recv(1024).decode('utf-8')
-            if not chunk: return None
-            buffer += chunk
             try:
-                print("JSON 数据:", buffer)
-                # 处理粘包/半包逻辑（这里假设一次收一个完整JSON）
-                return json.loads(buffer)
-            except:
-                print("等待完整的 JSON 数据...")
+                conn.settimeout(60)
+                chunk = conn.recv(1024).decode('utf-8')
+                print("chunk: ", chunk)
+                if not chunk: 
+                    print("Received empty chunk, connection might be closed.")
+                    return None
+                print("buffer before: ", buffer)
+                buffer += chunk
+                if "}" in buffer:
+                    print("Attempting to parse JSON from buffer...")
+                    return json.loads(buffer)
+                print("buffer after: ", buffer)
+            except socket.timeout:
+                return None
+            except json.JSONDecodeError:
                 continue
+            except Exception:
+                return None
 
     def send_json(self, session, data):
         if session.socket:
-            session.socket.sendall(json.dumps(data).encode('utf-8'))
+            try:
+                session.socket.sendall(json.dumps(data).encode('utf-8'))
+            except:
+                pass
 
+    # ---------- 核心测试管线 ---------- #
     def run_test_pipeline(self, session):
-        """全自动测试流水线"""
+        mac = session.mac
         try:
-            # Step 1: 获取云端数据 (异步但不阻塞其他项)
-            session.current_step = "获取云端SN"
-            while not session.tuple_data:
-                data = CloudAPI.fetch_tuple(session.mac)
+            # 1. 云端数据
+            if "fetch_sn" not in session.results:
+                self.update_ui_state(mac, "fetch_sn", "进行中")
+                self.append_device_log(mac, "正在请求云端设备信息...")
+                data = CloudAPI.fetch_tuple(mac)
                 if data:
                     session.tuple_data = data
-                    self.append_log(f"{session.mac} 云端数据获取成功")
+                    session.results["fetch_sn"] = True
+                    self.update_ui_state(mac, "fetch_sn", "Pass")
+                    self.append_device_log(mac, "云端数据获取成功", "success")
                 else:
-                    session.current_step = "获取SN失败, 重试中..."
-                    time.sleep(2)
+                    session.results["fetch_sn"] = False
+                    self.update_ui_state(mac, "fetch_sn", "Fail", "云端接口无响应/失败")
+                    self.append_device_log(mac, "云端获取失败", "error")
+                    return self.finish_session(session, "获取SN失败终止")
 
-            # Step 2: 自动化固件测试
-            session.current_step = "基础功能测试"
-            print("正在进行 Net 测试...")
-            # Net 测试
-            self.send_json(session, {"cmd": "test_net"})
-            resp = self.receive_json(session.socket)
-            print("Net 测试结果:", resp)
-            session.results["test_net"] = (resp.get("result") == "pass")
+            # 内部辅助函数用于测试基础项
+            def do_check(step_key, cmd_name, title):
+                if step_key not in session.results:
+                    
+                    self.update_ui_state(mac, step_key, "进行中")
+                    self.append_device_log(mac, f"发起 [{title}] 测试...")
+                    self.send_json(session, {"cmd": cmd_name})
+                    resp = self.receive_json(session.socket)
+                    if resp:
+                        if resp.get("result") == "pass":
+                            session.results[step_key] = True
+                            self.update_ui_state(mac, step_key, "Pass")
+                            self.append_device_log(mac, f"[{title}] 结果: Pass", "success")
+                        elif resp.get("result") == "fail":
+                            session.results[step_key] = False
+                            if resp.get("code"):
+                                if step_key == "test_wifi":
+                                    self.update_ui_state(mac, step_key, "Fail", f" (代码: {resp.get('code')} rssi: {resp.get('rssi', 'N/A')})")
+                                else:
+                                    self.update_ui_state(mac, step_key, "Fail", f" (代码: {resp.get('code')})")
 
-            # LTE 测试
-            print("正在进行 LTE 测试...")
-            self.send_json(session, {"cmd": "test_lte"})
-            resp = self.receive_json(session.socket)
-            print("LTE 测试结果:", resp)
-            session.results["test_lte"] = (resp.get("result") == "pass")
+                            self.append_device_log(mac, f"[{title}] 测试结果: Fail, 详情: {resp.get('logs', '')}", "error")
 
-            # Serial 测试 (加密)
-            print("Serial 测试 (加密)...")
-            payload = CryptoHelper.encrypt_b64("FACTORY_TEST_DATA_2024")
-            print("加密后数据:", payload)
-            self.send_json(session, {"cmd": "test_serial", "data": payload})
-            resp = self.receive_json(session.socket)
-            session.results["test_serial"] = (resp.get("data") is not None)
+                            return False
+                    else:
+                        rsn = resp.get("msg", "设备未响应/异常") if resp else "通信超时"
+                        session.results[step_key] = False
+                        self.update_ui_state(mac, step_key, "Fail", rsn)
+                        self.append_device_log(mac, f"[{title}] 结果: Fail, 原因: {rsn}", "error")
+                        return False
+                return True
 
-            # Step 3: LED 人工确认
-            session.current_step = "LED人工确认"
-            self.send_json(session, {"cmd": "test_led"})
-            session.interactive_event.wait() # 等待 UI 点击
-            session.results["test_led"] = session.interactive_result
+            # 测试：Net, WiFi, LTE, Serial
+            if not do_check("test_net", "test_net", "网口"): return self.finish_session(session, "网口失败")
+            if not do_check("test_wifi", "test_wifi", "WiFi"): return self.finish_session(session, "WiFi失败")
+            if not do_check("test_lte", "test_lte", "4G"): return self.finish_session(session, "4G失败")
 
-            # Step 4: 看门狗重启测试
-            session.current_step = "看门狗重启验证"
-            session.is_rebooting = True
-            session.last_seen = time.time()
-            self.send_json(session, {"cmd": "test_wdog"}) # 发送该命令后设备应停止喂狗并重启
-            
-            # 设置一个较短的超时，用来探测设备是否在规定时间内断开
-            session.socket.settimeout(5) 
-            try:
-                # 下发指令后，设备应该会停止喂狗。
-                # 这里的 recv(1024) 会阻塞直到：1. 收到数据 2. 超时 3. 连接断开
-                dummy_data = session.socket.recv(1024)
+            if "test_serial" not in session.results:
+                self.update_ui_state(mac, "test_serial", "进行中")
+                payload = CryptoHelper.encrypt_b64("FACTORY_TEST_DATA_2024")
+                self.send_json(session, {"cmd": "test_serial", "data": payload})
+                resp = self.receive_json(session.socket)
+                if resp and resp.get("data") is not None:
+                    session.results["test_serial"] = True
+                    self.update_ui_state(mac, "test_serial", "Pass")
+                    self.append_device_log(mac, "串口加密数据收发验证通过", "success")
+                else:
+                    self.update_ui_state(mac, "test_serial", "Fail", "数据验证异常")
+                    self.append_device_log(mac, "串口数据校验未通过", "error")
+                    return self.finish_session(session, "串口失败")
+
+            # LED
+            if "test_led" not in session.results:
+                self.update_ui_state(mac, "test_led", "进行中")
+                self.append_device_log(mac, "下发LED指令，等待人工确认...", "warn")
+                self.send_json(session, {"cmd": "test_led"})
+                session.interactive_event.wait()
+                if session.interactive_result:
+                    session.results["test_led"] = True
+                    self.update_ui_state(mac, "test_led", "Pass")
+                    self.append_device_log(mac, "人工确认LED通过", "success")
+                else:
+                    session.results["test_led"] = False
+                    self.update_ui_state(mac, "test_led", "Fail", "按下了异常")
+                    self.append_device_log(mac, "人工判断LED错误", "error")
+                    return self.finish_session(session, "LED指引异常")
+
+            # Watchdog
+            if "test_wdog" not in session.results:
+                self.update_ui_state(mac, "test_wdog", "进行中")
+                self.append_device_log(mac, "下发看门狗重启指令，等待设备重连...", "warn")
+                session.reboot_start_time = time.time()
+                session.is_rebooting = True
+                self.send_json(session, {"cmd": "test_wdog"})
                 
-                # 如果能走到这里且连接没断开，说明设备没重启
+                # 结束当前连接线程，等待设备重连后新的接受线程来继续触发
                 if session.socket:
-                    session.current_step = "看门狗失效(Fail)"
-                    self.append_log(f"{session.mac} 错误: 25秒内未检测到设备重启断连")
-                    return
-            except (socket.timeout):
-                # 如果是超时了，说明连接还在，看门狗没起作用
-                session.current_step = "看门狗未触发(Fail)"
-                self.append_log(f"{session.mac} 错误: 设备仍在线，看门狗未能使其重启")
-                return
-            except (ConnectionResetError, BrokenPipeError, socket.error):
-                # 捕获到连接重置或错误，说明设备已经断开了，符合看门狗重启预期
-                self.append_log(f"{session.mac} 检测到连接断开(正常重启)")
-            finally:
-                if session.socket:
-                    session.socket.close()
+                    try: session.socket.close()
+                    except: pass
                     session.socket = None
-            # 继续执行原来的等待重连逻辑
-            self.append_log(f"{session.mac} 进入40s重连等待窗口...")
+                return 
 
-            # Step 5: 最终烧写
-            session.current_step = "写入五元组"
-            write_cmd = {"cmd": "write_tuple"}
-            write_cmd.update(session.tuple_data)
-            self.send_json(session, write_cmd)
-            
-            resp = self.receive_json(session.socket)
-            if resp.get("result") == "pass":
-                session.current_step = "产测成功"
-                session.is_done = True
-                self.append_log(f"{session.mac} 全部流程圆满完成")
-                time.sleep(3) # 留时间看结果
-                self.remove_device_ui(session)
+            # 如果前面触发过 watchdog 且重连回来的 session 会携带 test_wdog == True
+            if session.results.get("test_wdog") == True:
+                if "write_tuple" not in session.results:
+                    self.update_ui_state(mac, "write_tuple", "进行中")
+                    write_cmd = {"cmd": "write_tuple"}
+                    write_cmd.update(session.tuple_data)
+                    self.send_json(session, write_cmd)
+                    resp = self.receive_json(session.socket)
+                    if resp and resp.get("result") == "pass":
+                        session.results["write_tuple"] = True
+                        self.update_ui_state(mac, "write_tuple", "Pass")
+                        self.append_device_log(mac, "成功写入五元组，测试大成功！", "success")
+                        self.finish_session(session)
+                    else:
+                        rsn = resp.get("msg", "失败") if resp else "无响应"
+                        session.results["write_tuple"] = False
+                        self.update_ui_state(mac, "write_tuple", "Fail", rsn)
+                        self.append_device_log(mac, f"写入五元组失败: {rsn}", "error")
+                        self.finish_session(session, "写入烧录阶段错误")
+            else:
+                 # watchdog timeout logic sets false
+                 return self.finish_session(session, "看门狗未通过")
 
         except Exception as e:
-            session.current_step = f"异常终止: {str(e)}"
-            self.append_log(f"{session.mac} 测试异常: {e}")
+            self.update_ui_state(mac, "fetch_sn", "Fail", f"断联或系统异常: {e}")
+            self.append_device_log(mac, f"流程异常崩溃: {e}", "error")
+            self.finish_session(session, "意外崩溃/断开连接")
 
-    # --- UI 辅助方法 ---
-    def add_device_ui(self, session):
-        card = DeviceCard(self.scroll_frame, session, self.on_led_confirm)
-        card.pack(fill="x", padx=10, pady=5)
-        self.cards[session.mac] = card
+
+    # ---------- UI 调度封装 ---------- #
+    def add_device_tab(self, session):
+        # 建立 Tab
+        tab = self.tabview.add(session.mac)
+        p_card = DeviceTab(tab, session, self.on_led_confirm)
+        p_card.pack(fill="both", expand=True)
+        self.tabs[session.mac] = p_card
+        
+        # 激活此 Tab
+        self.tabview.set(session.mac)
         self.update_stat()
+
+    def update_ui_state(self, mac, step_key, status, reason=""):
+        self.after(0, self._sync_update_ui_state, mac, step_key, status, reason)
+        
+    def _sync_update_ui_state(self, mac, step_key, status, reason):
+        if mac in self.tabs:
+            self.tabs[mac].sync_update_status(step_key, status, reason)
+
+    def append_device_log(self, mac, msg, level="info"):
+        self.after(0, self._sync_append_device_log, mac, msg, level)
+
+    def _sync_append_device_log(self, mac, msg, level):
+        if mac in self.tabs:
+            self.tabs[mac].sync_append_log(msg, level)
 
     def on_led_confirm(self, session, result):
         session.interactive_result = result
         session.interactive_event.set()
-        self.append_log(f"{session.mac} 人工确认LED: {'Pass' if result else 'Fail'}")
 
-    def remove_device_ui(self, session):
-        if session.mac in self.cards:
-            self.cards[session.mac].destroy()
-            del self.cards[session.mac]
-        if session.mac in self.sessions:
-            del self.sessions[session.mac]
+    def finish_session(self, session, reason=None):
+        with self.lock:
+            if not session.is_done:
+                session.is_done = True
+                session.finish_time = time.time()
+                if reason:
+                    self.append_device_log(session.mac, f"【流程停止】原因: {reason}", "error")
+                else:
+                    self.append_device_log(session.mac, f"【流程竣工】全部测试完美结束", "success")
+                self.append_device_log(session.mac, f"测试已结束，等待连接断开后自动关闭界面...", "warn")
+
+    def _sync_remove_tab(self, mac):
+        if mac in self.tabs:
+            # tkinter 并没有直接提供 destory tab 但 customTkinter 提供 delete
+            try:
+                self.tabview.delete(mac)
+            except:
+                pass
+            del self.tabs[mac]
         self.update_stat()
 
     def update_stat(self):
         self.stat_label.configure(text=f"在线设备: {len(self.sessions)}")
 
     def check_timeouts(self):
-        """定期更新 UI 状态"""
+        """定期检查重连超时及清理结束的设备"""
         while True:
+            now = time.time()
+            to_remove = []
+            
             with self.lock:
-                for mac, card in list(self.cards.items()):
-                    card.update_ui()
-            time.sleep(0.5)
+                for mac, session in list(self.sessions.items()):
+                    # 1. 看门狗重连超时
+                    if session.is_rebooting and (now - session.reboot_start_time > RECONN_TIMEOUT):
+                        # 人工介入设为 Fail
+                        session.is_rebooting = False
+                        session.results["test_wdog"] = False
+                        self.update_ui_state(mac, "test_wdog", "Fail", "规定时间内未重连")
+                        self.append_device_log(mac, f"重连验证超时 ({RECONN_TIMEOUT}s)", "error")
+                        self.finish_session(session, "看门狗未重连")
+                        
+                    # 2. 移除旧的 10 秒倒计时清理逻辑（现在由连接断开自动触发）
+                    pass
+                        
+                for mac in to_remove:
+                    del self.sessions[mac]
+                    self.after(0, self._sync_remove_tab, mac)
+                    self.append_global_log(f"已自动清理设备 {mac} 的测试记录。")
+
+            time.sleep(1)
 
 if __name__ == "__main__":
     app = FactoryApp()
