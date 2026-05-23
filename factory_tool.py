@@ -16,6 +16,17 @@ AES_IV = b'abcdefghij123456'
 
 RECONN_TIMEOUT = 100
 
+TEST_ITEMS = {
+    "fetch_sn": "获取云端SN",
+    "test_net": "Net 测试",
+    "test_wifi": "WiFi 测试",
+    "test_lte": "LTE 测试",
+    "test_serial": "Serial 测试",
+    "test_led": "LED 人工确认",
+    "test_wdog": "看门狗测试",
+    "write_tuple": "写入五元组"
+}
+
 # ================= 业务逻辑类 =================
 
 class CryptoHelper:
@@ -86,20 +97,10 @@ class DeviceTab(ctk.CTkFrame):
         self.tests_frame = ctk.CTkFrame(self, fg_color=("#F0F0F0", "#2B2B2B"))
         self.tests_frame.grid(row=1, column=0, padx=(20, 10), pady=(0, 20), sticky="nsew")
         
-        self.test_items = {
-            "fetch_sn": "获取云端SN",
-            "test_net": "Net 测试",
-            "test_wifi": "WiFi 测试",
-            "test_lte": "LTE 测试",
-            "test_serial": "Serial 测试",
-            "test_led": "LED 人工确认",
-            "test_wdog": "看门狗测试",
-            "write_tuple": "写入五元组"
-        }
         self.status_labels = {}
         self.reason_labels = {}
         
-        for i, (key, name) in enumerate(self.test_items.items()):
+        for i, (key, name) in enumerate(TEST_ITEMS.items()):
             ctk.CTkLabel(self.tests_frame, text=name, width=120, anchor="w", font=("Microsoft YaHei", 12)).grid(row=i, column=0, padx=20, pady=8)
             st_lbl = ctk.CTkLabel(self.tests_frame, text="等待中", text_color="gray", width=60)
             st_lbl.grid(row=i, column=1, padx=10, pady=8)
@@ -138,7 +139,7 @@ class DeviceTab(ctk.CTkFrame):
         if key == "test_led":
             if status == "进行中":
                 # 展示确认按钮
-                self.led_frame.grid(row=list(self.test_items.keys()).index("test_led"), column=3, padx=10)
+                self.led_frame.grid(row=list(TEST_ITEMS.keys()).index("test_led"), column=3, padx=10)
             else:
                 self.led_frame.grid_forget()
 
@@ -291,42 +292,48 @@ class FactoryApp(ctk.CTk):
         except Exception as e:
             self.append_global_log(f"连接处理异常 [{addr}]: {e}")
 
-    def receive_json(self, conn):
+    def receive_json(self, conn, timeout=60):
         buffer = ""
+        try:
+            conn.settimeout(timeout)
+        except:
+            return None
+            
         while True:
             try:
-                conn.settimeout(60)
                 chunk = conn.recv(1024).decode('utf-8')
-                print("chunk: ", chunk)
                 if not chunk: 
-                    print("Received empty chunk, connection might be closed.")
                     return None
-                print("buffer before: ", buffer)
                 buffer += chunk
                 if "}" in buffer:
-                    print("Attempting to parse JSON from buffer...")
                     return json.loads(buffer)
-                print("buffer after: ", buffer)
-            except socket.timeout:
-                return None
-            except json.JSONDecodeError:
-                continue
-            except Exception:
+            except (socket.timeout, json.JSONDecodeError, Exception):
                 return None
 
     def send_json(self, session, data):
-        if session.socket:
-            try:
-                session.socket.sendall(json.dumps(data).encode('utf-8'))
-            except:
-                pass
+        """发送指令并等待设备 ACK 确认是否收到"""
+        if not session.socket:
+            return False
+        try:
+            cmd_name = data.get("cmd", "unknown")
+            session.socket.sendall((json.dumps(data) + "\n").encode('utf-8'))
+            
+            # 发送后立即等待 2s 的确认响应 (ACK)
+            ack = self.receive_json(session.socket, timeout=2)
+            if ack and ack.get("cmd") == "ack" and ack.get("ref_cmd") == cmd_name:
+                return True
+            self.append_device_log(session.mac, f"指令 [{cmd_name}] 发送失败: 设备未确认收到", "error")
+        except Exception as e:
+            self.append_global_log(f"Socket 发送异常: {e}")
+        return False
 
     # ---------- 核心测试管线 ---------- #
     def run_test_pipeline(self, session):
         mac = session.mac
         try:
             # 1. 云端数据
-            if "fetch_sn" not in session.results:
+            # 修改点：如果之前已经成功获取了 tuple_data，则跳过获取，不再重复请求
+            if session.results.get("fetch_sn") != True:
                 self.update_ui_state(mac, "fetch_sn", "进行中")
                 self.append_device_log(mac, "正在请求云端设备信息...")
                 data = CloudAPI.fetch_tuple(mac)
@@ -339,7 +346,8 @@ class FactoryApp(ctk.CTk):
                     session.results["fetch_sn"] = False
                     self.update_ui_state(mac, "fetch_sn", "Fail", "云端接口无响应/失败")
                     self.append_device_log(mac, "云端获取失败", "error")
-                    return self.finish_session(session, "获取SN失败终止")
+            else:
+                self.append_device_log(mac, "检测到已有云端SN数据，跳过获取步骤。")
 
             # 内部辅助函数用于测试基础项
             def do_check(step_key, cmd_name, title):
@@ -347,56 +355,57 @@ class FactoryApp(ctk.CTk):
                     
                     self.update_ui_state(mac, step_key, "进行中")
                     self.append_device_log(mac, f"发起 [{title}] 测试...")
-                    self.send_json(session, {"cmd": cmd_name})
-                    resp = self.receive_json(session.socket)
+                    # 调用 send_json 时会自动阻塞等待 ACK
+                    if not self.send_json(session, {"cmd": cmd_name}):
+                        self.update_ui_state(mac, step_key, "Fail", "通信超时(ACK)")
+                        return "BREAK"
+
+                    # ACK 收到后，进入长时间的结果等待期
+                    resp = self.receive_json(session.socket, timeout=60)
                     if resp:
                         if resp.get("result") == "pass":
                             session.results[step_key] = True
                             self.update_ui_state(mac, step_key, "Pass")
                             self.append_device_log(mac, f"[{title}] 结果: Pass", "success")
+                            return True
                         elif resp.get("result") == "fail":
                             session.results[step_key] = False
-                            if resp.get("code"):
-                                if step_key == "test_wifi":
-                                    self.update_ui_state(mac, step_key, "Fail", f" (代码: {resp.get('code')} rssi: {resp.get('rssi', 'N/A')})")
-                                else:
-                                    self.update_ui_state(mac, step_key, "Fail", f" (代码: {resp.get('code')})")
-
-                            self.append_device_log(mac, f"[{title}] 测试结果: Fail, 详情: {resp.get('logs', '')}", "error")
-
-                            return False
+                            rsn_code = resp.get("code", "ERROR")
+                            if step_key == "test_wifi":
+                                self.update_ui_state(mac, step_key, "Fail", f"代码:{rsn_code} RSSI:{resp.get('rssi','N/A')}")
+                            else:
+                                self.update_ui_state(mac, step_key, "Fail", f"代码:{rsn_code}")
+                            self.append_device_log(mac, f"[{title}] 测试失败: {resp.get('logs', '')}", "error")
+                            return True
                     else:
-                        rsn = resp.get("msg", "设备未响应/异常") if resp else "通信超时"
-                        session.results[step_key] = False
-                        self.update_ui_state(mac, step_key, "Fail", rsn)
-                        self.append_device_log(mac, f"[{title}] 结果: Fail, 原因: {rsn}", "error")
-                        return False
+                        self.update_ui_state(mac, step_key, "Fail", "通信中断(Result超时)")
+                        self.append_device_log(mac, f"[{title}] 执行超时，通信已断开", "error")
+                        return "BREAK"
                 return True
 
-            # 测试：Net, WiFi, LTE, Serial
-            if not do_check("test_net", "test_net", "网口"): return self.finish_session(session, "网口失败")
-            if not do_check("test_wifi", "test_wifi", "WiFi"): return self.finish_session(session, "WiFi失败")
-            if not do_check("test_lte", "test_lte", "4G"): return self.finish_session(session, "4G失败")
+            # 执行基础测试项：Net, WiFi, LTE
+            # 如果任意一项出现 BREAK (通信故障)，则停止后续所有测试
+            for item in [("test_net", "test_net", "网口"), 
+                        ("test_wifi", "test_wifi", "WiFi"), 
+                        ("test_lte", "test_lte", "LTE")]:
+                res = do_check(*item)
+                if res == "BREAK": 
+                    return self.finish_session(session, "设备连接异常(ACK Timeout)")
 
             if "test_serial" not in session.results:
-                self.update_ui_state(mac, "test_serial", "进行中")
-                payload = CryptoHelper.encrypt_b64("FACTORY_TEST_DATA_2024")
-                self.send_json(session, {"cmd": "test_serial", "data": payload})
-                resp = self.receive_json(session.socket)
-                if resp and resp.get("data") is not None:
-                    session.results["test_serial"] = True
-                    self.update_ui_state(mac, "test_serial", "Pass")
-                    self.append_device_log(mac, "串口加密数据收发验证通过", "success")
-                else:
-                    self.update_ui_state(mac, "test_serial", "Fail", "数据验证异常")
-                    self.append_device_log(mac, "串口数据校验未通过", "error")
-                    return self.finish_session(session, "串口失败")
+                # 调用独立的串口测试函数
+                res = self.perform_serial_test(session)
+                if res == "BREAK":
+                    return self.finish_session(session, "串口测试通讯故障")
 
             # LED
             if "test_led" not in session.results:
                 self.update_ui_state(mac, "test_led", "进行中")
                 self.append_device_log(mac, "下发LED指令，等待人工确认...", "warn")
-                self.send_json(session, {"cmd": "test_led"})
+                if not self.send_json(session, {"cmd": "test_led"}):
+                    self.update_ui_state(mac, "test_led", "Fail", "通信异常")
+                    return self.finish_session(session, "LED控制指令无响应")
+
                 session.interactive_event.wait()
                 if session.interactive_result:
                     session.results["test_led"] = True
@@ -406,7 +415,6 @@ class FactoryApp(ctk.CTk):
                     session.results["test_led"] = False
                     self.update_ui_state(mac, "test_led", "Fail", "按下了异常")
                     self.append_device_log(mac, "人工判断LED错误", "error")
-                    return self.finish_session(session, "LED指引异常")
 
             # Watchdog
             if "test_wdog" not in session.results:
@@ -415,6 +423,13 @@ class FactoryApp(ctk.CTk):
                 session.reboot_start_time = time.time()
                 session.is_rebooting = True
                 self.send_json(session, {"cmd": "test_wdog"})
+                
+                # 看门狗 ACK 检查 (必须确认设备收到了重启指令再断开连接)
+                ack = self.receive_json(session.socket, timeout=2)
+                if not ack or ack.get("cmd") != "ack":
+                    session.is_rebooting = False
+                    self.update_ui_state(mac, "test_wdog", "Fail", "ACK超时")
+                    return self.finish_session(session, "看门狗指令发送失败")
                 
                 # 结束当前连接线程，等待设备重连后新的接受线程来继续触发
                 if session.socket:
@@ -425,32 +440,108 @@ class FactoryApp(ctk.CTk):
 
             # 如果前面触发过 watchdog 且重连回来的 session 会携带 test_wdog == True
             if session.results.get("test_wdog") == True:
-                if "write_tuple" not in session.results:
-                    self.update_ui_state(mac, "write_tuple", "进行中")
-                    write_cmd = {"cmd": "write_tuple"}
-                    write_cmd.update(session.tuple_data)
-                    self.send_json(session, write_cmd)
-                    resp = self.receive_json(session.socket)
-                    if resp and resp.get("result") == "pass":
-                        session.results["write_tuple"] = True
-                        self.update_ui_state(mac, "write_tuple", "Pass")
-                        self.append_device_log(mac, "成功写入五元组，测试大成功！", "success")
-                        self.finish_session(session)
-                    else:
-                        rsn = resp.get("msg", "失败") if resp else "无响应"
-                        session.results["write_tuple"] = False
-                        self.update_ui_state(mac, "write_tuple", "Fail", rsn)
-                        self.append_device_log(mac, f"写入五元组失败: {rsn}", "error")
-                        self.finish_session(session, "写入烧录阶段错误")
+                # --- 终审环节 ---
+                # 检查除了 write_tuple 以外的所有项是否都为 True
+                # 修复点：使用全局 TEST_ITEMS 避免 AttributeError
+                failed_items = [TEST_ITEMS.get(k, k) for k, v in session.results.items() if v is False]
+                
+                if not failed_items:
+                    if "write_tuple" not in session.results:
+                        self.update_ui_state(mac, "write_tuple", "进行中")
+                        write_cmd = {"cmd": "write_tuple"}
+                        if session.tuple_data:
+                            write_cmd.update(session.tuple_data)
+                        if not self.send_json(session, write_cmd):
+                            self.update_ui_state(mac, "write_tuple", "Fail", "通信异常")
+                            return self.finish_session(session, "五元组写入指令无响应")
+
+                        resp = self.receive_json(session.socket)
+                        if resp and resp.get("result") == "pass":
+                            session.results["write_tuple"] = True
+                            self.update_ui_state(mac, "write_tuple", "Pass")
+                            self.append_device_log(mac, "成功写入五元组，测试大成功！", "success")
+                            self.finish_session(session)
+                        elif resp is None:
+                            self.update_ui_state(mac, "write_tuple", "Fail", "通信超时")
+                            return self.finish_session(session, "五元组写入结果接收超时")
+                        else:
+                            rsn = resp.get("msg", "失败")
+                            session.results["write_tuple"] = False
+                            self.update_ui_state(mac, "write_tuple", "Fail", rsn)
+                            self.append_device_log(mac, f"写入五元组失败: {rsn}", "error")
+                            self.finish_session(session, "写入烧录阶段逻辑错误")
+                else:
+                    self.update_ui_state(mac, "write_tuple", "Fail", "前项有失败，跳过写入")
+                    self.append_device_log(mac, f"检测到失败项: {', '.join(failed_items)}，禁止写入五元组。", "error")
+                    self.finish_session(session, "测试项未全通过")
             else:
                  # watchdog timeout logic sets false
                  return self.finish_session(session, "看门狗未通过")
 
         except Exception as e:
-            self.update_ui_state(mac, "fetch_sn", "Fail", f"断联或系统异常: {e}")
+            # 修复点：不再固定标记为 fetch_sn 失败，改为通用日志记录，避免误导
+            # 如果需要，可以单独给 write_tuple 或 test_wdog 标记 Fail
+            self.append_global_log(f"设备 {mac} 流程异常: {e}")
             self.append_device_log(mac, f"流程异常崩溃: {e}", "error")
             self.finish_session(session, "意外崩溃/断开连接")
 
+    def perform_serial_test(self, session):
+        """独立的双路串口回环测试函数"""
+        mac = session.mac
+        self.update_ui_state(mac, "test_serial", "进行中")
+        
+        # 1. 准备测试数据 (Base64 编码)
+        raw_str = "FACTORY_TEST_DATA_2024"
+        payload = base64.b64encode(raw_str.encode()).decode('utf-8')
+        
+        # 2. 构造指令 (固定波特率 115200)
+        cmd = {
+            "cmd": "test_serial",
+            "data": payload,
+            "baudrate": 115200
+        }
+        
+        self.append_device_log(mac, "发起双路串口回环测试: 波特率 115200, 等待回传...")
+        
+        # 3. 发送并等待 ACK
+        if not self.send_json(session, cmd):
+            self.update_ui_state(mac, "test_serial", "Fail", "指令发送失败")
+            return "BREAK"
+
+        # 4. 接收结果 (严格 5s 超时)
+        resp = self.receive_json(session.socket, timeout=5)
+        
+        if resp is None:
+            self.update_ui_state(mac, "test_serial", "Fail", "超时 (5s)")
+            self.append_device_log(mac, "串口测试失败: 5秒内未收到任何回传数据", "error")
+            session.results["test_serial"] = False
+            return False
+            
+        # 5. 校验双路数据一致性
+        received_data1 = resp.get("data1")
+        received_data2 = resp.get("data2")
+        
+        p1_ok = (received_data1 == payload)
+        p2_ok = (received_data2 == payload)
+        
+        if p1_ok and p2_ok:
+            session.results["test_serial"] = True
+            self.update_ui_state(mac, "test_serial", "Pass")
+            self.append_device_log(mac, "串口回环校验成功", "success")
+            return True
+        else:
+            session.results["test_serial"] = False
+            error_reason = ""
+            if not p1_ok and not p2_ok:
+                error_reason = "P1&P2 校验失败"
+            elif not p1_ok:
+                error_reason = "P1 校验失败"
+            else:
+                error_reason = "P2 校验失败"
+            
+            self.update_ui_state(mac, "test_serial", "Fail", error_reason)
+            self.append_device_log(mac, f"串口回传异常: {error_reason}", "error")
+            return False
 
     # ---------- UI 调度封装 ---------- #
     def add_device_tab(self, session):

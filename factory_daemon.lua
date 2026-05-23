@@ -208,26 +208,84 @@ end
 
 -- RS485 纯透传测试
 function do_test_serial(req)
-    local port_name = req.port or "ttyS0"
-    local port_path = "/dev/" .. port_name
     local req_data = req.data or ""
+    local baudrate = 115200
+    local timeout = 2.0
 
-    local f_out = io.open(port_path, "w")
-    if f_out then
-        f_out:write(req_data)
-        f_out:flush()
-        f_out:close()
-    else
-        return { cmd = "test_serial", result = "fail", detail = "Cannot open " .. port_name }
+    log("开始双路串口测试 (P1:ttyS1/GPIO4, P2:ttyS0/GPIO11) @ " .. baudrate)
+
+    -- 1. 硬件初始化：配置两个串口的波特率和 GPIO 方向 (4 & 11)
+    os.execute(string.format("stty -F /dev/ttyS1 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
+    os.execute(string.format("stty -F /dev/ttyS0 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
+    os.execute("mem 0x10000600 0x810") -- 强制 GPIO4(0x10) 和 GPIO11(0x800) 为输出模式
+
+    local function test_port(path, set_mask, clr_mask)
+        local fd = io.open(path, "r+")
+        if not fd then return "OPEN_ERR" end
+        fd:setvbuf("no")
+
+        -- 发送
+        os.execute("mem 0x10000630 " .. set_mask)
+        fd:write(req_data)
+        fd:flush()
+        socket.sleep(0.02)
+
+        -- 接收
+        os.execute("mem 0x10000640 " .. clr_mask)
+        local recv = ""
+        local start_t = socket.gettime()
+        while (socket.gettime() - start_t) < timeout do
+            local char = fd:read(1)
+            if char then
+                recv = recv .. char
+                if #recv >= #req_data then break end
+            end
+        end
+        fd:close()
+        return recv:gsub("%s+", "")
     end
 
-    local reply_data = exec_cmd("timeout 1 cat " .. port_path)
-    reply_data = reply_data:gsub("%s+", "")
+    -- 执行测试
+    local reply_data1 = test_port("/dev/ttyS1", "0x10", "0x10")
+    local reply_data2 = test_port("/dev/ttyS0", "0x800", "0x800")
 
+    log("P1 读回: " .. reply_data1)
+    log("P2 读回: " .. reply_data2)
+
+    local is_match = (reply_data1 == req_data and reply_data2 == req_data) and "pass" or "fail"
     return {
         cmd = "test_serial",
-        data = reply_data
+        result = is_match,
+        data1 = reply_data1,
+        data2 = reply_data2
     }
+end
+
+-- 辅助测试函数：用于顺序测试单个端口
+local function internal_port_check(path, test_data, set_mask, clr_mask, timeout)
+    local fd = io.open(path, "r+")
+    if not fd then return "" end
+    fd:setvbuf("no")
+
+    -- 切换到发送
+    os.execute("mem 0x10000630 " .. set_mask)
+    fd:write(test_data)
+    fd:flush()
+    socket.sleep(0.02)
+
+    -- 切换到接收
+    os.execute("mem 0x10000640 " .. clr_mask)
+    local reply = ""
+    local start_t = socket.gettime()
+    while (socket.gettime() - start_t) < timeout do
+        local char = fd:read(1)
+        if char then
+            reply = reply .. char
+            if #reply >= #test_data then break end
+        end
+    end
+    fd:close()
+    return reply:gsub("%s+", "")
 end
 
 function do_test_lte()
@@ -238,7 +296,6 @@ function do_test_lte()
 
     -- 1. 获取外置槽位 (Slot 0)
     if perform_slot_switch(0) then
-        os.execute("sleep 2")
         local cpin_ext_raw = send_at("AT+CPIN?") or ""
         sim_ext.ready = cpin_ext_raw:find("READY") ~= nil
         --当sim 卡 不是ready状态时， 不需要获取iccid
@@ -252,7 +309,6 @@ function do_test_lte()
 
     -- 2. 获取内置槽位 (Slot 1)
     if perform_slot_switch(1) then
-        os.execute("sleep 2")
         local cpin_int_raw = send_at("AT+CPIN?") or ""
         sim_int.ready = cpin_int_raw:find("READY") ~= nil
         if sim_int.ready then
@@ -268,17 +324,25 @@ function do_test_lte()
         G_SERIAL_FD = nil
     end
 
-    local is_pass = (sim_ext.ready and sim_int.ready) and "pass" or "fail"
+    local is_pass = "fail"
+    local err_code = nil
+
+    if sim_ext.ready and sim_int.ready then
+        is_pass = "pass"
+    elseif not sim_ext.ready and not sim_int.ready then
+        err_code = "BOTH_SIM_FAIL"
+    elseif not sim_ext.ready then
+        err_code = "EXT_SIM_FAIL"
+    else
+        err_code = "INT_SIM_FAIL"
+    end
 
     return {
         cmd = "test_lte",
         result = is_pass,
-        sim_ext = sim_ext,
-        sim_int = sim_int,
-        logs = {
-            sim_ext = sim_ext,
-            sim_int = sim_int
-        }
+        code = err_code,
+        logs = string.format("EXT:%s(Ready:%s), INT:%s(Ready:%s)",
+            sim_ext.iccid, tostring(sim_ext.ready), sim_int.iccid, tostring(sim_int.ready))
     }
 end
 
@@ -313,7 +377,8 @@ function do_test_net()
         res.result = "pass"
     else
         res.result = "fail"
-        res.log = logs
+        res.code = table.concat(logs, ",")
+        res.logs = table.concat(logs, " | ")
     end
 
     return res
@@ -541,8 +606,67 @@ function lte_init()
     return modem_status, boot_iccid, boot_imsi, boot_imei
 end
 
--- ================= 主控循环 =================
+local function blink_led()
+    os.execute("echo timer > /sys/class/leds/system:data:data/trigger")
+    os.execute("echo 50 > /sys/class/leds/system:data:data/delay_on")
+    os.execute("echo 50 > /sys/class/leds/system:data:data/delay_off")
+    os.execute("echo timer > /sys/class/leds/system:net:info/trigger")
+    os.execute("echo 50 > /sys/class/leds/system:net:info/delay_on")
+    os.execute("echo 50 > /sys/class/leds/system:net:info/delay_off")
+    os.execute("echo timer > /sys/class/leds/system:work:status/trigger")
+    os.execute("echo 50 > /sys/class/leds/system:work:status/delay_on")
+    os.execute("echo 50 > /sys/class/leds/system:work:status/delay_off")
+end
 
+local function close_led()
+    os.execute("echo none > /sys/class/leds/system:data:data/trigger")
+    os.execute("echo none > /sys/class/leds/system:net:info/trigger")
+    os.execute("echo none > /sys/class/leds/system:work:status/trigger")
+end
+
+
+local function get_flash_id()
+    return exec_cmd("cat /proc/unique_id")
+end
+
+-- 独立串口自检函数：强制配置并验证物理回环
+function use_test_serial()
+    local test_data = "RkFDVE9SWV9URVNUX0RBVEFfMjAyNA=="
+    local baudrate = 115200
+    local timeout = 2.0
+
+    log("--- 独立双路 RS485 自检开始 ---")
+
+    -- 1. 初始化
+    os.execute(string.format("stty -F /dev/ttyS1 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
+    os.execute(string.format("stty -F /dev/ttyS0 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
+    os.execute("mem 0x10000600 0x810")
+
+    -- 2. 测试 P1
+    local res1 = internal_port_check("/dev/ttyS1", test_data, "0x10", "0x10", timeout)
+
+    -- 3. 测试 P2
+    local res2 = internal_port_check("/dev/ttyS0", test_data, "0x800", "0x800", timeout)
+
+    -- 4. 结果判定
+    if res1 == test_data and res2 == test_data then
+        log("自检成功: P1 & P2 验证通过")
+        return true
+    else
+        log(string.format("自检失败! P1:%s, P2:%s",
+            (res1 == test_data and "OK" or "FAIL"),
+            (res2 == test_data and "OK" or "FAIL")))
+        return false
+    end
+end
+
+--[[
+function main()
+    use_test_serial()
+end
+]] --
+
+-- ================= 主控循环 =================
 function main()
     log("Factory Daemon Started.")
 
@@ -561,6 +685,7 @@ function main()
 
         log("Connecting to " .. SERVER_IP .. ":" .. SERVER_PORT)
         local res, err = tcp:connect(SERVER_IP, SERVER_PORT)
+        local flash_id = get_flash_id()
 
         if res then
             -- 3. 注册设备 (上报所有采集到的状态)
@@ -571,7 +696,7 @@ function main()
                 iccid = boot_iccid,
                 imsi = boot_imsi,
                 modem_status = modem_status,
-                flashid = "TODO_Placeholder"
+                flashid = flash_id
             }
             tcp:send(cjson.encode(reg_info) .. "\n")
             log("Reg info sent: " .. cjson.encode(reg_info))
@@ -589,56 +714,62 @@ function main()
                 local req = cjson.decode(raw_str)
                 local resp = {}
 
-                if req.cmd == "test_net" then
-                    resp = do_test_net()
-                elseif req.cmd == "test_lte" then
-                    resp = do_test_lte()
-                elseif req.cmd == "test_serial" then
-                    resp = do_test_serial(req)
-                elseif req.cmd == "test_wifi" then
-                    resp = do_test_wifi(req)
-                elseif req.cmd == "test_wdog" then
-                    --看门狗测试 ，收到命令停止喂看门狗 设备会重启，上位机 判断看门狗正常的逻辑
-                    resp = { cmd = "test_wdog", result = "pass" }
-                    --主动关闭tcp连接
-                    log("Closing TCP connection...")
-                    tcp:close()
-                    socket.sleep(5)
-                    --停止喂看门狗
-                    log("Stopping watchdog...")
-                    os.execute("mem 0x10000060 0x50154444;gpioset gpiochip0 0=0")
-                    --使用死循环卡住
-                    log("Waiting for watchdog reset...")
-                    while true do socket.sleep(1) end
-                elseif req.cmd == "test_led" then
-                    --LED灯测试 本地控制LED闪烁, 控制完后 直接返回 让产测人员自行判断是否在闪烁
-                    resp = { cmd = "test_led", result = "pass" }
-                elseif req.cmd == "write_tuple" then
-                    local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f", req.DN, req.PjK,
-                        req.PdK, req.PdS, req.DS)
-                    if os.execute(cmd) == 0 then
-                        os.execute("firstboot -y")
-                        tcp:send(cjson.encode({ cmd = "write_tuple", result = "pass" }) .. "\n")
-                        log("Seal completed! Triggering Watchdog hard reset...")
-                        os.execute("killall feed_wdog.sh")
-                        while true do socket.sleep(10) end
-                    else
-                        resp = { cmd = "write_tuple", result = "fail" }
-                    end
-                end
+                -- 1. 定义支持的测试命令，用于过滤 ACK 响应
+                local supported_cmds = {
+                    test_net = true,
+                    test_lte = true,
+                    test_serial = true,
+                    test_wifi = true,
+                    test_wdog = true,
+                    test_led = true,
+                    write_tuple = true
+                }
 
-                if resp.cmd then
-                    local out_json = cjson.encode(resp)
-                    tcp:send(out_json .. "\n")
-                    log("Send: " .. out_json)
-                    if resp.result == "fail" then
-                        log("Closing TCP connection...")
+                -- 2. 如果收到有效测试命令，立即回复 ACK
+                if req.cmd and supported_cmds[req.cmd] then
+                    tcp:send(cjson.encode({ cmd = "ack", status = "received", ref_cmd = req.cmd }) .. "\n")
+                    log("ACK sent for: " .. req.cmd)
+
+                    -- 3. 执行具体的测试函数
+                    if req.cmd == "test_net" then
+                        resp = do_test_net()
+                    elseif req.cmd == "test_lte" then
+                        resp = do_test_lte()
+                    elseif req.cmd == "test_serial" then
+                        resp = do_test_serial(req)
+                    elseif req.cmd == "test_wifi" then
+                        resp = do_test_wifi(req)
+                    elseif req.cmd == "test_wdog" then
+                        close_led()
+                        log("Watchdog test triggered. Restarting...")
                         tcp:close()
-                        socket.sleep(1)
-                        --使用死循环卡住
-                        log("Waiting for watchdog reset...")
+                        socket.sleep(5)
+                        os.execute("mem 0x10000060 0x50154444;gpioset gpiochip0 0=0")
                         while true do socket.sleep(1) end
+                    elseif req.cmd == "test_led" then
+                        resp = { cmd = "test_led", result = "pass" }
+                        blink_led()
+                    elseif req.cmd == "write_tuple" then
+                        local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f",
+                            req.DN, req.PjK, req.PdK, req.PdS, req.DS)
+                        if os.execute(cmd) == 0 then
+                            os.execute("firstboot -y")
+                            tcp:send(cjson.encode({ cmd = "write_tuple", result = "pass" }) .. "\n")
+                            os.execute("killall feed_wdog.sh")
+                            while true do socket.sleep(10) end
+                        else
+                            resp = { cmd = "write_tuple", result = "fail" }
+                        end
                     end
+
+                    -- 4. 发送测试最终结果
+                    if resp.cmd then
+                        local out_json = cjson.encode(resp)
+                        tcp:send(out_json .. "\n")
+                        log("Send Result: " .. out_json)
+                    end
+                else
+                    log("Ignored unknown or register command: " .. tostring(req.cmd))
                 end
             end
         end
@@ -646,4 +777,5 @@ function main()
     end
 end
 
+---
 main()
