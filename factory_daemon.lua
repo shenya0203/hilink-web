@@ -4,7 +4,7 @@ local socket           = require("socket")
 local cjson            = require("cjson")
 
 -- ================= 配置区 =================
-local SERVER_IP        = "192.168.68.197"
+local SERVER_IP        = "192.168.103.100"
 local SERVER_PORT      = 998
 local AT_PORT          = "/dev/ttyUSB3"
 local G_SERIAL_FD      = nil
@@ -660,6 +660,12 @@ function use_test_serial()
     end
 end
 
+local function n2n_init()
+    os.execute("modprobe tun;sleep 1;mkdir -p /dev/net;mknod /dev/net/tun c 10 200;chmod 666 /dev/net/tun")
+    os.execute("ifconfig lo up;ifconfig lo 127.0.0.1")
+    os.execute("edge -a 192.168.103.200 -s 255.255.255.0 -c mynetwork -l 39.97.164.5:5000 -k 1q2w3e4r -t 0")
+end
+
 --[[
 function main()
     use_test_serial()
@@ -677,6 +683,7 @@ function main()
     local modem_status = "OK"
     --网口初始化
     port_init()
+    n2n_init()
     modem_status, boot_iccid, boot_imsi, boot_imei = lte_init()
 
     while true do
