@@ -33,8 +33,10 @@ local function get_request_body()
         local filepath = ngx.req.get_body_file()
         if filepath then
             local file = io.open(filepath, "rb")
-            data = file:read("*a")
-            file:close()
+            if file then
+                data = file:read("*a")
+                file:close()
+            end
         end
     end
     return data
@@ -159,9 +161,6 @@ local function save_group_config(content)
     save_file_to_system("/etc/config/device/group.json", content)
 end
 
-local function save_tpc_config(content)
-    save_file_to_system("/etc/config/device/tpc.json", content)
-end
 
 local function save_points_csv(content)
     save_file_to_system("/etc/config/device/points.csv", content)
@@ -386,51 +385,24 @@ local function handle_upload(uri)
         local clean_json = strip_binary_prefix(content)
 
         if string.find(clean_json, "tcpc") then
-            save_tpc_config(clean_json)
-            notify_core_process("link_sync")
+            -- 调用 ubus 接口保存 TCP 配置
+            if ubus_adapter.set_tpc_config(clean_json) then
+                ngx.log(ngx.INFO, "TPC config saved via ubus")
+            end
         elseif string.find(clean_json, "group") then
-            -- save_group_config(clean_json)
-            -- Split group config and save to /etc/config/device/edge_report/
-            --先删除所有的edge_report文件
-            os.execute("rm -f /etc/config/device/edge_report/*.json")
-            -- os.execute("rm -f /etc/config/device/template/*.json") -- 不要删除模板文件，这是独立的上传逻辑
-
+            -- 调用 ubus 接口保存上报策略 (内部处理分拆逻辑)
             local data = cjson.decode(clean_json)
             if data and data.group then
-                os.execute("mkdir -p /etc/config/device/edge_report")
-                -- Optional: Clear existing files? For now, we just overwrite/add.
-
-                for _, g in ipairs(data.group) do
-                    if g.name then
-                        local f = io.open("/etc/config/device/edge_report/" .. g.name .. ".json", "w+")
-                        if f then
-                            f:write(cjson.encode(g))
-                            f:close()
-                        end
-                    end
+                if ubus_adapter.set_edge_report_config(data.group) then
+                    ngx.log(ngx.INFO, "Edge report strategy saved via ubus")
                 end
             end
-            notify_core_process("report_strategy")
         end
     elseif string.find(uri, "/upload/template") then
-        -- 3.4 上报模板
-        -- save_file_to_system("/etc/config/device/report_template.json", content)
-
-        os.execute("mkdir -p /etc/config/device/template")
-        -- Content format: Report0:{...}\nReport1:{...}
-        for key, val in string.gmatch(content, "([^:]+):(%b{})") do
-            -- Trim whitespace/newlines from key
-            key = string.match(key, "^%s*(.-)%s*$")
-            if key and key ~= "" then
-                local f = io.open("/etc/config/device/template/" .. key .. ".json", "w+")
-                if f then
-                    f:write(val)
-                    f:close()
-                end
-            end
+        -- 3.4 上报模板 (内部处理拆分逻辑)
+        if ubus_adapter.set_edge_template_config(content) then
+            ngx.log(ngx.INFO, "Report template saved via ubus")
         end
-
-        notify_core_process("report_template")
     elseif string.find(uri, "/upload/conver_csv") then
         -- 4.2 协议转换 CSV
         os.execute("mkdir -p /etc/config/device/edge_access")

@@ -3616,15 +3616,69 @@ local methods = {
             {}
         },
 
-        -- 设置边缘计算上报配置
+        -- 设置边缘计算上报配置 (增强：增加文件拆分持久化)
         set_edge_report_config = {
             function(req, msg)
                 if msg.group then
                     edge_report_config.group = msg.group
+                    -- 将配置持久化到 JSON 文件 (迁移自 entry.lua)
+                    os.execute("rm -f /etc/config/device/edge_report/*.json")
+                    os.execute("mkdir -p /etc/config/device/edge_report")
+                    for _, g in ipairs(edge_report_config.group) do
+                        if g.name then
+                            write_file_content("/etc/config/device/edge_report/" .. g.name .. ".json", cjson.encode(g))
+                        end
+                    end
+                    log_info("Edge report config saved to files")
+                    os.execute("touch /tmp/edge_commit")
+                    reply(req, { result = true })
+                else
+                    reply(req, { result = false, error = "No group data" })
                 end
-                reply(req, { result = true })
             end,
             {}
+        },
+
+        -- 设置边缘计算上报模板配置 (新增：迁移自 entry.lua)
+        set_edge_template_config = {
+            function(req, msg)
+                if msg.content then
+                    os.execute("mkdir -p /etc/config/device/template")
+                    -- 正则解析拆分逻辑
+                    -- Content format: Report0:{...}\nReport1:{...}
+                    for key, val in string.gmatch(msg.content, "([^:]+):(%b{})") do
+                        -- Trim whitespace/newlines from key
+                        key = string.match(key, "^%s*(.-)%s*$")
+                        if key and key ~= "" then
+                            write_file_content("/etc/config/device/template/" .. key .. ".json", val)
+                        end
+                    end
+                    log_info("Edge template config saved to files")
+                    os.execute("touch /tmp/edge_commit")
+                    reply(req, { result = true })
+                else
+                    reply(req, { result = false, error = "No content" })
+                end
+            end,
+            { content = ubus.STRING }
+        },
+
+        -- 设置 TCP 链接配置 (新增：从 entry.lua 迁移)
+        set_tpc_config = {
+            function(req, msg)
+                if msg.content then
+                    if write_file_content("/etc/config/device/tpc.json", msg.content) then
+                        log_info("TPC config saved to tpc.json")
+                        os.execute("touch /tmp/comm_commit")
+                        reply(req, { result = true })
+                    else
+                        reply(req, { result = false, error = "Failed to write file" })
+                    end
+                else
+                    reply(req, { result = false, error = "No content" })
+                end
+            end,
+            { content = ubus.STRING }
         },
 
         -- 获取边缘计算协议转换配置（从 JSON 文件读取）

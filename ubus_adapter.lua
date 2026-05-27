@@ -375,12 +375,6 @@ function _M.get_edge_report_config()
     return config
 end
 
-function _M.set_edge_report_config(data)
-    if data and data.group then
-        edge_report_config.group = data.group
-    end
-    return true
-end
 
 -- 14. Edge Access Config - 协议转换访问配置 (Moved to top)
 
@@ -433,6 +427,21 @@ end
 
 function _M.set_edge_proto_access_csv(content)
     local result = ubus_call("hilink", "set_edge_proto_access_csv", { content = content })
+    return result and result.result
+end
+
+function _M.set_tpc_config(content)
+    local result = ubus_call("hilink", "set_tpc_config", { content = content })
+    return result and result.result
+end
+
+function _M.set_edge_report_config(group)
+    local result = ubus_call("hilink", "set_edge_report_config", { group = group })
+    return result and result.result
+end
+
+function _M.set_edge_template_config(content)
+    local result = ubus_call("hilink", "set_edge_template_config", { content = content })
     return result and result.result
 end
 
