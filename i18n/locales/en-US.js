@@ -76,6 +76,9 @@ export default {
         sn: 'SN',
         systemTime: 'System Time',
         currentNetwork: 'Current Network',
+        sim_external: "External SIM",
+        sim_internal: "Internal SIM",
+        useSim: "Use SIM",
 
         // Ethernet
         ethernet: 'Ethernet',

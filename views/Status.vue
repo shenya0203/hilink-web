@@ -95,6 +95,10 @@
               <td>{{ networkInfo.lte?.sim === '1' ? t('status.sim_ready') : t('status.sim_absent') }}</td>
             </tr>
             <tr>
+              <td class="title">{{ t('status.useSim') }}:</td>
+              <td>{{ networkInfo.lte?.use_sim === 0 ? t('status.sim_external') : t('status.sim_internal') }}</td>
+            </tr>
+            <tr>
               <td class="title">{{ t('status.imei') }}:</td>
               <td>{{ networkInfo.lte?.imei }}</td>
             </tr>

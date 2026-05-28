@@ -77,6 +77,9 @@ export default {
         sn: 'SN',
         systemTime: '系统时间',
         currentNetwork: '当前运行网络',
+        sim_external: "外置SIM卡",
+        sim_internal: "内置SIM卡",
+        useSim: "使用SIM卡",
 
         // 以太网
         ethernet: '以太网',

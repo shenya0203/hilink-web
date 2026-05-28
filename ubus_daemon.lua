@@ -26,10 +26,11 @@ local LED_MODE_ON         = 1
 local LED_MODE_BLINK      = 2
 
 local current_led_mode    = LED_MODE_OFF
-local led_blink_timer     = nil
-local blink_count         = 0     -- 记录当前是第几次闪烁 (0-7, 偶数亮奇数灭)
-local is_led_lit          = false -- 指示灯物理状态
-local work_led_timer      = nil
+local led_mgmt_timer      = nil -- 单一LED管理定时器
+local led_work_tick       = 0   -- 工作指示灯滴答计数 (每4拍=1s翻转一次)
+local led_blink_tick      = 0   -- 网络指示灯闪烁相位 (0-15)
+local led_work_state      = 1   -- 工作指示灯当前状态 (1=亮)
+local sn                  = nil
 
 -- Data Collection Config
 --local WIFI_STA_IFACE = "wlan0"
@@ -77,11 +78,19 @@ local edge_point_configs = {}
 local edge_proto_access_csv = ""
 
 local function log_info(msg)
-    print(string.format("[INFO] %s", msg))
+    local f = io.popen("logger", "w")
+    if f then
+        f:write(string.format("[INFO] %s", tostring(msg)))
+        f:close()
+    end
 end
 
 local function log_error(msg)
-    print(string.format("[ERROR] %s", msg))
+    local f = io.popen("logger", "w")
+    if f then
+        f:write(string.format("[ERROR] %s", tostring(msg)))
+        f:close()
+    end
 end
 
 local function deep_copy(obj)
@@ -119,6 +128,7 @@ local function get_system_mac()
 end
 
 local function get_system_sn()
+    if sn then return sn end
     -- 假设编译好的程序名为 tuple_read，如果在特定目录下请加上路径，例如 "/usr/bin/tuple_read get_dn"
     local handle = io.popen("tuple-read get_dn", "r")
 
@@ -142,6 +152,7 @@ local function get_system_sn()
 
         -- 再次校验是否为空字符串
         if result == "" then return nil end
+        sn = result
 
         return result
     end
@@ -254,38 +265,43 @@ local function set_led_brightness(val)
     if f then
         f:write(tostring(val))
         f:close()
-        is_led_lit = (val == 1)
     end
 end
 
--- 闪烁定时器回调函数
-local function led_blink_cb()
-    if current_led_mode ~= LED_MODE_BLINK then return end
+-- 统一LED管理定时器回调：每250ms执行一次，同时管理工作指示灯和网络指示灯
+local function led_mgmt_cb()
+    -- 工作指示灯：每4拍(1s)翻转一次
+    led_work_tick = led_work_tick + 1
+    if led_work_tick >= 4 then
+        led_work_tick = 0
+        led_work_state = 1 - led_work_state
+        os.execute(string.format("echo %d > /sys/class/leds/system:work:status/brightness", led_work_state))
+    end
 
-    if blink_count < 8 then
-        -- 在 4 次完整闪烁周期内 (8 次切换)
-        if is_led_lit then
-            set_led_brightness(0)
+    -- 网络指示灯闪烁
+    if current_led_mode == LED_MODE_BLINK then
+        local phase = led_blink_tick
+        if phase < 8 then
+            -- 闪烁阶段：每拍翻转一次
+            if phase % 2 == 0 then
+                set_led_brightness(1)
+            else
+                set_led_brightness(0)
+            end
         else
-            set_led_brightness(1)
+            -- 暂停阶段：保持熄灭
+            if phase == 8 then
+                set_led_brightness(0)
+            end
         end
-        blink_count = blink_count + 1
-        -- 250ms 后进行下一次切换
-        led_blink_timer:set(250)
-    else
-        -- 闪烁 4 次完成，熄灭并进入 2s 延时
-        set_led_brightness(0)
-        blink_count = 0
-        -- 2000ms 后重新开始闪烁循环
-        led_blink_timer:set(2000)
+        led_blink_tick = (led_blink_tick + 1) % 16
     end
+
+    led_mgmt_timer:set(250)
 end
 
--- 根据网络状态更新 LED 模式
+-- 根据网络状态更新 LED 模式（无定时器操作，只改变模式变量和立即设置亮度）
 local function update_net_led_logic()
-    log_info("Updating Network LED Logic...")
-
-    -- 1. 获取 UCI 策略 (参考原有逻辑)
     local handle = io.popen("uci -q get mwan3.default_rule.use_policy", "r")
     local policy = nil
     if handle then
@@ -293,63 +309,36 @@ local function update_net_led_logic()
         handle:close()
         if res then policy = string.gsub(res, "^%s*(.-)%s*$", "%1") end
     end
-    log_info("Current Policy: " .. (policy or "nil"))
 
-    -- 2. 获取接口在线状态
     local wan_online = check_is_online("wan")
     local wifi_online = check_is_online("wwan")
     local lte_online = check_is_online("lte")
-
-    log_info("wan_online: " .. (wan_online and "online" or "offline"))
-    log_info("wifi_online: " .. (wifi_online and "online" or "offline"))
-    log_info("lte_online: " .. (lte_online and "online" or "offline"))
-
     local new_mode = LED_MODE_OFF
 
-    -- 规则判定
     if policy == "policy_lte_pri" then
-        -- LTE 优先模式
         if lte_online then
             new_mode = LED_MODE_BLINK
         elseif wan_online or wifi_online then
-            -- LTE 断开但 WAN/WiFi 通，按您的逻辑“只要lte优先，lte在线就闪”，
-            -- 那如果 LTE 不在线但 WAN 在线呢？通常回落到常亮更合理。
             new_mode = LED_MODE_ON
         end
     else
-        -- 默认或 policy_ew_pri (以太网优先)
         if wan_online or wifi_online then
             new_mode = LED_MODE_ON
         elseif lte_online then
-            -- 即使以太网优先，如果只有 4G 在线，通常也应显示状态
-            -- 此时由于处于以太网策略，建议常亮或根据需求定义（暂定常亮）
             new_mode = LED_MODE_BLINK
         end
     end
 
-    -- 3. 应用模式切换
     if new_mode == current_led_mode then return end
-
-    log_info("LED Mode Change: " .. current_led_mode .. " -> " .. new_mode)
     current_led_mode = new_mode
-
-    -- 停止旧定时器
-    if led_blink_timer then
-        led_blink_timer:cancel()
-    end
 
     if current_led_mode == LED_MODE_OFF then
         set_led_brightness(0)
     elseif current_led_mode == LED_MODE_ON then
         set_led_brightness(1)
     elseif current_led_mode == LED_MODE_BLINK then
-        blink_count = 0
-        set_led_brightness(1) -- 从点亮开始
-        blink_count = 1
-        if not led_blink_timer then
-            led_blink_timer = uloop.timer(led_blink_cb)
-        end
-        led_blink_timer:set(250)
+        set_led_brightness(1)
+        led_blink_tick = 0
     end
 end
 
@@ -550,7 +539,7 @@ local function load_system_config_from_uci()
             end
         end
     end)
-    log_info("system_config: " .. cjson.encode(system_conf))
+    --log_info("system_config: " .. cjson.encode(system_conf))
 
     return system_conf
 end
@@ -572,20 +561,20 @@ local function load_nginx_config_from_uci()
     local section = cursor:get_all("nginx", "global")
 
     if section then
-        log_info("Found nginx global section")
+        --log_info("Found nginx global section")
 
         -- 更新配置，如果uci里有值就用uci的，否则保持默认
         if section.uci_port then nginx_conf.port = tonumber(section.uci_port) end
         if section.uci_user then nginx_conf.user = section.uci_user end
         if section.uci_pass then nginx_conf.pass = section.uci_pass end
 
-        log_info("uci_port: " .. (section.uci_port or "nil"))
-        log_info("uci_user: " .. (section.uci_user or "nil"))
+        --log_info("uci_port: " .. (section.uci_port or "nil"))
+        --log_info("uci_user: " .. (section.uci_user or "nil"))
     else
         log_info("Nginx global section not found!")
     end
 
-    log_info("nginx config :" .. cjson.encode(nginx_conf))
+    --log_info("nginx config :" .. cjson.encode(nginx_conf))
 
     return nginx_conf
 end
@@ -799,7 +788,7 @@ local function load_comm_tunnel_config_from_uci()
         table.insert(config.MQTT, mqtt_item)
     end)
 
-    log_info("GET CLOUD")
+    --log_info("GET CLOUD")
 
     -- 读取CLOUD配置
     cursor:foreach("comm_tunnel", "CLOUD", function(section)
@@ -980,7 +969,7 @@ local network_status = {
         iccid_0 = "",
         imsi_0 = "",
         imei = "",
-        csq = 21,
+        csq = 99,
         mode = "4G",
         oper = 1,
         sim = 1,
@@ -990,6 +979,7 @@ local network_status = {
         lte_netmask = "",
         lte_dns = "",
         lte_sdns = "",
+        use_sim = 0,
         internal_forward_disable = 1,
         external_forward_disable = 0
     }
@@ -1002,17 +992,17 @@ local network_config = {
     keepalive_addr = { "223.5.5.5", "8.8.8.8" },
     eth0 = {
         ip_mode = 0,
-        sip = "192.168.2.177",
-        gip = "192.168.2.1",
-        mip = "255.255.255.0",
+        sip = "",
+        gip = "",
+        mip = "",
         dns_mode = 0,
-        dns_ip = { "223.5.5.5", "223.6.6.6" }
+        dns_ip = { "", "" }
     },
     cell = {
         sim_switch = 2,
         apn = { addr = "", user = "", pswd = "", auth = 0 },
         dns_mode = 1,
-        dns_ip = { "202.96.128.86", "202.96.134.133" }
+        dns_ip = { "", "" }
     }
 }
 
@@ -1754,16 +1744,16 @@ end
 -- 2. 辅助函数：启动时同步 Nginx 真实配置 (可选，但推荐)
 -- ==========================================================
 local function sync_nginx_settings()
-    log_info("sync setting")
+    --log_info("sync setting")
     -- Load initial config from UCI to memory
     local sys_conf = load_system_config_from_uci()
     local nginx_conf = load_nginx_config_from_uci()
     local timing_reset_conf = load_timing_reset_config_from_uci()
     local loaded_config = load_comm_tunnel_config_from_uci()
-    log_info("loaded comm tunnel config: " .. cjson.encode(loaded_config))
+    --log_info("loaded comm tunnel config: " .. cjson.encode(loaded_config))
     if loaded_config and (#loaded_config.SOCK > 0 or #loaded_config.MQTT > 0 or loaded_config.CLOUD) then
         comm_tunnel_config = loaded_config
-        log_info("loaded comm tunnel config: " .. comm_tunnel_config.SOCK[1].enable)
+        --log_info("loaded comm tunnel config: " .. comm_tunnel_config.SOCK[1].enable)
         comm_tunnel_config_loaded = true
     end
 
@@ -2229,11 +2219,6 @@ local function set_network_config_values(args)
     local lte_external_forward_disable = args["n_cell.external_forward_disable"] and
         tonumber(args["n_cell.external_forward_disable"])
 
-    log_info("11111111111111111111111111111111")
-    log_info("lte_internal_forward_disable = " .. lte_internal_forward_disable)
-    log_info("lte_external_forward_disable = " .. lte_external_forward_disable)
-    log_info("22222222222222222222222222222222")
-
     if lte_internal_forward_disable ~= nil then
         cursor:set("network", "lte", "lte_internal_forward_disable", lte_internal_forward_disable)
         log_info("Set network.lte.lte_internal_forward_disable = " .. lte_internal_forward_disable)
@@ -2364,6 +2349,7 @@ local function set_network_config_values(args)
             local ignore = (dhcp_enable == 1) and "0" or "1"
             cursor:set("dhcp", "lan", "ignore", ignore)
             log_info("Set dhcp.lan.ignore = " .. ignore)
+            os.execute("touch /tmp/dhcp_restart")
         end
 
         -- DHCP 租期设置
@@ -2371,6 +2357,7 @@ local function set_network_config_values(args)
             local leasetime = tostring(dhcp_lease) .. "h"
             cursor:set("dhcp", "lan", "leasetime", leasetime)
             log_info("Set dhcp.lan.leasetime = " .. leasetime)
+            os.execute("touch /tmp/dhcp_restart")
         end
 
         -- 计算 DHCP start 和 limit
@@ -2380,6 +2367,7 @@ local function set_network_config_values(args)
                 cursor:set("dhcp", "lan", "start", tostring(start_offset))
                 cursor:set("dhcp", "lan", "limit", tostring(limit))
                 log_info("Set dhcp.lan.start = " .. start_offset .. ", limit = " .. limit)
+                os.execute("touch /tmp/dhcp_restart")
             end
         end
     end
@@ -2480,7 +2468,7 @@ local function set_network_config_values(args)
 
     if dhcp_enable ~= nil or dhcp_start_ip or dhcp_end_ip or dhcp_lease then
         cursor:commit("dhcp")
-        os.execute("touch /tmp/network_commit")
+        os.execute("touch /tmp/dhcp_restart")
         log_info("Committed dhcp configuration")
     end
 
@@ -2737,17 +2725,27 @@ local function collect_network_status()
     net_status.lte.lte_ip = ""
 
     local modem_info_str = read_file_content("/tmp/modem_info.json")
+    local modem_status = read_file_content("/tmp/modem_status.json")
+
+    local use_sim = 0 --默认外置
+    if modem_status then
+        local ok, status = pcall(cjson.decode, modem_status)
+        if ok then
+            use_sim = status.sim_source == "external" and 0 or 1
+        end
+    end
 
     if modem_info_str then
-        log_info("modem_info_str: " .. modem_info_str)
+        --log_info("modem_info_str: " .. modem_info_str)
         local ok, info = pcall(cjson.decode, modem_info_str)
 
         if ok then
-            log_info("info: " .. cjson.encode(info))
+            --log_info("info: " .. cjson.encode(info))
             local is_ready = (info.sim_status == "ready")
             local reg_status = (info.status:find("Registered"))
             net_status.lte.sim = info.sim_status == "ready" and "1" or "0"
             net_status.lte.imei = info.imei
+            net_status.lte.use_sim = use_sim
 
 
             if info.local_ip ~= "0.0.0.0" then
@@ -2772,7 +2770,7 @@ local function collect_network_status()
 
             --net_status.lte.lte_sta = info.connection_status
 
-            log_info("net_status: " .. cjson.encode(net_status))
+            --log_info("net_status: " .. cjson.encode(net_status))
 
             if is_ready and info.signal then
                 local dbm = tonumber(string.match(info.signal, "([-%d]+)"))
@@ -2981,7 +2979,7 @@ local function collect_network_status()
 
     net_status.wifi_ap.clients = clients
 
-    log_info("finally netdev : " .. net_status.netdev)
+    --log_info("finally netdev : " .. net_status.netdev)
 
     return net_status
 end
@@ -3080,7 +3078,10 @@ local methods = {
         -- 更新网络指示灯状态
         update_net_led = {
             function(req, msg)
-                update_net_led_logic()
+                local ok, e = pcall(update_net_led_logic)
+                if not ok then
+                    log_error("update_net_led_logic failed: " .. tostring(e))
+                end
                 reply(req, { status = "ok" })
             end,
             {}
@@ -3407,7 +3408,7 @@ local methods = {
         get_misc_config = {
             function(req, msg)
                 -- Refresh from UCI to ensure we have latest values (e.g. if changed by other means)
-                log_info("get misc config")
+                --log_info("get misc config")
                 sync_nginx_settings()
                 reply(req, deep_copy(misc_config))
             end,
@@ -3853,13 +3854,9 @@ local methods = {
 
                 -- 构建升级命令 (后台静默执行)
                 -- 1. 停止所有 Lua 定时器（防止在后台进程运行时继续干扰系统）
-                if work_led_timer then
-                    work_led_timer:cancel()
-                    work_led_timer = nil
-                end
-                if led_blink_timer then
-                    led_blink_timer:cancel()
-                    led_blink_timer = nil
+                if led_mgmt_timer then
+                    led_mgmt_timer:cancel()
+                    led_mgmt_timer = nil
                 end
 
                 -- 2. 拼接完整的系统清理与升级命令
@@ -3913,6 +3910,7 @@ local methods = {
                     (os.execute("test -f /tmp/network_commit") == 0) or
                     (os.execute("test -f /tmp/firewall_commit") == 0)
                 local need_nginx = (os.execute("test -f /tmp/nginx_commit") == 0)
+                local need_dhcp = (os.execute("test -f /tmp/dhcp_restart") == 0)
 
 
                 local has_any_commit = need_network or need_nginx or
@@ -3941,7 +3939,8 @@ local methods = {
                         table.insert(cmd_parts, "sleep 1")
                         table.insert(cmd_parts, "modprobe mt7603e")
                     end
-
+                    --关闭网络灯
+                    current_led_mode = LED_MODE_OFF
                     table.insert(cmd_parts, "/etc/init.d/network restart")
                     table.insert(cmd_parts, "/etc/init.d/modem-monitor restart")
                 end
@@ -3956,6 +3955,10 @@ local methods = {
                 if need_network or need_nginx then
                     table.insert(cmd_parts, "/etc/init.d/firewall restart")
                     table.insert(cmd_parts, "/etc/init.d/nginx_hlk restart")
+                end
+
+                if need_dhcp then
+                    table.insert(cmd_parts, "/etc/init.d/dnsmasq restart")
                 end
 
                 -- 清理所有标记文件
@@ -4242,6 +4245,7 @@ local function main_service()
 
     log_info("=========================================")
     log_info("Hilink ubus daemon started successfully")
+    --[[
     log_info("Object: hilink")
     log_info("=========================================")
     log_info("Available methods:")
@@ -4251,37 +4255,36 @@ local function main_service()
         end
     end
     log_info("=========================================")
+    ]] --
 
     -- ==========================================================
-    -- WORK 状态指示灯 (GPIO4) 闪烁逻辑
+    -- LED 指示灯控制：使用单一250ms定时器管理所有LED
+    -- （避免旧方案中 cancel/recreate/re-arm 触发 uloop C 库异常）
     -- ==========================================================
-    local led_state = 0
-
-    local function toggle_work_led()
-        led_state = (led_state == 0) and 1 or 0
-        os.execute(string.format("echo %d > /sys/class/leds/system:work:status/brightness", led_state))
-        work_led_timer:set(1000) -- 每隔1000ms尝试翻转状态
-    end
-
-    -- 初始状态置为灭
     os.execute("echo none > /sys/class/leds/system:work:status/trigger")
     os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
-    -- 启动定时器，1s后开始第一次翻转
-    work_led_timer = uloop.timer(toggle_work_led)
-    work_led_timer:set(1000)
+    led_mgmt_timer = uloop.timer(led_mgmt_cb)
+    led_mgmt_timer:set(250)
 
     os.execute("/etc/init.d/nginx_hlk restart")
 
-    -- 初始化网络状态灯
     update_net_led_logic()
 
     uloop.run()
 end
-
 -- 执行受保护的主函数
-local status, err = xpcall(main_service, function(msg)
-    return debug.traceback(msg)
-end)
+local function safe_traceback(msg)
+    local result = tostring(msg)
+    if debug and type(debug.traceback) == "function" then
+        local ok, trace = pcall(debug.traceback, "", 2)
+        if ok and type(trace) == "string" and trace ~= "" then
+            result = result .. "\n" .. trace
+        end
+    end
+    return result
+end
+
+local status, err = xpcall(main_service, safe_traceback)
 
 if not status then
     log_info("=========================================")
