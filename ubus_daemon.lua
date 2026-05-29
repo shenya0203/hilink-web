@@ -47,15 +47,12 @@ product_name              = "HLK-IR01"
 local uci_lib             = require("uci")
 
 -- UCI Helper
+-- UCI Helper
 local function get_uci(key)
-    local f = io.popen("uci get " .. key .. " 2>/dev/null")
-    if f then
-        local content = f:read("*a")
-        f:close()
-        if content and content ~= "" then
-            local res = string.gsub(content, "\n", "")
-            if res ~= "" then return res end
-        end
+    local cursor = uci_lib.cursor()
+    local config, section, option = string.match(key, "([^%.]+)%.([^%.]+)%.([^%.]+)")
+    if config and section and option then
+        return cursor:get(config, section, option)
     end
     return nil
 end
@@ -67,10 +64,17 @@ local uart_config_loaded = false
 local comm_tunnel_config_loaded = false
 
 local function get_runtime()
-    local f = io.popen("cut -d' ' -f1 /proc/uptime")
-    local uptime = f:read("*all")
-    f:close()
-    return tonumber(string.format("%.0f", tonumber(uptime))) --转成整数
+    local f = io.open("/proc/uptime", "r")
+    if f then
+        local content = f:read("*l")
+        f:close()
+        local uptime = string.match(content, "^([%d%.]+)")
+        local uptime_val = tonumber(uptime)
+        if uptime_val then
+            return math.floor(uptime_val)
+        end
+    end
+    return 0
 end
 
 -- 边缘计算点位配置缓存
@@ -944,7 +948,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.0.29",
+    soft_ver = "V1.0.30",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -1444,25 +1448,20 @@ end
 local function get_communication_status(link)
     -- 假设状态文件存放在 /tmp/ 目录下，请根据实际情况修改
     -- 先判断app是否存在
+    -- POSIX 规范检查进程是否存在开销较大，且 procd 有守护机制
+    -- 我们选择相信状态文件，或在以后使用 ubus call service list 检查
+    --[[
     if link == "CLOUD" then
-        --判断cloud_app 进程是否存在
         local ret = os.execute("pidof cloud_app >/dev/null 2>&1")
-        if ret ~= 0 then
-            return 0
-        end
+        if ret ~= 0 then return 0 end
     elseif link == "MQTT1" or link == "MQTT2" then
-        --判断mqtt_app 进程是否存在
         local ret = os.execute("pidof mqtt_app >/dev/null 2>&1")
-        if ret ~= 0 then
-            return 0
-        end
+        if ret ~= 0 then return 0 end
     elseif link == "SOCKA" or link == "SOCKB" then
-        --判断sock_app 进程是否存在
         local ret = os.execute("pidof socket >/dev/null 2>&1")
-        if ret ~= 0 then
-            return 0
-        end
+        if ret ~= 0 then return 0 end
     end
+    ]] --
 
     local status_dir = "/tmp/"
 
@@ -1624,7 +1623,7 @@ local function set_comm_tunnel_config(args)
                 end
                 target[parts[#parts]] = tonumber(v) or v
             end
-            log_info("SOCK[" .. (index - 1) .. "]." .. key .. " = " .. tostring(v))
+            --log_info("SOCK[" .. (index - 1) .. "]." .. key .. " = " .. tostring(v))
         end
 
         -- 处理 MQTT 配置
@@ -1645,15 +1644,15 @@ local function set_comm_tunnel_config(args)
                 end
                 target[parts[#parts]] = tonumber(v) or v
             end
-            log_info("MQTT[" .. (index - 1) .. "]." .. key .. " = " .. tostring(v))
+            --log_info("MQTT[" .. (index - 1) .. "]." .. key .. " = " .. tostring(v))
         end
 
         -- 处理 CLOUD 配置
-        log_info("cloud_key: " .. k)
+        --log_info("cloud_key: " .. k)
         local cloud_key = string.match(k, "[ns]_CLOUD%.(.+)")
         if cloud_key then
             comm_tunnel_config.CLOUD[cloud_key] = tonumber(v) or v
-            log_info("CLOUD." .. cloud_key .. " = " .. tostring(v))
+            --log_info("CLOUD." .. cloud_key .. " = " .. tostring(v))
         end
     end
 
@@ -2611,8 +2610,14 @@ local function parse_arp_table()
     return arp
 end
 
--- 根据模式 (ap 或 sta) 动态解析 iwinfo 输出获取物理接口名称
+-- 根据模式 (ap 或 sta) 动态解析 iwinfo 输出获取物理接口名称 (增加 30s 缓存)
+local wifi_iface_cache = { ap = nil, sta = nil, last_update = 0 }
 local function get_wifi_ifname_by_mode(target_type)
+    local now = os.time()
+    if wifi_iface_cache[target_type] and (now - wifi_iface_cache.last_update < 60) then
+        return wifi_iface_cache[target_type]
+    end
+
     local target_mode = (target_type == "ap") and "Master" or "Client"
     local f = io.popen("iwinfo 2>/dev/null")
     if not f then return nil end
@@ -2622,7 +2627,6 @@ local function get_wifi_ifname_by_mode(target_type)
 
     local current_iface = nil
     for line in string.gmatch(content, "[^\n]+") do
-        -- 匹配行首接口，例如 "wlan0" 或 "wlan0-1"
         local iface = string.match(line, "^([%w%-%.]+)%s+ESSID:")
         if iface then
             current_iface = iface
@@ -2631,6 +2635,8 @@ local function get_wifi_ifname_by_mode(target_type)
         local mode = string.match(line, "Mode: (%a+)")
         if mode and current_iface then
             if mode == target_mode then
+                wifi_iface_cache[target_type] = current_iface
+                wifi_iface_cache.last_update = now
                 return current_iface
             end
         end
@@ -3083,6 +3089,40 @@ local methods = {
                     log_error("update_net_led_logic failed: " .. tostring(e))
                 end
                 reply(req, { status = "ok" })
+            end,
+            {}
+        },
+
+        -- 首页综合数据接口：一次请求获取 status 和 network，显著降 CPU
+        get_homepage_data = {
+            function(req, msg)
+                local data = {}
+                -- 1. 基础状态 (status)
+                local status_copy = deep_copy(status_data)
+                status_copy.systime = os.time()
+                status_copy.runtime = get_runtime() * 1000
+                status_copy.mac = get_system_mac()
+                status_copy.socketa_sta = get_communication_status("SOCKA")
+                status_copy.socketa_enable = get_communication_enable("SOCKA")
+                status_copy.socketb_sta = get_communication_status("SOCKB")
+                status_copy.socketb_enable = get_communication_enable("SOCKB")
+                status_copy.mqtt1_sta = get_communication_status("MQTT1")
+                status_copy.mqtt1_enable = get_communication_enable("MQTT1")
+                status_copy.mqtt2_sta = get_communication_status("MQTT2")
+                status_copy.mqtt2_enable = get_communication_enable("MQTT2")
+                status_copy.cloud_sta = get_communication_status("CLOUD")
+                status_copy.cloud_enable = get_communication_enable("CLOUD")
+
+                data.status = status_copy
+
+                -- 2. 网络详细状态 (network)
+                data.network = collect_network_status()
+
+                -- 3. 杂项配置 (misc)
+                sync_nginx_settings()
+                data.misc = deep_copy(misc_config)
+
+                reply(req, data)
             end,
             {}
         },

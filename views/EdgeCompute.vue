@@ -2628,7 +2628,10 @@ const importCsv = async () => {
     
     alert(t('edge.importSuccess'))
     selectedCsvFile.value = null
-    await loadData()
+    // 增加微小延迟确保后端处理完成后再加载，规避数据未同步风险
+    setTimeout(async () => {
+      await loadData()
+    }, 500)
   } catch (err) {
     console.error('导入失败:', err)
     alert(t('edge.importFailed') + ': ' + (err.response?.data?.msg || err.message))
@@ -3938,14 +3941,15 @@ const loadData = async () => {
     loading.value = true
     error.value = null
     
-    // 并行获取所有数据
+    // 并行获取所有数据，增加时间戳参数 _t 以规避浏览器缓存
+    const t = Date.now()
     const [edgeRes, edgeFileRes, edgeReportRes, edgeAccessRes, edgeLinkCtrlRes, edgeProtoAccessRes] = await Promise.all([
-      apiClient.get('/download_nv.cgi', { params: { name: 'edge' } }),
-      apiClient.get('/download_file.cgi', { params: { name: 'edge' } }),
-      apiClient.get('/download_nv.cgi', { params: { name: 'edge_report' } }),
-      apiClient.get('/download_nv.cgi', { params: { name: 'edge_access' } }),
-      apiClient.get('/download_nv.cgi', { params: { name: 'edge_link_ctrl' } }),
-      apiClient.get('/download_file.cgi', { params: { name: 'edge_proto_access' } })
+      apiClient.get('/download_nv.cgi', { params: { name: 'edge', _t: t } }),
+      apiClient.get('/download_file.cgi', { params: { name: 'edge', _t: t } }),
+      apiClient.get('/download_nv.cgi', { params: { name: 'edge_report', _t: t } }),
+      apiClient.get('/download_nv.cgi', { params: { name: 'edge_access', _t: t } }),
+      apiClient.get('/download_nv.cgi', { params: { name: 'edge_link_ctrl', _t: t } }),
+      apiClient.get('/download_file.cgi', { params: { name: 'edge_proto_access', _t: t } })
     ])
     
     console.log('=== 边缘计算页面数据加载 ===')
@@ -4067,11 +4071,9 @@ const loadData = async () => {
     // 解析CSV文件内容
     if (edgeFileContent.value) {
       const parsedSlaves = parseCsvContent(edgeFileContent.value)
-      if (parsedSlaves.length > 0) {
-        // 保留系统从机，添加解析的从机
-        const systemSlave = slaveList.value[0]
-        slaveList.value = [systemSlave, ...parsedSlaves]
-      }
+      // 移除 length > 0 的判断。无论解析结果是否为空（如导入空表时），都应重置 slaveList 以实现数据同步
+      const systemSlave = slaveList.value[0]
+      slaveList.value = [systemSlave, ...parsedSlaves]
     }
 
     if (edgeProtoAccessContent) {

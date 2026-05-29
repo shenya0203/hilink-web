@@ -6,12 +6,16 @@ local INTERFACE = "lte"
 local INFO_FILE = "/tmp/modem_info.json"
 local STATUS_FILE = "/tmp/modem_status.json"
 local BLOCK_FILE = "/tmp/internal_sim_blocked.json"
-local CHECK_INTERVAL = 6
+local CHECK_INTERVAL = 15
 local FAIL_THRESHOLD = 10   -- 长周期重拨阈值
 local SWITCH_FAIL_LIMIT = 3 -- 模式3自动切卡阈值
 
 -- 全局串口句柄
 local G_SERIAL_FD = nil
+
+-- 串口重连最大重试次数
+local SERIAL_RETRY_MAX = 15
+local SERIAL_RETRY_INTERVAL = 2
 
 -- --- 全局状态 ---
 -- --- 全局状态 ---
@@ -26,6 +30,7 @@ local state = {
     is_internal_switching = false,
     session_id = os.time() % 100000, -- 初始随时间戳，后递增
     internal_blocked = false,        -- 流量超限标记
+    is_internal_flight_mode = false, -- 内置卡飞行模式标记--
     slots = {
         ["0"] = { iccid = "N/A", imsi = "N/A" },
         ["1"] = { iccid = "N/A", imsi = "N/A" }
@@ -48,6 +53,7 @@ local function log(msg, key)
         if last_logs[key] == msg then return end
         last_logs[key] = msg
     end
+
     os.execute(string.format("logger -t 'Modem-Monitor-Lua' %q", tostring(msg)))
 end
 
@@ -93,7 +99,6 @@ end
 local function check_internal_block()
     local f = io.open(BLOCK_FILE, "r")
     if not f then
-        log("No block file found")
         state.internal_blocked = false
         return
     end
@@ -115,6 +120,70 @@ local function check_internal_block()
     end
 end
 
+-- --- 模组重启后重新初始化串口 ---
+-- 1. 先尝试重连原来的 DEVICE（最多 SERIAL_RETRY_MAX 次）
+-- 2. 失败则扫描所有 ttyUSB* 自动探测
+-- 3. 找到后更新 DEVICE 全局变量
+local function reinit_serial_port()
+    if G_SERIAL_FD then
+        pcall(G_SERIAL_FD.close, G_SERIAL_FD)
+        G_SERIAL_FD = nil
+    end
+
+    log("Serial: waiting for modem USB re-enumeration...")
+    os.execute("sleep 3")
+
+    for retry = 1, SERIAL_RETRY_MAX do
+        local try_dev = "/dev/ttyUSB" .. retry
+        -- 必须先 stty 设置 min 0 time 1，否则阻塞读会卡死
+        os.execute(string.format("stty -F %s 115200 raw -echo min 0 time 1 2>/dev/null", try_dev))
+        local f = io.open(try_dev, "r+")
+        if f then
+            f:setvbuf("no")
+            -- Drain buffer：用 chunk 读取代替逐字节
+            local drain_end = os.time() + 1
+            while os.time() < drain_end do
+                local chunk = f:read(4096)
+                if not chunk or chunk == "" then break end
+            end
+            f:write("AT\r\n")
+            f:flush()
+            local start = os.time()
+            local resp = ""
+            while os.difftime(os.time(), start) < 2 do
+                local char = f:read(1)
+                if char then
+                    resp = resp .. char
+                    if resp:find("OK") then
+                        f:close()
+                        G_SERIAL_FD = io.open(try_dev, "r+")
+                        G_SERIAL_FD:setvbuf("no")
+                        log(string.format("Serial: reconnected on %s (retry %d)", try_dev, retry))
+                        return true
+                    end
+                end
+            end
+            f:close()
+        else
+            log(string.format("Serial: %s not available (retry %d)", try_dev, retry))
+        end
+    end
+
+    log(string.format("Serial: %s not available after %d retries, scanning all ttyUSB*...",
+        DEVICE, SERIAL_RETRY_MAX))
+    local found = find_modem_serial()
+    if found then
+        log(string.format("Serial: found modem on %s (was %s), updating DEVICE", found, DEVICE))
+        DEVICE = found
+        G_SERIAL_FD = io.open(DEVICE, "r+")
+        G_SERIAL_FD:setvbuf("no")
+        return true
+    end
+
+    log("Serial *** CRITICAL: modem serial port not found after reboot!")
+    return false
+end
+
 -- --- 串口初始化 ---
 local function init_serial_port()
     log("Initializing Serial Port " .. DEVICE .. "...")
@@ -122,34 +191,83 @@ local function init_serial_port()
     G_SERIAL_FD = io.open(DEVICE, "r+")
     if not G_SERIAL_FD then
         log("CRITICAL ERROR: Failed to open serial device.")
+        if reinit_serial_port() then
+            log("Serial port re-initialized successfully.")
+            return
+        end
         os.exit(1)
     end
     G_SERIAL_FD:setvbuf("no")
 end
 
--- --- AT 指令交互 ---
+-- --- 自动探测 4G 模组的 AT 串口 ---
+-- 遍历 /dev/ttyUSB0~10，向每个设备发送 AT 指令，
+-- 能返回 "OK" 的就是模组的 AT 串口
+local function find_modem_serial()
+    for i = 0, 10 do
+        local path = "/dev/ttyUSB" .. i
+        os.execute(string.format("stty -F %s 115200 raw -echo min 0 time 1 2>/dev/null", path))
+        local f = io.open(path, "r+")
+        if f then
+            f:setvbuf("no")
+            local drain_end = os.time() + 1
+            while os.time() < drain_end do
+                local chunk = f:read(4096)
+                if not chunk or chunk == "" then break end
+            end
+            f:write("AT\r\n")
+            f:flush()
+            local start = os.time()
+            while os.difftime(os.time(), start) < 2 do
+                local line = f:read("*l")
+                if line then
+                    if line:find("OK") then
+                        f:close()
+                        return path
+                    end
+                    if line:find("ERROR") then break end
+                end
+            end
+            f:close()
+        end
+    end
+    return nil
+end
+
+
+
+-- --- 串口 Drain：用大块读取代替逐字节，减少 Lua 调用次数 ---
+local function drain_serial()
+    local drain_end = os.time() + 1
+    while os.time() < drain_end do
+        local chunk = G_SERIAL_FD:read(4096)
+        if not chunk or chunk == "" then break end
+    end
+end
+
+-- --- AT 指令交互（优化版） ---
+-- 使用 read("*l") 行读取替代 read(1) 逐字节，大幅减少 Lua 调用和 GC 压力
 local function send_at(cmd, timeout_sec)
     timeout_sec = timeout_sec or 3
     if not G_SERIAL_FD then return nil end
 
-    -- Drain buffer
-    while G_SERIAL_FD:read(1) do end
+    drain_serial()
 
     G_SERIAL_FD:write(cmd .. "\r\n")
     G_SERIAL_FD:flush()
 
-    local response = ""
+    local lines = {}
     local start_t = os.time()
     while os.difftime(os.time(), start_t) < timeout_sec do
-        local char = G_SERIAL_FD:read(1)
-        if char then
-            response = response .. char
-            if response:find("OK") or response:find("ERROR") then break end
+        local line = G_SERIAL_FD:read("*l")
+        if line then
+            table.insert(lines, line)
+            if line:find("OK") or line:find("ERROR") then break end
         end
     end
 
     local results = {}
-    for line in response:gmatch("[^\r\n]+") do
+    for _, line in ipairs(lines) do
         if not line:find(cmd, 1, true) then
             line = line:gsub("^%s*(.-)%s*$", "%1")
             if #line > 0 then table.insert(results, line) end
@@ -163,8 +281,44 @@ local function send_at(cmd, timeout_sec)
     else
         log_msg = string.format("AT >> %s | << %s", cmd, output)
     end
-    --log(log_msg, cmd)
+    log(log_msg, cmd)
     return output
+end
+
+-- --- 合并 AT 命令交互 ---
+-- 发送 AT+CMD1;+CMD2;+CMD3 并逐行返回所有响应结果
+-- 返回值: 行数组（已过滤回显行和 OK/ERROR）
+local function send_at_combined(cmd, timeout_sec)
+    timeout_sec = timeout_sec or 2
+    if not G_SERIAL_FD then return nil end
+
+    drain_serial()
+
+    G_SERIAL_FD:write(cmd .. "\r\n")
+    G_SERIAL_FD:flush()
+
+    local lines = {}
+    local start_t = os.time()
+    while os.difftime(os.time(), start_t) < timeout_sec do
+        local line = G_SERIAL_FD:read("*l")
+        if line then
+            table.insert(lines, line)
+            if line:find("OK") or line:find("ERROR") then
+                break
+            end
+        end
+    end
+
+    local results = {}
+    for _, line in ipairs(lines) do
+        if not line:find(cmd, 1, true) and not line:find("^OK$") and not line:find("^ERROR") then
+            line = line:gsub("^%s*(.-)%s*$", "%1")
+            if #line > 0 then table.insert(results, line) end
+        end
+    end
+    log(string.format("AT >> %s | << %d lines", cmd, #results), cmd)
+
+    return results
 end
 
 -- --- 硬件特性同步 ---
@@ -198,35 +352,37 @@ end
 
 -- --- 执行卡槽切换 ---
 local function perform_slot_switch(target)
+    local resp
     log(string.format("!!! TRIGGER: Software Switch to SIM%d !!!", target))
     os.execute(string.format("ubus call network.interface.%s down", INTERFACE))
     state.is_internal_switching = true
-    send_at("AT+CFUN=0")
+    resp = send_at("AT+CFUN=0")
     os.execute("sleep 1")
-    send_at("AT+SIMCROSS=" .. target)
-    os.execute("sleep 1")
-    send_at("AT+CFUN=1")
+    resp = send_at("AT+SIMCROSS=" .. target)
+    os.execute("echo 1 > /sys/class/net/eth1/reset_statistics")
+    resp = send_at("AT+CFUN=1")
     state.net_offline_count = 0
     state.fail_count = 0
     state.session_id = state.session_id + 1 -- 会话ID递增
-    os.execute("sleep 5")
+    os.execute("sleep 1")
     os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
+    local resp_slot = send_at("AT+SIMCROSS?")
+    state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
 end
 
 -- --- 采集指定卡槽的元数据 (ICCID/IMSI) ---
 local function collect_slot_metadata(slot_id)
     if not slot_id or slot_id == -1 then return end
     local sid_str = tostring(slot_id)
-
-    -- ICCID
-    local iccid_resp = send_at("AT+ICCID")
-    local iccid = iccid_resp and iccid_resp:match(":%s*([%dA-Z]+)")
-    if iccid then state.slots[sid_str].iccid = iccid end
-
-    -- IMSI (CIMI)
-    local imsi_resp = send_at("AT+CIMI")
-    local imsi = imsi_resp and imsi_resp:match("%d+")
-    if imsi then state.slots[sid_str].imsi = imsi end
+    local resp = send_at_combined("AT+ICCID;+CIMI", 5)
+    if resp then
+        for _, line in ipairs(resp) do
+            local iccid = line:match(":%s*([%dA-Z]+)")
+            if iccid and #iccid > 10 then state.slots[sid_str].iccid = iccid end
+            local imsi = line:match("^(%d+)$")
+            if imsi and #imsi > 5 then state.slots[sid_str].imsi = imsi end
+        end
+    end
 end
 
 -- --- 初始化相关函数 ---
@@ -239,8 +395,8 @@ end
 local function initial_sim_slot_setup()
     while state.current_slot == -1 do
         perform_slot_switch(1)
-        local resp_slot = send_at("AT+SIMCROSS?")
-        state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
+        --local resp_slot = send_at("AT+SIMCROSS?")
+        --state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
     end
 
     if state.current_slot ~= -1 then
@@ -248,15 +404,25 @@ local function initial_sim_slot_setup()
     end
 
     collect_slot_metadata(state.current_slot)
+
+    --切回外置卡
+    if state.modem_simnum == 0 or state.modem_simnum == 2 or state.modem_simnum == 3 then
+        while state.current_slot ~= 0 do
+            perform_slot_switch(0)
+            --local resp_slot = send_at("AT+SIMCROSS?")
+            --state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
+        end
+    end
 end
 
 local function init_service()
     init_serial_port()
     read_modem_config()
+    --获取内置卡信息
     initial_sim_slot_setup()
     --切到外置卡槽0
     --if state.modem_simnum == 0 or state.modem_simnum == 2 or state.modem_simnum == 3 then
-    perform_slot_switch(0)
+    --perform_slot_switch(0)
     --end
 
     --perform_slot_switch(0)
@@ -295,62 +461,59 @@ local function handle_sim_slot_change_event()
     state.last_slot = state.current_slot
 end
 
--- 3. 基础状态感知
+-- 3. 基础状态感知（合并 AT+CPIN?;+CSQ;+CEREG? 为一次串口调用）
 local function collect_modem_status()
-    local cpin_resp = send_at("AT+CPIN?")
-    state.data.sim_ready = (cpin_resp and cpin_resp:find("READY")) and "ready" or "absent"
+    -- 先重置信号/注册状态，供下方和 collect_network_data 共用
+    state.data.sig_str = "No Signal"
+    state.data.net_reg_status = "Unknown"
+    state.data.sim_ready = "absent"
+
+    local resp = send_at_combined("AT+CPIN?;+CSQ;+CEREG?", 5)
+    if resp then
+        for _, line in ipairs(resp) do
+            if line:find("CPIN:") then
+                state.data.sim_ready = line:find("READY") and "ready" or "absent"
+            end
+            local csq_val = line:match("%+CSQ:%s*(%d+)")
+            if csq_val and tonumber(csq_val) ~= 99 then
+                state.data.sig_str = (-113 + tonumber(csq_val) * 2) .. " dBm"
+            end
+            local cereg_stat = line:match("%+CEREG:%s*%d+,(%d+)")
+            if cereg_stat == "1" then
+                state.data.net_reg_status = "Registered (Home)"
+            elseif cereg_stat == "5" then
+                state.data.net_reg_status = "Registered (Roaming)"
+            elseif cereg_stat then
+                state.data.net_reg_status = "Not Registered (" .. cereg_stat .. ")"
+            end
+        end
+    end
 
     local new_mwan_stat = get_mwan3_status()
-    -- 规则：每次 ECM 重新拨号成功后递增 session_id
-    --if state.data.mwan_stat == "offline" and new_mwan_stat == "online" then
-    --    log("Dial-up success detected. Incrementing session_id.")
-    --    state.session_id = state.session_id + 1
-    --end
     state.data.mwan_stat = new_mwan_stat
 
     if state.imei == "N/A" then
-        state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
+        local imei_resp = send_at("AT+CGSN")
+        state.imei = imei_resp and imei_resp:match("%d+") or "N/A"
     end
 end
 
--- 4. 增强数据采集 (信号, IP, 注册状态, 元数据更新)
+-- 4. 增强数据采集（单独采集 IP + 卡槽元数据）
 local function collect_network_data()
-    -- 重置瞬态数据
-    state.data.sig_str = "No Signal"
-    state.data.local_ip = "0.0.0.0"
-    state.data.net_reg_status = "Unknown"
-
     if state.data.sim_ready == "ready" then
-        -- 信号强度 (CSQ)
-        local csq_resp = send_at("AT+CSQ")
-        local csq_val = csq_resp and csq_resp:match("%+CSQ:%s*(%d+)")
-        if csq_val and tonumber(csq_val) ~= 99 then
-            state.data.sig_str = (-113 + tonumber(csq_val) * 2) .. " dBm"
-        end
-
-        -- 注册状态 (CEREG)
-        local cereg_resp = send_at("AT+CEREG?")
-        local cereg_stat = cereg_resp and cereg_resp:match("%+CEREG:%s*%d+,(%d+)")
-        if cereg_stat == "1" then
-            state.data.net_reg_status = "Registered (Home)"
-        elseif cereg_stat == "5" then
-            state.data.net_reg_status = "Registered (Roaming)"
-        else
-            state.data.net_reg_status = "Not Registered (" .. (cereg_stat or "N/A") .. ")"
-        end
-
         -- IP 地址 (CGPADDR)
-        local ip_resp = send_at("AT+CGPADDR=1")
-        local ip_val = ip_resp and ip_resp:match(':%s*%d+,"([^"]+)"')
-        if ip_val and ip_val ~= "0.0.0.0" then
-            state.data.local_ip = ip_val
+        if state.data.local_ip == "0.0.0.0" then
+            local ip_resp = send_at("AT+CGPADDR=1")
+            log("ip_resp: " .. ip_resp)
+            if ip_resp then
+                state.data.local_ip = ip_resp:match(':%s*%d+,"([^"]+)"')
+                log("state.data.local_ip: " .. state.data.local_ip)
+            end
+            collect_slot_metadata(state.current_slot)
         end
-
-        -- 卡槽元数据更新
-        collect_slot_metadata(state.current_slot)
         return false
     else
-        -- SIM 缺失时的特殊处理 (模式0且在卡槽0时强制切到内置卡槽1)
+        --外置卡优先，当前卡为外置卡 且内置卡未被阻断
         if state.modem_simnum == 0 and state.current_slot == 0 and not state.internal_blocked then
             perform_slot_switch(1)
             return true
@@ -431,16 +594,25 @@ end
 -- 7. 重拨与切卡修复逻辑
 local function handle_redial_and_switch_logic()
     -- 首先检查阻断强制执行：如果当前是内置卡且被阻断，立即切走
+    -- 如果当前配置不是仅内置卡 且 当前卡槽使用的是内置卡
     if state.modem_simnum ~= 1 and state.current_slot == 1 then
-        log("CRITICAL: Internal SIM blocked! Forcing switch to External SIM...")
         if state.internal_blocked then
+            log("CRITICAL: Internal SIM blocked! Forcing switch to External SIM...")
+
             --如果  mode_simnum == 1 仅内置卡 时 是不能切换到外置卡的
-            if state.modem_simnum == 1 then
+            if state.modem_simnum == 1 and state.is_internal_flight_mode == false then
                 --这里虽然停留在内置卡拨号上 但又不能让他联网
+                --让卡进入飞行模式
+                state.is_internal_flight_mode = true
+                send_at("AT+CFUN=0")
                 return
             end
         end
-        perform_slot_switch(0)
+        --如果配置的是双卡备份模式 则切换到外置卡 否则（即使配置的是外置卡优先 也不再切回到外置卡上）
+        if state.modem_simnum == 2 then
+            perform_slot_switch(0)
+        end
+
         return
     end
 
@@ -474,6 +646,188 @@ local function handle_redial_and_switch_logic()
     end
 end
 
+-- 8. IP 冲突检测与自动修复
+local function check_ip_conflict_and_resolve()
+    --
+    -- 阶段 1: 获取 LTE 接口当前的 IP 地址
+    --
+    -- 通过 ubus 获取 LTE 接口的运行状态，从中提取 ipv4 address
+    -- 使用 INTERFACE 常量（默认 "lte"），实际底层设备由 get_netif_base() 确定
+    --
+    local cmd_status = "ubus call network.interface." .. INTERFACE .. " status 2>/dev/null"
+    local f = io.popen(cmd_status)
+    if not f then
+        log("IP-Check: ubus call failed (interface " .. INTERFACE .. " may not exist)")
+        return
+    end
+    local content = f:read("*a")
+    f:close()
+    --
+    -- 从 ubus 返回的 JSON 中匹配第一个 ipv4 address 字段
+    -- ubus 返回格式: ... "address":"192.168.43.2","mask":24 ...
+    --
+    local lte_ip = content and content:match('"address"%s*:%s*"([^"]+)"')
+    if not lte_ip then
+        log("IP-Check: no ipv4 address for " .. INTERFACE .. " (interface may be down)")
+        return
+    end
+
+    --
+    -- 提取 IP 的前三段构成子网前缀（如 192.168.43）
+    -- 这里假定 netmask 为 255.255.255.0（/24），
+    -- 因为 LTE 静态配的就是 /24，其他接口也大概率是 C 类网段
+    --
+    local lte_parts = {}
+    for part in string.gmatch(lte_ip, "([^%.]+)") do
+        table.insert(lte_parts, part)
+    end
+    if #lte_parts < 3 then
+        log("IP-Check: invalid LTE IP format: " .. lte_ip)
+        return
+    end
+    local lte_prefix = lte_parts[1] .. "." .. lte_parts[2] .. "." .. lte_parts[3]
+
+    --
+    -- 阶段 2: 收集可能产生冲突的其他接口的子网
+    --
+    -- 检测对象：wan（有线）、wwan（WiFi 中继）、lan（LAN 侧）
+    -- 只要 LTE 与其中任意一个接口处于同一子网，就会导致路由冲突
+    --
+    local used_prefixes = {}
+    local check_interfaces = { "wan", "wwan", "lan" }
+    for _, iface in ipairs(check_interfaces) do
+        local cmd = "ubus call network.interface." .. iface .. " status 2>/dev/null"
+        local f2 = io.popen(cmd)
+        if f2 then
+            local c = f2:read("*a")
+            f2:close()
+            local ip = c and c:match('"address"%s*:%s*"([^"]+)"')
+            if ip then
+                local parts = {}
+                for part in string.gmatch(ip, "([^%.]+)") do
+                    table.insert(parts, part)
+                end
+                if #parts >= 3 then
+                    local prefix = parts[1] .. "." .. parts[2] .. "." .. parts[3]
+                    used_prefixes[prefix] = true
+                end
+            end
+        end
+    end
+
+    --
+    -- 阶段 3: 判断是否存在冲突
+    --
+    -- 如果 LTE 的子网前缀（前三段）没有出现在 used_prefixes 中，
+    -- 说明当前没有冲突，直接返回。
+    --
+    if not used_prefixes[lte_prefix] then
+        return
+    end
+
+    --
+    -- 阶段 4: 冲突确认 → 进入自动修复流程
+    --
+    log(string.format("IP-Check *** CONFLICT DETECTED: LTE prefix %s.x conflicts with another interface!", lte_prefix))
+
+    --
+    -- 阶段 5: 寻找一个空闲的 192.168.x.x 网段
+    --
+    -- 策略：保持前两段（192.168）不变，遍历第三段 2~254，
+    -- 跳过已经被 used_prefixes 占用的网段，
+    -- 同时也跳过当前 LTE 自身正在使用的网段（i ~= lte_third）。
+    -- 找到的第一个空闲网段即作为新的 LTE 网段。
+    --
+    local lte_third = tonumber(lte_parts[3])
+    local new_prefix
+    for i = 210, 230 do
+        local candidate = lte_parts[1] .. "." .. lte_parts[2] .. "." .. i
+        if not used_prefixes[candidate] then
+            new_prefix = candidate
+            log(string.format("IP-Check: found free subnet = %s.x", new_prefix))
+            break
+        end
+    end
+
+    if not new_prefix then
+        log("IP-Check *** CRITICAL: ALL subnets 192.168.2~254 are occupied, cannot resolve conflict!")
+        return
+    end
+
+    --
+    -- 构造新的 IP 地址:
+    --   模组侧（网关）: 192.168.NEW.1
+    --   OpenWrt 侧  : 192.168.NEW.2
+    --
+    local new_gateway = new_prefix .. ".1"
+    local new_ipaddr = new_prefix .. ".2"
+    log(string.format("IP-Check: target gateway = %s, target ipaddr = %s", new_gateway, new_ipaddr))
+
+    --
+    -- 阶段 6: 通过 AT 指令修改 4G 模组自身的 IP 地址
+    --
+    -- AT+CIFCONFIG 用于设置 ECM 模式下模组的本地 IP，
+    -- 模组会以这个 IP 作为网关与 OpenWrt 通信。
+    -- 发送后等待模组返回 "OK" 确认。
+    --
+    local at_cmd = string.format('AT+CIFCONFIG="%s"', new_ipaddr)
+    log("IP-Check: sending " .. at_cmd)
+    local resp = send_at(at_cmd)
+    if not resp or not resp:find("OK") then
+        log(string.format("IP-Check *** ERROR: AT+CIFCONFIG failed, response = %s", resp or "(empty)"))
+        return
+    end
+    log("IP-Check: AT+CIFCONFIG response OK, modem IP will change to " .. new_gateway)
+
+    --
+    -- 阶段 7: 重启模组使 AT+CIFCONFIG 生效
+    --
+    -- AT+CFUN=1,1 触发模组软重启，新的 IP 配置才会被加载。
+    -- 模组重启后 USB 设备会重新枚举，ttyUSB 序号可能变化，
+    -- 所以 CFUN 之后需要 reinit_serial_port() 自动找回串口。
+    --
+    log("IP-Check: sending AT+CFUN=1,1 to reboot modem...")
+    os.execute("ifconfig eth1 down")
+    send_at("AT+CFUN=1,1")
+
+    if not reinit_serial_port() then
+        log("IP-Check *** CRITICAL: failed to reinitialize serial after modem reboot!")
+        return
+    end
+
+    --
+    -- 阶段 8: 更新 OpenWrt UCI 持久化配置
+    --
+    -- 将 LTE 接口的静态 IP 和网关改为新的网段，
+    -- 这样下次网络重启 / 开机后配置仍然有效。
+    --
+    os.execute(string.format("uci set network.%s.ipaddr='%s'", INTERFACE, new_ipaddr))
+
+    os.execute(string.format("uci set network.%s.gateway='%s'", INTERFACE, new_gateway))
+
+    os.execute("uci commit network")
+
+    --
+    -- 阶段 9: 通知 netifd（ubus）运行时接口的新地址
+    --
+    -- 通过 ubus set_data 直接告诉 netifd 当前运行中的接口
+    -- 应该使用的新 IP 和网关，避免 restart 之前的短暂不一致。
+    --
+
+    --
+    -- 同步更新本地内存中的 IP，以便后续周期直接使用
+    --
+    state.data.local_ip = new_ipaddr
+
+    --
+    -- 阶段 10: 重启 LTE 接口使新配置生效
+    --
+    -- ubus call 重启只影响 LTE 接口本身，不会中断有线/WiFi 的连接。
+    --
+    os.execute("/etc/init.d/network reload")
+    os.execute("/etc/init.d/mwan3 restart")
+end
+
 -- --- 主循环守护 ---
 local function monitor_main()
     init_service()
@@ -483,12 +837,12 @@ local function monitor_main()
         local skip_this_cycle = false
 
         -- 阶段 0: 外部指令感知 (阻断检查)
-        check_internal_block()
+        --check_internal_block()
 
         -- 阶段 1: 物理感知与模式强制矫正
-        if process_sim_slot_detection() then
-            skip_this_cycle = true
-        end
+        --if process_sim_slot_detection() then
+        --    skip_this_cycle = true
+        --end
 
         if not skip_this_cycle then
             -- 阶段 2: 事件记录与基础状态
@@ -507,6 +861,9 @@ local function monitor_main()
             report_all_status()
             handle_redial_and_switch_logic()
         end
+
+        -- 阶段 5: IP 冲突检测 (独立运行，不受 skip 影响)
+        --check_ip_conflict_and_resolve()
 
         if first then
             first = false

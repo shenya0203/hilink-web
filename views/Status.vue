@@ -326,6 +326,7 @@ const toggleSection = (key) => {
 import { 
   fetchStatusData,
   fetchNetworkData,
+  fetchHomepageData,
   fetchMiscData,
   formatSeconds,
   formatTimestamp 
@@ -393,18 +394,14 @@ const loadData = async () => {
     loading.value = true
     error.value = null
     
-    // 只加载 status 和 network 数据（符合要求）
-    const [status, network] = await Promise.all([
-      fetchStatusData(),
-      fetchNetworkData()
-    ])
+    // 使用聚合接口获取数据 (包含 status, network, misc)
+    const allData = await fetchHomepageData()
     
-    statusInfo.value = status
-    networkInfo.value = network
-    
-    // 获取 misc 数据用于设备名称等信息
-    const misc = await fetchMiscData()
-    miscInfo.value = misc
+    if (allData) {
+      statusInfo.value = allData.status || {}
+      networkInfo.value = allData.network || {}
+      miscInfo.value = allData.misc || {}
+    }
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
     console.error('数据加载错误:', err)
@@ -416,17 +413,15 @@ const loadData = async () => {
 // 静默刷新数据（不显示 loading 状态，只更新对应参数）
 const refreshData = async () => {
   try {
-    // 并行获取所有数据
-    const [status, network, misc] = await Promise.all([
-      fetchStatusData(),
-      fetchNetworkData(),
-      fetchMiscData()
-    ])
+    // 获取聚合数据 (包含 status, network, misc)
+    const allData = await fetchHomepageData()
     
-    // 只更新数据，不触发 loading 状态
-    statusInfo.value = status
-    networkInfo.value = network
-    miscInfo.value = misc
+    // 更新数据
+    if (allData) {
+      statusInfo.value = allData.status || {}
+      networkInfo.value = allData.network || {}
+      miscInfo.value = allData.misc || {}
+    }
     
     // 清除之前可能存在的错误
     error.value = null
@@ -459,7 +454,7 @@ const handleVisibilityChange = () => {
     refreshData()
     // 重启定时器（如果未启动）
     if (!refreshTimer) {
-      refreshTimer = setInterval(refreshData, 5000)
+      refreshTimer = setInterval(refreshData, 8000)
     }
   }
 }

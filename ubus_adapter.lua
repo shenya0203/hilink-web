@@ -61,6 +61,14 @@ local _M = {}
 -- Ubus Adapter Module
 -- ==========================================================
 
+function _M.get_homepage_data()
+    local result = ubus_call("hilink", "get_homepage_data", {})
+    if result then
+        return result
+    end
+    return nil
+end
+
 -- 1. Status Data
 function _M.get_status()
     local result = ubus_call("hilink", "get_status", {})

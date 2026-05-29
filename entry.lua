@@ -256,6 +256,8 @@ local function handle_download_flex(args)
         response = ubus_adapter.get_network_status()
     elseif name == "edge_values" then
         response = ubus_adapter.get_edge_values()
+    elseif name == "all" then
+        response = ubus_adapter.get_homepage_data()
     end
 
     -- Ensure response is not nil

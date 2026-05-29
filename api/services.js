@@ -39,6 +39,14 @@ export function getNetwork() {
 }
 
 /**
+ * 获取首页聚合数据 (status + network)
+ */
+export function getHomepageData() {
+    return apiClient.get('/download_flex.cgi?name=all')
+        .then(res => res.data)
+}
+
+/**
  * 获取杂项配置数据
  */
 export function getMisc() {

@@ -1,5 +1,5 @@
 // src/api/mockData.js
-import { getStatus, getNetwork, getMisc, getNetworkConfig, getNetworkLanConfig, getUartConfig, getCommTunnel, getOfflineCache } from './services'
+import { getStatus, getNetwork, getHomepageData, getMisc, getNetworkConfig, getNetworkLanConfig, getUartConfig, getCommTunnel, getOfflineCache } from './services'
 
 // 获取状态数据
 export async function fetchStatusData() {
@@ -22,6 +22,18 @@ export async function fetchNetworkData() {
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=network:', error)
         /*return getDefaultNetworkData()*/
+        return null
+    }
+}
+
+// 获取首页聚合数据
+export async function fetchHomepageData() {
+    try {
+        const data = await getHomepageData()
+        console.log('✓ 获取成功 - GET /download_flex.cgi?name=all:', data)
+        return data
+    } catch (error) {
+        console.error('✗ 获取失败 - GET /download_flex.cgi?name=all:', error)
         return null
     }
 }
