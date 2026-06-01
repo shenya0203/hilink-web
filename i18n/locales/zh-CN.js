@@ -403,6 +403,7 @@ export default {
 
         // 提示信息
         pleaseSelectFileFirst: '请先选择文件',
+        importing: '正在导入点表，请稍候...',
         importSuccess: '导入成功',
         importFailed: '导入失败',
         // 新增选项

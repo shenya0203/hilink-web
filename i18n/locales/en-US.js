@@ -389,6 +389,7 @@ export default {
 
         // Messages
         pleaseSelectFileFirst: 'Please select a file first',
+        importing: 'Importing point table, please wait...',
         importSuccess: 'Import successful',
         importFailed: 'Import failed',
         exportFailed: 'Export failed',

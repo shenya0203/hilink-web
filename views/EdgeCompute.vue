@@ -1071,6 +1071,16 @@
         </div>
       </div>
     </div>
+
+    <!-- 导入CSV加载弹窗 -->
+    <div v-if="importing" class="modal-overlay">
+      <div class="modal" style="text-align: center;">
+        <div class="modal-body">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">{{ t('edge.importing') }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1101,6 +1111,7 @@ const { isServiceRestarting, restartService } = useServiceControl()
 // 响应式数据
 const loading = ref(true)
 const error = ref(null)
+const importing = ref(false)
 const activeTab = ref(0)
 
 // 标签页配置
@@ -2567,6 +2578,7 @@ const importCsv = async () => {
     return
   }
   
+  importing.value = true
   try {
     const fileContent = await new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -2605,16 +2617,19 @@ const importCsv = async () => {
     
     // 发现冲突，中止导入
     if (duplicateNames.length > 0) {
+      importing.value = false
       const errorMsg = duplicateNames.slice(0, 5).join('\n') + (duplicateNames.length > 5 ? '\n...' : '')
       alert(`导入失败！发现重复或非法的点位名称：\n${errorMsg}`)
       return
     }
     
     if (slaveCount > 64) {
+      importing.value = false
       alert(t('edge.slavesLimitReached'))
       return
     }
     if (pointCount > 1000) {
+      importing.value = false
       alert(t('edge.pointsLimitReached'))
       return
     }
@@ -2623,7 +2638,8 @@ const importCsv = async () => {
     formData.append('file', selectedCsvFile.value)
     
     await apiClient.post('/upload/edge', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
     })
     
     alert(t('edge.importSuccess'))
@@ -2635,6 +2651,8 @@ const importCsv = async () => {
   } catch (err) {
     console.error('导入失败:', err)
     alert(t('edge.importFailed') + ': ' + (err.response?.data?.msg || err.message))
+  } finally {
+    importing.value = false
   }
 }
 
