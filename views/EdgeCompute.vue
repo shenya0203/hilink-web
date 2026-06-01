@@ -2579,6 +2579,7 @@ const importCsv = async () => {
   }
   
   importing.value = true
+  stopPolling()
   try {
     const fileContent = await new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -2653,6 +2654,7 @@ const importCsv = async () => {
     alert(t('edge.importFailed') + ': ' + (err.response?.data?.msg || err.message))
   } finally {
     importing.value = false
+    startPolling()
   }
 }
 
