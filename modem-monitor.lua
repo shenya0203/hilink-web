@@ -669,6 +669,44 @@ local function check_ip_conflict_and_resolve()
     local lte_ip = content and content:match('"address"%s*:%s*"([^"]+)"')
     if not lte_ip then
         log("IP-Check: no ipv4 address for " .. INTERFACE .. " (interface may be down)")
+
+        -- 检查UCI是否已有配置
+        local f_uci = io.popen("uci -q get network." .. INTERFACE .. ".ipaddr 2>/dev/null")
+        if f_uci then
+            local uci_ip = f_uci:read("*l")
+            f_uci:close()
+            if uci_ip and uci_ip ~= "" then
+                log("IP-Check: uci already has ipaddr=" .. uci_ip .. ", skipping")
+                return
+            end
+        end
+
+        -- UCI未配置，通过AT+CIFCONFIG?获取当前4G模组分配的IP
+        local at_resp = send_at("AT+CIFCONFIG?")
+        if at_resp then
+            local modem_ip = at_resp:match("(%d+%.%d+%.%d+%.%d+)")
+            if modem_ip then
+                -- 网关地址 = IP末段减1 (如 192.168.10.2 → 192.168.10.1)
+                local parts = {}
+                for part in string.gmatch(modem_ip, "([^%.]+)") do
+                    table.insert(parts, part)
+                end
+                if #parts == 4 then
+                    local last = tonumber(parts[4])
+                    if last and last > 1 then
+                        parts[4] = tostring(last - 1)
+                    end
+                    local gateway = table.concat(parts, ".")
+                    os.execute(string.format("uci set network.%s.ipaddr='%s'", INTERFACE, modem_ip))
+                    os.execute(string.format("uci set network.%s.gateway='%s'", INTERFACE, gateway))
+                    os.execute("uci commit network")
+                    log(string.format("IP-Check: set ipaddr=%s, gateway=%s from AT+CIFCONFIG?", modem_ip, gateway))
+                    -- 重启LTE接口使新配置生效
+                    os.execute("ifdown " .. INTERFACE)
+                    os.execute("ifup " .. INTERFACE)
+                end
+            end
+        end
         return
     end
 
@@ -863,7 +901,7 @@ local function monitor_main()
         end
 
         -- 阶段 5: IP 冲突检测 (独立运行，不受 skip 影响)
-        --check_ip_conflict_and_resolve()
+        check_ip_conflict_and_resolve()
 
         if first then
             first = false
