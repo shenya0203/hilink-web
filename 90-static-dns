@@ -1,0 +1,60 @@
+#!/bin/sh
+
+[ "$ACTION" = "ifup" ] || [ "$ACTION" = "ifdown" ] || exit 0
+
+PROTO=$(uci -q get network.${INTERFACE}.proto)
+[ "$PROTO" = "static" ] || exit 0
+
+if [ "$ACTION" = "ifup" ]; then
+    . /lib/functions/network.sh
+    network_get_physdev DEVICE "${INTERFACE}"
+    [ -z "$DEVICE" ] && exit 0
+
+    if [ "$INTERFACE" = "lte" ]; then
+        # --- 添加默认路由（UCI有gateway则用，否则从IP末段-1推导） ---
+        IPADDR=$(uci -q get network.${INTERFACE}.ipaddr)
+        GATEWAY=$(uci -q get network.${INTERFACE}.gateway)
+        [ -z "$GATEWAY" ] && [ -n "$IPADDR" ] && \
+            GATEWAY=$(echo "$IPADDR" | awk -F. '{if($4>1) print $1"."$2"."$3"."$4-1}')
+
+        if [ -n "$GATEWAY" ]; then
+            ip route replace "$GATEWAY/32" dev "$DEVICE" 2>/dev/null || true
+            ip route replace default via "$GATEWAY" dev "$DEVICE" 2>/dev/null || true
+        fi
+    fi
+
+    # --- 原DNS逻辑 ---
+    PEERDNS=$(uci -q get network.${INTERFACE}.peerdns)
+    [ "$PEERDNS" = "1" ] || exit 0
+
+    PIDFILE="/var/run/udhcpc-${INTERFACE}-dns.pid"
+    [ -f "$PIDFILE" ] && kill -9 $(cat "$PIDFILE" 2>/dev/null) 2>/dev/null
+
+    env LOGICAL_IFACE="${INTERFACE}" udhcpc -b -p "$PIDFILE" -i "$DEVICE" -O dns -s /usr/libexec/udhcpc-dns-only.script
+
+elif [ "$ACTION" = "ifdown" ]; then
+    # --- 清理路由 ---
+    if [ "$INTERFACE" = "lte" ]; then
+        GATEWAY=$(uci -q get network.${INTERFACE}.gateway)
+        [ -z "$GATEWAY" ] && {
+            IPADDR=$(uci -q get network.${INTERFACE}.ipaddr)
+            GATEWAY=$(echo "$IPADDR" | awk -F. '{if($4>1) print $1"."$2"."$3"."$4-1}')
+        }
+        [ -n "$GATEWAY" ] && {
+            ip route del default via "$GATEWAY" 2>/dev/null || true
+            ip route del "$GATEWAY/32" 2>/dev/null || true
+        }
+    fi
+
+    # --- 原DNS清理 ---
+    PEERDNS=$(uci -q get network.${INTERFACE}.peerdns)
+    [ "$PEERDNS" = "1" ] || exit 0
+
+    PIDFILE="/var/run/udhcpc-${INTERFACE}-dns.pid"
+    if [ -f "$PIDFILE" ]; then
+        kill -15 $(cat "$PIDFILE" 2>/dev/null) 2>/dev/null
+        rm -f "$PIDFILE"
+    fi
+    env LOGICAL_IFACE="${INTERFACE}" /usr/libexec/udhcpc-dns-only.script deconfig
+fi
+

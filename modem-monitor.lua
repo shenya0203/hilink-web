@@ -399,8 +399,14 @@ local function initial_sim_slot_setup()
         --state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
     end
 
-    if state.current_slot ~= -1 then
-        state.imei = send_at("AT+CGSN"):match("%d+") or "N/A"
+    if state.imei == "N/A" then
+        local resp = send_at("AT+CGSN")
+        if resp then
+            local raw = resp:match("%d+")
+            state.imei = (raw and raw:match("^%d+$") and #raw == 15) and raw or "N/A"
+        else
+            state.imei = "N/A"
+        end
     end
 
     collect_slot_metadata(state.current_slot)
@@ -487,10 +493,9 @@ local function collect_network_data()
         -- IP 地址 (CGPADDR)
         if state.data.local_ip == "0.0.0.0" then
             local ip_resp = send_at("AT+CGPADDR=1")
-            log("ip_resp: " .. ip_resp)
+                log("ip_resp: " .. ip_resp)
             if ip_resp then
                 state.data.local_ip = ip_resp:match(':%s*%d+,"([^"]+)"')
-                log("state.data.local_ip: " .. state.data.local_ip)
             end
             collect_slot_metadata(state.current_slot)
         end

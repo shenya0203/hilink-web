@@ -1,0 +1,28 @@
+#!/bin/sh
+
+[ "$ACTION" = "ifup" ] || [ "$ACTION" = "ifdown" ] || exit 0
+
+PROTO=$(uci -q get network.${INTERFACE}.proto)
+[ "$PROTO" = "static" ] || exit 0
+
+PEERDNS=$(uci -q get network.${INTERFACE}.peerdns)
+[ "$PEERDNS" = "1" ] || exit 0
+
+PIDFILE="/var/run/udhcpc-${INTERFACE}-dns.pid"
+
+if [ "$ACTION" = "ifup" ]; then
+    . /lib/functions/network.sh
+    network_get_physdev DEVICE "${INTERFACE}"
+    [ -z "$DEVICE" ] && exit 0
+
+    [ -f "$PIDFILE" ] && kill -9 $(cat "$PIDFILE" 2>/dev/null) 2>/dev/null
+
+    env LOGICAL_IFACE="${INTERFACE}" udhcpc -b -p "$PIDFILE" -i "$DEVICE" -O dns -s /usr/libexec/udhcpc-dns-only.script
+
+elif [ "$ACTION" = "ifdown" ]; then
+    if [ -f "$PIDFILE" ]; then
+        kill -15 $(cat "$PIDFILE" 2>/dev/null) 2>/dev/null
+        rm -f "$PIDFILE"
+    fi
+    env LOGICAL_IFACE="${INTERFACE}" /usr/libexec/udhcpc-dns-only.script deconfig
+fi

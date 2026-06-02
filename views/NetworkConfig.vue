@@ -338,13 +338,14 @@
             </span>
           </div>
         </div>
-        <div class="form-group" style="margin-left: 170px;">
+        
+        <div v-show="false" class="form-group" style="margin-left: 170px;">
           <label style="display: flex; align-items: center; gap: 8px; width: auto; text-align: left; cursor: pointer; margin-top: 0; font-weight: 500;">
             <input type="checkbox" v-model="config.internal_forward_disable" true-value="1" false-value="0" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
             {{ t('network.internalForwardDisable') }}
           </label>
         </div>
-        <div class="form-group" style="margin-left: 170px; margin-top: -10px;">
+        <div v-show="false" class="form-group" style="margin-left: 170px; margin-top: -10px;">
           <label style="display: flex; align-items: center; gap: 8px; width: auto; text-align: left; cursor: pointer; margin-top: 0; font-weight: 500;">
             <input type="checkbox" v-model="config.external_forward_disable" true-value="1" false-value="0" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
             {{ t('network.externalForwardDisable') }}
