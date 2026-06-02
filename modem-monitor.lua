@@ -431,23 +431,6 @@ end
 
 -- --- 循环内部核心逻辑函数 ---
 
--- 1. 物理层侦测与业务逻辑切卡
-local function process_sim_slot_detection()
-    local resp_slot = send_at("AT+SIMCROSS?")
-    state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
-
-    -- 强制卡槽逻辑 (模式1：仅内置卡槽1, 模式2：仅外置卡槽0)
-    if state.modem_simnum == 1 and state.current_slot == 0 and not state.internal_blocked then --内置卡被阻断
-        perform_slot_switch(1)
-        return true
-    elseif state.modem_simnum == 2 and state.current_slot == 1 then
-        perform_slot_switch(0)
-        return true
-    end
-
-    return false
-end
-
 -- 2. 处理卡槽变动事件日志
 local function handle_sim_slot_change_event()
     if state.last_slot ~= -1 and state.current_slot ~= state.last_slot then
@@ -878,9 +861,6 @@ local function monitor_main()
         --check_internal_block()
 
         -- 阶段 1: 物理感知与模式强制矫正
-        --if process_sim_slot_detection() then
-        --    skip_this_cycle = true
-        --end
 
         if not skip_this_cycle then
             -- 阶段 2: 事件记录与基础状态

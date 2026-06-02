@@ -369,7 +369,7 @@ end
 
 -- 格式化边缘计算点位值（支持截断和补位）
 local function format_edge_value(val, data_type, precision)
-    log_info("format_edge_value: " .. val .. ", " .. data_type .. ", " .. precision)
+    --log_info("format_edge_value: " .. val .. ", " .. data_type .. ", " .. precision)
     if not val then return "0" end
     local n = 10 ^ precision
     local num_val = tonumber(val) or 0
@@ -386,7 +386,7 @@ local function format_edge_value(val, data_type, precision)
     -- 强制格式化为指定精度字符串（自动补0）
     local fmt = "%." .. precision .. "f"
     local ret_val = string.format(fmt, num_val)
-    log_info("format_edge_value: " .. ret_val)
+    --log_info("format_edge_value: " .. ret_val)
     return ret_val
 end
 
@@ -418,7 +418,7 @@ local function load_edge_point_configs()
             -- 索引 2: 数据点名称 (CSV 的第三个字段) -> 与 SHM 的 key 对应
             -- 索引 4: 数据类型
             -- 索引 5: 小数位数
-            log_info("fields: " .. cjson.encode(fields))
+            --log_info("fields: " .. cjson.encode(fields))
             if fields[1] == "C" then
                 local key = fields[3]
                 local data_type = tonumber(fields[5])
@@ -429,7 +429,7 @@ local function load_edge_point_configs()
                         precision = precision
                     }
                 end
-                log_info("Loaded edge point config: key=" .. key .. ", type=" .. data_type .. ", precision=" .. precision)
+                --log_info("Loaded edge point config: key=" .. key .. ", type=" .. data_type .. ", precision=" .. precision)
             end
         end
     end
@@ -948,7 +948,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.0.30",
+    soft_ver = "V1.0.31",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",

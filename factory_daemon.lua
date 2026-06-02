@@ -4,7 +4,7 @@ local socket           = require("socket")
 local cjson            = require("cjson")
 
 -- ================= 配置区 =================
-local SERVER_IP        = "192.168.103.100"
+local SERVER_IP        = "192.168.68.197"
 local SERVER_PORT      = 998
 local AT_PORT          = "/dev/ttyUSB3"
 local G_SERIAL_FD      = nil
@@ -29,6 +29,16 @@ local function exec_cmd(cmd)
     local result = f:read("*a")
     f:close()
     return result or ""
+end
+
+-- 工具函数：将字符串转换为 16 进制字符串，方便调试不可见字符或干扰
+local function to_hex(str)
+    if not str then return "" end
+    local hex = {}
+    for i = 1, #str do
+        table.insert(hex, string.format("%02X", string.byte(str, i)))
+    end
+    return table.concat(hex, " ")
 end
 
 -- 打印日志
@@ -215,23 +225,31 @@ function do_test_serial(req)
     log("开始双路串口测试 (P1:ttyS1/GPIO4, P2:ttyS0/GPIO11) @ " .. baudrate)
 
     -- 1. 硬件初始化：配置两个串口的波特率和 GPIO 方向 (4 & 11)
-    os.execute(string.format("stty -F /dev/ttyS1 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
-    os.execute(string.format("stty -F /dev/ttyS0 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
-    os.execute("mem 0x10000600 0x810") -- 强制 GPIO4(0x10) 和 GPIO11(0x800) 为输出模式
+    os.execute(string.format(
+        "stty -F /dev/ttyS1 %d raw -echo -echoe -echok -echoctl -echoke min 0 time 1 >/dev/null 2>&1", baudrate))
+    os.execute(string.format(
+        "stty -F /dev/ttyS0 %d raw -echo -echoe -echok -echoctl -echoke min 0 time 1 >/dev/null 2>&1", baudrate))
+    os.execute("mem 0x10000600 0x810 >/dev/null 2>&1") -- 静默输出
 
     local function test_port(path, set_mask, clr_mask)
         local fd = io.open(path, "r+")
         if not fd then return "OPEN_ERR" end
         fd:setvbuf("no")
 
+        -- 接收前清理：读掉缓冲区里可能存在的 Console 脏数据
+        while true do
+            local junk = fd:read(1)
+            if not junk then break end
+        end
+
         -- 发送
-        os.execute("mem 0x10000630 " .. set_mask)
+        os.execute("mem 0x10000630 " .. set_mask .. " >/dev/null 2>&1")
         fd:write(req_data)
         fd:flush()
         socket.sleep(0.02)
 
         -- 接收
-        os.execute("mem 0x10000640 " .. clr_mask)
+        os.execute("mem 0x10000640 " .. clr_mask .. " >/dev/null 2>&1")
         local recv = ""
         local start_t = socket.gettime()
         while (socket.gettime() - start_t) < timeout do
@@ -242,6 +260,10 @@ function do_test_serial(req)
             end
         end
         fd:close()
+
+        -- 核心调试：输出收到的原始 16 进制数据
+        log(string.format("[%s] 原始接收 Hex: [%s]", path, to_hex(recv)))
+
         return recv:gsub("%s+", "")
     end
 
@@ -267,14 +289,22 @@ local function internal_port_check(path, test_data, set_mask, clr_mask, timeout)
     if not fd then return "" end
     fd:setvbuf("no")
 
+    -- 接收前清理：排空缓冲区中可能的指令残留或日志输出
+    while true do
+        local junk = fd:read(1)
+        if not junk then break end
+    end
+
     -- 切换到发送
     os.execute("mem 0x10000630 " .. set_mask)
+    os.execute("mem 0x10000630 " .. set_mask .. " >/dev/null 2>&1")
     fd:write(test_data)
     fd:flush()
     socket.sleep(0.02)
 
     -- 切换到接收
     os.execute("mem 0x10000640 " .. clr_mask)
+    os.execute("mem 0x10000640 " .. clr_mask .. " >/dev/null 2>&1")
     local reply = ""
     local start_t = socket.gettime()
     while (socket.gettime() - start_t) < timeout do
@@ -285,14 +315,20 @@ local function internal_port_check(path, test_data, set_mask, clr_mask, timeout)
         end
     end
     fd:close()
+
+    -- 自检模式下的 16 进制输出
+    log(string.format("[%s] 自检接收 Hex: [%s]", path, to_hex(reply)))
+
     return reply:gsub("%s+", "")
 end
 
-function do_test_lte()
+function do_test_lte(req)
     open_at_port()
 
     local sim_ext = { ready = false, iccid = "ERROR" }
     local sim_int = { ready = false, iccid = "ERROR" }
+    local signal = req.signal or 27
+    local signal_check = false
 
     -- 1. 获取外置槽位 (Slot 0)
     if perform_slot_switch(0) then
@@ -319,6 +355,28 @@ function do_test_lte()
         end
     end
 
+    --检测信号强度:
+    local cnt = 5
+    while cnt > 0 do
+        local signal_strength = get_at_with_retry("AT+CSQ", "SIGNAL_STRENGTH", 3)
+        log("Factory : signal strength: " .. signal_strength)
+        if signal_strength and signal_strength:find("%+CSQ:%s*(%d+)") then
+            local rssi_val = tonumber(signal_strength:match("%+CSQ:%s*(%d+)"))
+            log("信号强度: " .. rssi_val)
+            log("信号标准：" .. tostring(signal))
+            if signal > rssi_val then
+                log("信号强度不足")
+            else
+                log("信号强度充足")
+                signal_check = true
+                break
+            end
+        else
+            log("无法获取信号强度")
+        end
+        cnt = cnt - 1
+    end
+
     if G_SERIAL_FD then
         G_SERIAL_FD:close()
         G_SERIAL_FD = nil
@@ -327,14 +385,16 @@ function do_test_lte()
     local is_pass = "fail"
     local err_code = nil
 
-    if sim_ext.ready and sim_int.ready then
+    if sim_ext.ready and sim_int.ready and signal_check then
         is_pass = "pass"
     elseif not sim_ext.ready and not sim_int.ready then
         err_code = "BOTH_SIM_FAIL"
     elseif not sim_ext.ready then
         err_code = "EXT_SIM_FAIL"
-    else
+    elseif not sim_int.ready then
         err_code = "INT_SIM_FAIL"
+    else
+        err_code = "SIGNAL_FAIL"
     end
 
     return {
@@ -641,6 +701,11 @@ function use_test_serial()
     os.execute(string.format("stty -F /dev/ttyS1 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
     os.execute(string.format("stty -F /dev/ttyS0 %d raw -echo min 0 time 1 2>/dev/null", baudrate))
     os.execute("mem 0x10000600 0x810")
+    os.execute(string.format(
+        "stty -F /dev/ttyS1 %d raw -echo -echoe -echok -echoctl -echoke min 0 time 1 >/dev/null 2>&1", baudrate))
+    os.execute(string.format(
+        "stty -F /dev/ttyS0 %d raw -echo -echoe -echok -echoctl -echoke min 0 time 1 >/dev/null 2>&1", baudrate))
+    os.execute("mem 0x10000600 0x810 >/dev/null 2>&1")
 
     -- 2. 测试 P1
     local res1 = internal_port_check("/dev/ttyS1", test_data, "0x10", "0x10", timeout)
@@ -741,7 +806,7 @@ function main()
                     if req.cmd == "test_net" then
                         resp = do_test_net()
                     elseif req.cmd == "test_lte" then
-                        resp = do_test_lte()
+                        resp = do_test_lte(req)
                     elseif req.cmd == "test_serial" then
                         resp = do_test_serial(req)
                     elseif req.cmd == "test_wifi" then

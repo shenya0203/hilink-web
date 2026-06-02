@@ -55,7 +55,7 @@ end
 local function read_file(path)
     local file = io.open(path, "r")
     if not file then
-        ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
+        --ngx.log(ngx.ERR, "[DEBUG] Cannot open file: ", path)
         return nil
     end
     local content = file:read("*a")
@@ -300,7 +300,7 @@ local function handle_download_file(args)
         if not content or content == "" then content = "S,1,6,10,ModBusTCP" end
     end
 
-    ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
+    --ngx.log(ngx.ERR, "[DEBUG] handle_download_file content: ", content)
 
     -- 直接输出文本内容，非 JSON
     ngx.header.content_type = "text/plain"
