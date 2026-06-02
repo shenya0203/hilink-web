@@ -948,7 +948,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.0.31",
+    soft_ver = "V1.0.32",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -4302,7 +4302,7 @@ local function main_service()
     -- （避免旧方案中 cancel/recreate/re-arm 触发 uloop C 库异常）
     -- ==========================================================
     os.execute("echo none > /sys/class/leds/system:work:status/trigger")
-    os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
+    os.execute("echo 0 > /sys/class/leds/system:work:status/brightness")
     led_mgmt_timer = uloop.timer(led_mgmt_cb)
     led_mgmt_timer:set(250)
 
