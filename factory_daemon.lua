@@ -684,6 +684,31 @@ local function close_led()
     os.execute("echo none > /sys/class/leds/system:work:status/trigger")
 end
 
+local function blink_led_double()
+    close_led()
+    while true do
+        -- First flash
+        os.execute("echo 1 > /sys/class/leds/system:data:data/brightness")
+        os.execute("echo 1 > /sys/class/leds/system:net:info/brightness")
+        os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
+        socket.sleep(0.1)
+        os.execute("echo 0 > /sys/class/leds/system:data:data/brightness")
+        os.execute("echo 0 > /sys/class/leds/system:net:info/brightness")
+        os.execute("echo 0 > /sys/class/leds/system:work:status/brightness")
+        socket.sleep(0.1)
+        -- Second flash
+        os.execute("echo 1 > /sys/class/leds/system:data:data/brightness")
+        os.execute("echo 1 > /sys/class/leds/system:net:info/brightness")
+        os.execute("echo 1 > /sys/class/leds/system:work:status/brightness")
+        socket.sleep(0.1)
+        os.execute("echo 0 > /sys/class/leds/system:data:data/brightness")
+        os.execute("echo 0 > /sys/class/leds/system:net:info/brightness")
+        os.execute("echo 0 > /sys/class/leds/system:work:status/brightness")
+        -- Off for 1 second
+        socket.sleep(1)
+    end
+end
+
 
 local function get_flash_id()
     return exec_cmd("cat /proc/unique_id")
@@ -828,7 +853,7 @@ function main()
                             os.execute("firstboot -y")
                             tcp:send(cjson.encode({ cmd = "write_tuple", result = "pass" }) .. "\n")
                             os.execute("killall feed_wdog.sh")
-                            while true do socket.sleep(10) end
+                            blink_led_double()
                         else
                             resp = { cmd = "write_tuple", result = "fail" }
                         end
