@@ -847,8 +847,8 @@ function main()
                         resp = { cmd = "test_led", result = "pass" }
                         blink_led()
                     elseif req.cmd == "write_tuple" then
-                        local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f",
-                            req.DN, req.PjK, req.PdK, req.PdS, req.DS)
+                        --local cmd = string.format("tuple-write -d '%s' -p '%s' -k '%s' -s '%s' -e '%s' -f", req.DN, req.PjK, req.PdK, req.PdS, req.DS)
+                        local cmd = string.format("cloud_app -s '%s' '%s' '%s' '%s' '%s'", req.DN, req.PjK, req.PdK, req.PdS, req.DS)
                         if os.execute(cmd) == 0 then
                             os.execute("firstboot -y")
                             tcp:send(cjson.encode({ cmd = "write_tuple", result = "pass" }) .. "\n")

@@ -133,32 +133,23 @@ end
 
 local function get_system_sn()
     if sn then return sn end
-    -- 假设编译好的程序名为 tuple_read，如果在特定目录下请加上路径，例如 "/usr/bin/tuple_read get_dn"
-    local handle = io.popen("tuple-read get_dn", "r")
+    local handle = io.popen("cloud_app -g 2>&1", "r")
 
-    -- 如果无法启动进程
     if not handle then
         return nil
     end
 
-    -- 读取所有输出内容 (*a 表示 all)
     local result = handle:read("*a")
     print("get_system_sn result: " .. result)
-
-    -- 关闭文件句柄
     handle:close()
 
-    -- 如果读取到了内容，进行清洗
     if result then
-        -- 使用gsub去除尾部的换行符(\n)和可能存在的空白字符
-        -- 模式匹配解释: ^%s*(.-)%s*$ 匹配首尾空白并在中间捕获内容
-        result = string.gsub(result, "^%s*(.-)%s*$", "%1")
-
-        -- 再次校验是否为空字符串
-        if result == "" then return nil end
-        sn = result
-
-        return result
+        -- 提取 DeviceName 字段
+        local device_name = result:match("DeviceName:%s*(%S+)")
+        if device_name then
+            sn = device_name
+            return device_name
+        end
     end
 
     return nil

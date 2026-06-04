@@ -120,6 +120,40 @@ local function check_internal_block()
     end
 end
 
+-- --- 自动探测 4G 模组的 AT 串口 ---
+-- 遍历 /dev/ttyUSB0~10，向每个设备发送 AT 指令，
+-- 能返回 "OK" 的就是模组的 AT 串口
+local function find_modem_serial()
+    for i = 0, 10 do
+        local path = "/dev/ttyUSB" .. i
+        os.execute(string.format("stty -F %s 115200 raw -echo min 0 time 1 2>/dev/null", path))
+        local f = io.open(path, "r+")
+        if f then
+            f:setvbuf("no")
+            local drain_end = os.time() + 1
+            while os.time() < drain_end do
+                local chunk = f:read(4096)
+                if not chunk or chunk == "" then break end
+            end
+            f:write("AT\r\n")
+            f:flush()
+            local start = os.time()
+            while os.difftime(os.time(), start) < 2 do
+                local line = f:read("*l")
+                if line then
+                    if line:find("OK") then
+                        f:close()
+                        return path
+                    end
+                    if line:find("ERROR") then break end
+                end
+            end
+            f:close()
+        end
+    end
+    return nil
+end
+
 -- --- 模组重启后重新初始化串口 ---
 -- 1. 先尝试重连原来的 DEVICE（最多 SERIAL_RETRY_MAX 次）
 -- 2. 失败则扫描所有 ttyUSB* 自动探测
@@ -199,42 +233,6 @@ local function init_serial_port()
     end
     G_SERIAL_FD:setvbuf("no")
 end
-
--- --- 自动探测 4G 模组的 AT 串口 ---
--- 遍历 /dev/ttyUSB0~10，向每个设备发送 AT 指令，
--- 能返回 "OK" 的就是模组的 AT 串口
-local function find_modem_serial()
-    for i = 0, 10 do
-        local path = "/dev/ttyUSB" .. i
-        os.execute(string.format("stty -F %s 115200 raw -echo min 0 time 1 2>/dev/null", path))
-        local f = io.open(path, "r+")
-        if f then
-            f:setvbuf("no")
-            local drain_end = os.time() + 1
-            while os.time() < drain_end do
-                local chunk = f:read(4096)
-                if not chunk or chunk == "" then break end
-            end
-            f:write("AT\r\n")
-            f:flush()
-            local start = os.time()
-            while os.difftime(os.time(), start) < 2 do
-                local line = f:read("*l")
-                if line then
-                    if line:find("OK") then
-                        f:close()
-                        return path
-                    end
-                    if line:find("ERROR") then break end
-                end
-            end
-            f:close()
-        end
-    end
-    return nil
-end
-
-
 
 -- --- 串口 Drain：用大块读取代替逐字节，减少 Lua 调用次数 ---
 local function drain_serial()
