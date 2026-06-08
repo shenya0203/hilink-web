@@ -19,7 +19,7 @@ local WIFI_SSID        = "xuxu"
 local WIFI_PSK         = "12345678"
 local WIFI_RSSI_THRES  = -70 -- PASS/FAIL 阈值 (dBm)，待硬件工程师标定
 local WIFI_TIMEOUT     = 15  -- 单次连接超时 (秒)
-local WIFI_MAX_RETRIES = 3   -- 最大重试次数
+local WIFI_MAX_RETRIES = 2   -- 最大重试次数
 -- ==========================================
 
 -- 工具函数：执行Shell并获取输出
@@ -357,7 +357,7 @@ function do_test_lte(req)
 
     --检测信号强度:
     local cnt = 5
-    while cnt > 0 do
+    while sim_int.ready and cnt > 0 do
         local signal_strength = get_at_with_retry("AT+CSQ", "SIGNAL_STRENGTH", 3)
         log("Factory : signal strength: " .. signal_strength)
         if signal_strength and signal_strength:find("%+CSQ:%s*(%d+)") then
@@ -444,6 +444,54 @@ function do_test_net()
     return res
 end
 
+function do_test_key(req)
+    local timeout = 10
+    local start_t = os.time()
+
+    local function read_gpio()
+        local val = exec_cmd("mem 0x10000624 2>/dev/null")
+        local byte = val:match("%x+:%s+(%x+)")
+        if byte and #byte >= 2 then
+            local num = tonumber(byte, 16)
+            if num then return tostring(math.floor(num / 64) % 2) end
+        end
+        return ""
+    end
+
+    -- 阶段1: 等待按下 (bit6: 1→0)
+    local pressed = false
+    while os.difftime(os.time(), start_t) < timeout do
+        if read_gpio() == "0" then
+            pressed = true
+            break
+        end
+        socket.sleep(0.05)
+    end
+    if not pressed then
+        return { cmd = "test_key", result = "fail", detail = "Timeout", code = "KEY_TIMEOUT" }
+    end
+
+    -- 阶段2: 等待松开 (bit6: 0→1)
+    local remained = timeout - os.difftime(os.time(), start_t)
+    local released = false
+    if remained > 0 then
+        local release_t = os.time()
+        while os.difftime(os.time(), release_t) < remained do
+            if read_gpio() == "1" then
+                released = true
+                break
+            end
+            socket.sleep(0.05)
+        end
+    end
+
+    if not released then
+        return { cmd = "test_key", result = "fail", detail = "Key stuck", code = "KEY_STUCK" }
+    end
+
+    return { cmd = "test_key", result = "pass", detail = "Key pressed and released", code = "KEY_OK" }
+end
+
 -- WiFi 产测 (依据 MT7628_WiFi产测需求文档 v1.0)
 function do_test_wifi(req)
     req             = req or {}
@@ -512,6 +560,7 @@ network={
     end
     write_wpa_conf()
 
+    --[[
     -- Step 5: 扫描确认目标 AP 可见 (区分射频故障 vs 配置问题)
     local scan_out = exec_cmd("iw dev " .. iface .. " scan 2>/dev/null")
     if not scan_out:find("SSID: " .. ssid) then
@@ -519,6 +568,7 @@ network={
         exec_cmd("rm -f /tmp/wpa_supplicant.conf")
         return wifi_fail("NO_AP")
     end
+    ]]--
 
     -- Step 6: 启动 wpa_supplicant 连接 (超时15秒，最多重试3次)
     local connected = false
@@ -773,7 +823,7 @@ function main()
     local modem_status = "OK"
     --网口初始化
     port_init()
-    n2n_init()
+    --n2n_init()
     modem_status, boot_iccid, boot_imsi, boot_imei = lte_init()
 
     while true do
@@ -807,7 +857,6 @@ function main()
                     break
                 end
 
-                log("Recv: " .. raw_str)
                 local req = cjson.decode(raw_str)
                 local resp = {}
 
@@ -819,6 +868,7 @@ function main()
                     test_wifi = true,
                     test_wdog = true,
                     test_led = true,
+                    test_key = true,
                     write_tuple = true
                 }
 
@@ -836,11 +886,14 @@ function main()
                         resp = do_test_serial(req)
                     elseif req.cmd == "test_wifi" then
                         resp = do_test_wifi(req)
+                    elseif req.cmd == "test_key" then
+                        resp = do_test_key(req)
                     elseif req.cmd == "test_wdog" then
                         close_led()
                         log("Watchdog test triggered. Restarting...")
+                        socket.sleep(2)
                         tcp:close()
-                        socket.sleep(5)
+
                         os.execute("mem 0x10000060 0x50154444;gpioset gpiochip0 0=0")
                         while true do socket.sleep(1) end
                     elseif req.cmd == "test_led" then
