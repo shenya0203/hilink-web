@@ -581,21 +581,13 @@ end
 local function handle_redial_and_switch_logic()
     -- 首先检查阻断强制执行：如果当前是内置卡且被阻断，立即切走
     -- 如果当前配置不是仅内置卡 且 当前卡槽使用的是内置卡
-    if state.modem_simnum ~= 1 and state.current_slot == 1 then
-        if state.internal_blocked then
-            log("CRITICAL: Internal SIM blocked! Forcing switch to External SIM...")
+    if state.current_slot == 1 and state.internal_blocked then
+        log("CRITICAL: Internal SIM blocked! Forcing switch to External SIM...")
 
-            --如果  mode_simnum == 1 仅内置卡 时 是不能切换到外置卡的
-            if state.modem_simnum == 1 and state.is_internal_flight_mode == false then
-                --这里虽然停留在内置卡拨号上 但又不能让他联网
-                --让卡进入飞行模式
-                state.is_internal_flight_mode = true
-                send_at("AT+CFUN=0")
-                return
-            end
-        end
-        --如果配置的是双卡备份模式 则切换到外置卡 否则（即使配置的是外置卡优先 也不再切回到外置卡上）
-        if state.modem_simnum == 2 then
+        if state.modem_simnum == 1 then
+            state.is_internal_flight_mode = true
+            send_at("AT+CFUN=0")
+        else
             perform_slot_switch(0)
         end
 
@@ -618,7 +610,7 @@ local function handle_redial_and_switch_logic()
                     perform_slot_switch(next_slot)
                 end
             end
-        elseif state.modem_simnum == 0 and state.current_slot == 0 then
+        elseif state.modem_simnum == 0 and state.current_slot == 0 then --外置卡优先 且 当前正在使用外置卡
             -- 模式 0 故障回退内置卡，同样需要拦截
             if state.internal_blocked then
                 log("Fallback to SIM1 DENIED: SIM is blocked.")
@@ -861,7 +853,7 @@ local function monitor_main()
         local skip_this_cycle = false
 
         -- 阶段 0: 外部指令感知 (阻断检查)
-        --check_internal_block()
+        check_internal_block()
 
         -- 阶段 1: 物理感知与模式强制矫正
 

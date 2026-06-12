@@ -271,6 +271,8 @@ local function led_mgmt_cb()
         led_work_tick = 0
         led_work_state = 1 - led_work_state
         os.execute(string.format("echo %d > /sys/class/leds/system:work:status/brightness", led_work_state))
+        --喂狗心跳 暂时放这 后面需要根据 业务心跳 来去处理
+        os.execute("echo 1 > /sys/kernel/hlk_watchdog/heartbeat")
     end
 
     -- 网络指示灯闪烁
@@ -939,7 +941,7 @@ local status_data = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.0.32",
+    soft_ver = "V1.0.35",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -3901,7 +3903,8 @@ local methods = {
                     "/etc/init.d/cloud stop",
                     "/etc/init.d/modem-monitor stop",
                     "/etc/init.d/cron stop",
-                    "/etc/init.d/network stop"
+                    "/etc/init.d/network stop",
+                    "sync",
                 }
 
                 local sys_cmd = "sysupgrade "
@@ -3916,6 +3919,8 @@ local methods = {
                 log_info("Executing upgrade sequence in background: " .. final_cmd)
                 --关闭LED 开始闪烁
                 blink_led()
+                --关闭看门狗
+                os.execute("echo 1 > /sys/kernel/hlk_watchdog/disarm")
 
                 os.execute(final_cmd)
             end,
@@ -3981,6 +3986,7 @@ local methods = {
                 table.insert(cmd_parts, "/etc/init.d/mqtt_app restart")
                 table.insert(cmd_parts, "/etc/init.d/socket restart")
                 table.insert(cmd_parts, "/etc/init.d/cloud restart")
+                os.execute("rm -f /tmp/cloud_CLOUD_status")
                 table.insert(cmd_parts, "/etc/init.d/cron restart")
 
                 if need_network or need_nginx then
@@ -4299,7 +4305,12 @@ local function main_service()
 
     os.execute("/etc/init.d/nginx_hlk restart")
 
+    --开启看门狗
+    os.execute("insmod /lib/modules/5.4.238/hlk_watchdog.ko gpio_pin=480;echo 1 > /sys/kernel/hlk_watchdog/heartbeat")
+
     update_net_led_logic()
+
+    --写入一个系统配置文件 其他进程可以获取比如MAC SN IMEI ICCID MODEL
 
     uloop.run()
 end
