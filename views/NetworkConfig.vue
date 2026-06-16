@@ -339,17 +339,19 @@
           </div>
         </div>
         
-        <div v-show="false" class="form-group" style="margin-left: 170px;">
-          <label style="display: flex; align-items: center; gap: 8px; width: auto; text-align: left; cursor: pointer; margin-top: 0; font-weight: 500;">
-            <input type="checkbox" v-model="config.internal_forward_disable" true-value="1" false-value="0" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
-            {{ t('network.internalForwardDisable') }}
-          </label>
+        <div class="form-group">
+          <label>{{ t('network.internalForwardDisable') }}:</label>
+          <select v-model="config.internal_forward_disable">
+            <option value="0">{{ t('network.internalForwardAllow') }}</option>
+            <option value="1">{{ t('network.internalForwardDisallow') }}</option>
+          </select>
         </div>
-        <div v-show="false" class="form-group" style="margin-left: 170px; margin-top: -10px;">
-          <label style="display: flex; align-items: center; gap: 8px; width: auto; text-align: left; cursor: pointer; margin-top: 0; font-weight: 500;">
-            <input type="checkbox" v-model="config.external_forward_disable" true-value="1" false-value="0" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
-            {{ t('network.externalForwardDisable') }}
-          </label>
+        <div class="form-group">
+          <label>{{ t('network.externalForwardDisable') }}:</label>
+          <select v-model="config.external_forward_disable">
+            <option value="0">{{ t('network.externalForwardAllow') }}</option>
+            <option value="1">{{ t('network.externalForwardDisallow') }}</option>
+          </select>
         </div>
       </div>
     </form>

@@ -1609,7 +1609,7 @@ const systemPoints = computed(() => [
 const slaveList = ref([
   {
     id: 'system',
-    name: 'System_Sla..System',
+    name: 'System_Slave',
     isSystem: true,
     slaveAddress: '',
     points: [] // 初始化为空数组，后续填充

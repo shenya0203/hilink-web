@@ -43,6 +43,106 @@ local NETWORK_STA_LOGICAL = "wwan"
 
 product_name              = "HLK-IR01"
 
+-- 1. 状态数据
+local status_data         = {
+    systime = os.time(),
+    runtime = 0,
+    cloud_sta = 0,
+    socketa_sta = 0,
+    socketb_sta = 0,
+    mqtt1_sta = 0,
+    mqtt2_sta = 0,
+    soft_ver = "V1.0.37",
+    os = "Openwrt",
+    mac = "",
+    sn = "03300225101400005387",
+    user_sn = "",
+    product_type = "HLK-IR01 4G"
+}
+
+-- 2. 网络状态数据
+local network_status      = {
+    netdev = "None", --当前使用网络 EtherNet/LET/WIFI/No
+    eth = {
+        link_sta = 0,
+        ip_mode = 0,
+        ip = "",
+        dns = "",
+        sdns = "",
+        netmask = ""
+    },
+    lte = {
+        ver = "",
+        iccid = "",
+        iccid_0 = "",
+        imsi_0 = "",
+        imei = "",
+        csq = 99,
+        mode = "4G",
+        oper = 1,
+        sim = 1,
+        cimi = "",
+        lte_sta = "DisConnect",
+        lte_ip = "",
+        lte_netmask = "",
+        lte_dns = "",
+        lte_sdns = "",
+        use_sim = 0,
+        internal_forward_disable = 1,
+        external_forward_disable = 0
+    }
+}
+
+-- 3. 网络配置数据
+local network_config      = {
+    net_select = 0,
+    keepalive_period = 10,
+    keepalive_addr = { "223.5.5.5", "8.8.8.8" },
+    eth0 = {
+        ip_mode = 0,
+        sip = "",
+        gip = "",
+        mip = "",
+        dns_mode = 0,
+        dns_ip = { "", "" }
+    },
+    cell = {
+        sim_switch = 2,
+        apn = { addr = "", user = "", pswd = "", auth = 0 },
+        dns_mode = 1,
+        dns_ip = { "", "" }
+    }
+}
+
+-- 4. 杂项配置
+local misc_config         = {
+    web_lang = 2,
+    host_name = "",
+    websock_port = 6432,
+    websocket_point = 9,
+    web_port = 80,
+    web_user = "admin",
+    web_psw = "admin",
+    cache_buf = 0,
+    reset_time = 0,
+    telnet_en = 0,
+    telnet_port = 22,
+    ntp_sync_en = 1,
+    ntp_url = {
+    },
+    ntp_utc = 8,
+    f485_en = 0,
+    f485_t = 10,
+    port_max = 2,
+    port_view = 0,
+    timing_reset = {
+        enable = 0,
+        hh = 0,
+        mm = 0,
+        ss = 0
+    }
+}
+
 -- UCI 配置文件操作封装
 local uci_lib             = require("uci")
 
@@ -628,6 +728,191 @@ local function set_ntp_config(enabled, server_list)
     os.execute("touch /tmp/misc_commit")
 end
 
+-- ==========================================================
+-- hlk_system 配置文件初始化（存储设备固定参数）
+-- ==========================================================
+local hlk_system_retry_timer = nil
+local HLK_SYSTEM_RETRY_INTERVAL = 3000 -- 3秒
+
+local function validate_imei(imei)
+    if not imei or imei == "" then return false end
+    return string.match(imei, "^%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d$") ~= nil
+end
+
+local function validate_iccid(iccid)
+    if not iccid or iccid == "" then return false end
+    return string.match(iccid, "^%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d?") ~= nil
+        and (#iccid == 19 or #iccid == 20)
+end
+
+local function validate_imsi(imsi)
+    if not imsi or imsi == "" then return false end
+    return string.match(imsi, "^%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d$") ~= nil
+end
+
+
+local function init_hlk_system_check_cb()
+    local modem_info_str = read_file_content("/tmp/modem_info.json")
+    if not modem_info_str then
+        log_info("hlk_system: modem_info.json not ready, retrying...")
+        hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+        return
+    end
+
+    local ok, info = pcall(cjson.decode, modem_info_str)
+    if not ok then
+        log_info("hlk_system: modem_info.json parse failed, err=" .. tostring(info) .. ", retrying...")
+        hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+        return
+    end
+
+    local imei    = info.imei or ""
+    local iccid   = info.iccid or ""
+    local imsi    = info.imsi or ""
+
+    local mac     = get_system_mac() or ""
+    local sn      = get_system_sn() or ""
+    local ver     = status_data.soft_ver or ""
+
+    local v_imei  = validate_imei(imei)
+    local v_iccid = validate_iccid(iccid)
+    local v_imsi  = validate_imsi(imsi)
+
+    if not v_imei or not v_iccid or not v_imsi or
+        mac == "" or sn == "" or ver == "" then
+        log_info("hlk_system: data incomplete, retrying...")
+        hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+        return
+    end
+
+
+    local uci_dir = "/etc/config"
+    local uci_file = uci_dir .. "/hlk_system"
+
+    -- 检查文件是否存在，不存在则创建
+    local f = io.open(uci_file, "r")
+    if not f then
+        log_info("hlk_system: /etc/config/hlk_system not found, creating...")
+        local new_f = io.open(uci_file, "w")
+        if new_f then
+            new_f:write("config hlk_system 'global'\n")
+            new_f:close()
+            log_info("hlk_system: created /etc/config/hlk_system")
+        else
+            log_error("hlk_system: failed to create " .. uci_file)
+            hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+            return
+        end
+    else
+        f:close()
+        log_info("hlk_system: /etc/config/hlk_system already exists")
+    end
+
+    local cursor = uci_lib.cursor()
+    cursor:set("hlk_system", "global", "hlk_system")
+    cursor:set("hlk_system", "global", "imei", imei)
+    cursor:set("hlk_system", "global", "iccid", iccid)
+    cursor:set("hlk_system", "global", "imsi", imsi)
+    cursor:set("hlk_system", "global", "mac", mac)
+    cursor:set("hlk_system", "global", "sn", sn)
+    cursor:set("hlk_system", "global", "soft_ver", ver)
+
+    log_info("hlk_system: UCI set done, committing...")
+    cursor:commit("hlk_system")
+    os.execute("sync")
+    log_info("hlk_system: commit + sync done, reading back...")
+
+    local r_cursor = uci_lib.cursor()
+    local r_imei   = r_cursor:get("hlk_system", "global", "imei") or ""
+    local r_iccid  = r_cursor:get("hlk_system", "global", "iccid") or ""
+    local r_imsi   = r_cursor:get("hlk_system", "global", "imsi") or ""
+    local r_mac    = r_cursor:get("hlk_system", "global", "mac") or ""
+    local r_sn     = r_cursor:get("hlk_system", "global", "sn") or ""
+    local r_ver    = r_cursor:get("hlk_system", "global", "soft_ver") or ""
+
+    log_info("hlk_system: READ BACK imei=[" .. r_imei .. "] (expect [" .. imei .. "]) match=" .. tostring(r_imei == imei))
+    log_info("hlk_system: READ BACK iccid=[" ..
+        r_iccid .. "] (expect [" .. iccid .. "]) match=" .. tostring(r_iccid == iccid))
+    log_info("hlk_system: READ BACK imsi=[" .. r_imsi .. "] (expect [" .. imsi .. "]) match=" .. tostring(r_imsi == imsi))
+    log_info("hlk_system: READ BACK mac=[" .. r_mac .. "] (expect [" .. mac .. "]) match=" .. tostring(r_mac == mac))
+    log_info("hlk_system: READ BACK sn=[" .. r_sn .. "] (expect [" .. sn .. "]) match=" .. tostring(r_sn == sn))
+    log_info("hlk_system: READ BACK ver=[" .. r_ver .. "] (expect [" .. ver .. "]) match=" .. tostring(r_ver == ver))
+
+    if r_imei == imei and r_iccid == iccid and r_imsi == imsi and
+        r_mac == mac and r_sn == sn and r_ver == ver then
+        log_info("hlk_system: ===== WRITE SUCCESS =====")
+    else
+        log_error("hlk_system: ===== VERIFY FAILED, will retry =====")
+        hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+        return
+    end
+
+    if hlk_system_retry_timer then
+        hlk_system_retry_timer:cancel()
+        hlk_system_retry_timer = nil
+    end
+    log_info("hlk_system: ===== init_hlk_system_check_cb END =====")
+end
+
+local function init_hlk_system()
+    local f = io.open("/etc/config/hlk_system", "r")
+    if f then
+        f:close()
+        log_info("hlk_system: file exists, checking params...")
+
+        -- 读取已存储的参数
+        local cursor    = uci_lib.cursor()
+        local old_imei  = cursor:get("hlk_system", "global", "imei") or ""
+        local old_iccid = cursor:get("hlk_system", "global", "iccid") or ""
+        local old_imsi  = cursor:get("hlk_system", "global", "imsi") or ""
+        local old_mac   = cursor:get("hlk_system", "global", "mac") or ""
+        local old_sn    = cursor:get("hlk_system", "global", "sn") or ""
+        local old_ver   = cursor:get("hlk_system", "global", "soft_ver") or ""
+
+        log_info("hlk_system: stored imei=[" .. old_imei .. "] iccid=[" .. old_iccid ..
+            "] imsi=[" .. old_imsi .. "] mac=[" .. old_mac ..
+            "] sn=[" .. old_sn .. "] ver=[" .. old_ver .. "]")
+
+        -- 检查参数是否完整
+        if old_imei == "" or old_iccid == "" or old_imsi == "" or
+            old_mac == "" or old_sn == "" or old_ver == "" then
+            log_info("hlk_system: params incomplete, start timer to fill")
+            hlk_system_retry_timer = uloop.timer(init_hlk_system_check_cb)
+            hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+            return
+        end
+
+        -- 检查版本号是否变化（固件升级）
+        local cur_ver = status_data.soft_ver or ""
+        log_info("hlk_system: stored_ver=[" .. old_ver .. "] cur_ver=[" .. cur_ver .. "]")
+
+        if cur_ver ~= "" and cur_ver ~= old_ver then
+            log_info("hlk_system: version changed [" .. old_ver .. "] -> [" .. cur_ver .. "], updating")
+            cursor:set("hlk_system", "global", "soft_ver", cur_ver)
+            cursor:commit("hlk_system")
+            os.execute("sync")
+
+            -- 验证
+            local r_cursor = uci_lib.cursor()
+            local r_ver = r_cursor:get("hlk_system", "global", "soft_ver") or ""
+            if r_ver == cur_ver then
+                log_info("hlk_system: version update success")
+            else
+                log_error("hlk_system: version update failed, expect [" .. cur_ver .. "] got [" .. r_ver .. "]")
+            end
+        else
+            log_info("hlk_system: version unchanged, no update needed")
+        end
+
+        log_info("hlk_system: ===== init_hlk_system END (all good) =====")
+        return
+    end
+
+    log_info("hlk_system: file not found, starting timer to wait for modem data")
+    hlk_system_retry_timer = uloop.timer(init_hlk_system_check_cb)
+    hlk_system_retry_timer:set(HLK_SYSTEM_RETRY_INTERVAL)
+end
+
 -- 从UCI读取串口配置到内存
 local function load_uart_config_from_uci()
     local cursor = uci_lib.cursor()
@@ -932,105 +1217,7 @@ local function save_comm_tunnel_config_to_uci(config)
     return true
 end
 
--- 1. 状态数据
-local status_data = {
-    systime = os.time(),
-    runtime = 0,
-    cloud_sta = 0,
-    socketa_sta = 0,
-    socketb_sta = 0,
-    mqtt1_sta = 0,
-    mqtt2_sta = 0,
-    soft_ver = "V1.0.35",
-    os = "Openwrt",
-    mac = "",
-    sn = "03300225101400005387",
-    user_sn = "",
-    product_type = "HLK-IR01 4G"
-}
 
--- 2. 网络状态数据
-local network_status = {
-    netdev = "None", --当前使用网络 EtherNet/LET/WIFI/No
-    eth = {
-        link_sta = 0,
-        ip_mode = 0,
-        ip = "",
-        dns = "",
-        sdns = "",
-        netmask = ""
-    },
-    lte = {
-        ver = "",
-        iccid = "",
-        iccid_0 = "",
-        imsi_0 = "",
-        imei = "",
-        csq = 99,
-        mode = "4G",
-        oper = 1,
-        sim = 1,
-        cimi = "",
-        lte_sta = "DisConnect",
-        lte_ip = "",
-        lte_netmask = "",
-        lte_dns = "",
-        lte_sdns = "",
-        use_sim = 0,
-        internal_forward_disable = 1,
-        external_forward_disable = 0
-    }
-}
-
--- 3. 网络配置数据
-local network_config = {
-    net_select = 0,
-    keepalive_period = 10,
-    keepalive_addr = { "223.5.5.5", "8.8.8.8" },
-    eth0 = {
-        ip_mode = 0,
-        sip = "",
-        gip = "",
-        mip = "",
-        dns_mode = 0,
-        dns_ip = { "", "" }
-    },
-    cell = {
-        sim_switch = 2,
-        apn = { addr = "", user = "", pswd = "", auth = 0 },
-        dns_mode = 1,
-        dns_ip = { "", "" }
-    }
-}
-
--- 4. 杂项配置
-local misc_config = {
-    web_lang = 2,
-    host_name = "",
-    websock_port = 6432,
-    websocket_point = 9,
-    web_port = 80,
-    web_user = "admin",
-    web_psw = "admin",
-    cache_buf = 0,
-    reset_time = 0,
-    telnet_en = 0,
-    telnet_port = 22,
-    ntp_sync_en = 1,
-    ntp_url = {
-    },
-    ntp_utc = 8,
-    f485_en = 0,
-    f485_t = 10,
-    port_max = 2,
-    port_view = 0,
-    timing_reset = {
-        enable = 0,
-        hh = 0,
-        mm = 0,
-        ss = 0
-    }
-}
 
 -- 5. 通讯通道配置
 --分多个配置
@@ -3279,8 +3466,8 @@ local methods = {
                 local lte_pswd = get_uci("network.lte.modem_passwd") or ""
                 local lte_auth = get_uci("network.lte.modem_auth") or 0
                 local lte_simnum = get_uci("network.lte.modem_simnum") or 0
-                local lte_internal_forward_disable = get_uci("network.lte.internal_forward_disable") or 1
-                local lte_external_forward_disable = get_uci("network.lte.external_forward_disable") or 1
+                local lte_internal_forward_disable = get_uci("network.lte.lte_internal_forward_disable") or 1
+                local lte_external_forward_disable = get_uci("network.lte.lte_external_forward_disable") or 1
                 --local lte_allow_lan_forward = get_uci("network.lte.allow_lan_forward") or 1
 
                 -- Read DNS
@@ -4030,11 +4217,11 @@ local methods = {
                     end
 
                     -- 注入系统从机数据
-                    values["System_Sla..System"] = get_system_slave_data()
+                    values["System_Slave"] = get_system_slave_data()
                     reply(req, { result = true, data = values })
                 else
                     values = {}
-                    values["System_Sla..System"] = get_system_slave_data()
+                    values["System_Slave"] = get_system_slave_data()
                     reply(req, { result = true, data = values })
                 end
             end,
@@ -4311,6 +4498,7 @@ local function main_service()
     update_net_led_logic()
 
     --写入一个系统配置文件 其他进程可以获取比如MAC SN IMEI ICCID MODEL
+    init_hlk_system()
 
     uloop.run()
 end
