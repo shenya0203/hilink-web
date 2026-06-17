@@ -7,13 +7,10 @@ local INFO_FILE = "/tmp/modem_info.json"
 local STATUS_FILE = "/tmp/modem_status.json"
 local BLOCK_FILE = "/tmp/internal_sim_blocked.json"
 local PROBE_FILE = "/tmp/hlk_modem_probe.json"
-local PROBE_INTERVAL_SEC = 300      -- 15 分钟一轮试探
-local PROBE_PHASE_EXTERNAL_SEC = 90 -- 外置重拨 3 分钟
-local PROBE_PHASE_INTERNAL_SEC = 150 -- 内置临时试探 5 分钟
-local PROBE_PHASE_RADIO_SEC = 300    -- 仅内置卡开射频 5 分钟
+local PROBE_INTERVAL_SEC = 900      -- 15 分钟一轮试探
+local PROBE_PHASE_INTERNAL_SEC = 90 -- 内置临时试探 90s
 local CHECK_INTERVAL = 15
-local FAIL_THRESHOLD = 5   -- 长周期重拨阈值
-local SWITCH_FAIL_LIMIT = 3 -- 模式3自动切卡阈值
+local FAIL_THRESHOLD = 10   -- 长周期重拨阈值
 
 -- 全局串口句柄
 local G_SERIAL_FD = nil
@@ -111,6 +108,56 @@ local function get_netif_base()
     return dev or "eth1"
 end
 
+-- --- 串口 Drain：用大块读取代替逐字节，减少 Lua 调用次数 ---
+local function drain_serial()
+    local drain_end = os.time() + 1
+    while os.time() < drain_end do
+        local chunk = G_SERIAL_FD:read(4096)
+        if not chunk or chunk == "" then break end
+    end
+end
+
+-- --- AT 指令交互（优化版） ---
+-- 使用 read("*l") 行读取替代 read(1) 逐字节，大幅减少 Lua 调用和 GC 压力
+local function send_at(cmd, timeout_sec)
+    timeout_sec = timeout_sec or 3
+    if not G_SERIAL_FD then return nil end
+
+    drain_serial()
+
+    G_SERIAL_FD:write(cmd .. "\r\n")
+    G_SERIAL_FD:flush()
+
+    local lines = {}
+    local start_t = os.time()
+    while os.difftime(os.time(), start_t) < timeout_sec do
+        local line = G_SERIAL_FD:read("*l")
+        if line then
+            table.insert(lines, line)
+            if line:find("OK") or line:find("ERROR") then break end
+        end
+    end
+
+    local results = {}
+    for _, line in ipairs(lines) do
+        if not line:find(cmd, 1, true) then
+            line = line:gsub("^%s*(.-)%s*$", "%1")
+            if #line > 0 then table.insert(results, line) end
+        end
+    end
+    local output = table.concat(results, " ")
+
+    local log_msg
+    if #output == 0 then
+        log_msg = string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd)
+    else
+        log_msg = string.format("AT >> %s | << %s", cmd, output)
+    end
+    log(log_msg, cmd)
+    return output
+end
+
+
 -- --- 辅助函数：检查内置卡阻断状态 ---
 local function check_internal_block()
     local f = io.open(BLOCK_FILE, "r")
@@ -141,7 +188,6 @@ local function probe_override_active()
 end
 
 local function probe_skip_block_enforcement()
-    log("内置卡 尝试联网，但目前还处于被阻断中 ")
     if probe_override_active() then return true end
     return false
 end
@@ -248,6 +294,7 @@ end
 local function probe_set_radio_up()
     if state.is_internal_flight_mode then
         log("试探：内置卡开射频（CFUN=1）")
+        os.execute("echo 1 > /sys/class/net/eth1/reset_statistics")
         send_at("AT+CFUN=1")
         state.is_internal_flight_mode = false
     end
@@ -377,54 +424,7 @@ local function init_serial_port()
     G_SERIAL_FD:setvbuf("no")
 end
 
--- --- 串口 Drain：用大块读取代替逐字节，减少 Lua 调用次数 ---
-local function drain_serial()
-    local drain_end = os.time() + 1
-    while os.time() < drain_end do
-        local chunk = G_SERIAL_FD:read(4096)
-        if not chunk or chunk == "" then break end
-    end
-end
 
--- --- AT 指令交互（优化版） ---
--- 使用 read("*l") 行读取替代 read(1) 逐字节，大幅减少 Lua 调用和 GC 压力
-local function send_at(cmd, timeout_sec)
-    timeout_sec = timeout_sec or 3
-    if not G_SERIAL_FD then return nil end
-
-    drain_serial()
-
-    G_SERIAL_FD:write(cmd .. "\r\n")
-    G_SERIAL_FD:flush()
-
-    local lines = {}
-    local start_t = os.time()
-    while os.difftime(os.time(), start_t) < timeout_sec do
-        local line = G_SERIAL_FD:read("*l")
-        if line then
-            table.insert(lines, line)
-            if line:find("OK") or line:find("ERROR") then break end
-        end
-    end
-
-    local results = {}
-    for _, line in ipairs(lines) do
-        if not line:find(cmd, 1, true) then
-            line = line:gsub("^%s*(.-)%s*$", "%1")
-            if #line > 0 then table.insert(results, line) end
-        end
-    end
-    local output = table.concat(results, " ")
-
-    local log_msg
-    if #output == 0 then
-        log_msg = string.format("AT >> %s | << [TIMEOUT/EMPTY]", cmd)
-    else
-        log_msg = string.format("AT >> %s | << %s", cmd, output)
-    end
-    log(log_msg, cmd)
-    return output
-end
 
 -- --- 合并 AT 命令交互 ---
 -- 发送 AT+CMD1;+CMD2;+CMD3 并逐行返回所有响应结果
@@ -477,6 +477,7 @@ local function sync_modem_hardware(mode)
     os.execute("sleep 5")
 end
 
+--[[
 -- --- 网络状态获取 ---
 local function get_mwan3_status()
     local f = io.popen("mwan3 status 2>/dev/null")
@@ -490,6 +491,27 @@ local function get_mwan3_status()
     end
     return "offline"
 end
+]]--
+
+local function get_mwan3_status()
+
+    local path = "/var/run/mwan3/iface_state/lte"
+    local f = io.open(path, "r")
+
+    -- 1. 如果文件不存在，直接视为离线 (mwan3 未启动或接口未接管)
+    if not f then return "offline" end
+
+    local content = f:read("*a")
+    f:close()
+
+    -- 2. 判断内容是否包含 "online"
+    if content and string.find(content, "online") then
+        return "online"
+    end
+
+    return "offline"
+end
+
 
 -- --- 执行卡槽切换 ---
 local function perform_slot_switch(target)
@@ -579,11 +601,12 @@ local function manage_flow_probe()
         return
     end
 
-    probe_latch_internal_blocked()  --表示目前内置卡已block 标记一下 临时开启探测
-
     if not probe_interval_elapsed(now) then
         return
     end
+
+    probe_latch_internal_blocked()  --表示目前内置卡已block 标记一下 临时开启探测
+
 
     if state.probe.active then
         if now >= state.probe.deadline then
@@ -826,15 +849,11 @@ local function handle_redial_and_switch_logic()
                     state.is_internal_flight_mode = true
                     log("内置卡被阻断，进入飞行模式")
                     send_at("AT+CFUN=0")
-                else
-                    log("内置卡已被阻断，在飞行模式中")
                 end
             elseif state.modem_simnum == 2 then
                 --多卡配置下 且到其他卡
                 execute_slot_switch(0, "block_enforcement")
             end
-        else
-            log("当前卡是 内置卡被限流 且 在探测中")
         end
 
         return
@@ -862,6 +881,7 @@ local function handle_redial_and_switch_logic()
                     -- 已在 SIM1 上，主动重启 LTE 触发重拨
                     log("已切换到内置卡")
                     send_at("AT+CFUN=0")
+                    os.execute("echo 1 > /sys/class/net/eth1/reset_statistics")
                     os.execute("sleep 2")
                     send_at("AT+CFUN=1")
 
@@ -875,6 +895,7 @@ local function handle_redial_and_switch_logic()
             --正常停机？
             log("仅内置卡：检测到离线但未阻断，尝试重开射频重拨")
             send_at("AT+CFUN=0")
+            os.execute("echo 1 > /sys/class/net/eth1/reset_statistics")
             os.execute("sleep 2")
             send_at("AT+CFUN=1")
             os.execute(string.format("ubus call network.interface.%s down 2>/dev/null", INTERFACE))
@@ -914,7 +935,6 @@ local function check_ip_conflict_and_resolve()
     --
     local lte_ip = content and content:match('"address"%s*:%s*"([^"]+)"')
     if not lte_ip then
-        log("IP-Check: no ipv4 address for " .. INTERFACE .. " (interface may be down)")
 
         -- 检查UCI是否已有配置
         local f_uci = io.popen("uci -q get network." .. INTERFACE .. ".ipaddr 2>/dev/null")
@@ -922,7 +942,6 @@ local function check_ip_conflict_and_resolve()
             local uci_ip = f_uci:read("*l")
             f_uci:close()
             if uci_ip and uci_ip ~= "" then
-                log("IP-Check: uci already has ipaddr=" .. uci_ip .. ", skipping")
                 return
             end
         end

@@ -248,7 +248,7 @@
             <option value="0">{{ t('network.externalSimFirst') }}</option>
             <option value="1">{{ t('network.internalSimOnly') }}</option>
             <option value="2">{{ t('network.externalSimOnly') }}</option>
-            <option value="3">{{ t('network.dualSimBackup') }}</option>
+            <!--<option value="3">{{ t('network.dualSimBackup') }}</option>-->
           </select>
         </div>
         <div class="form-group">
