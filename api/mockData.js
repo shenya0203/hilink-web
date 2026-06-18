@@ -5,7 +5,6 @@ import { getStatus, getNetwork, getHomepageData, getMisc, getNetworkConfig, getN
 export async function fetchStatusData() {
     try {
         const data = await getStatus()
-        console.log('✓ 获取成功 - GET /download_flex.cgi?name=status:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=status:', error)
@@ -17,7 +16,6 @@ export async function fetchStatusData() {
 export async function fetchNetworkData() {
     try {
         const data = await getNetwork()
-        console.log('✓ 获取成功 - GET /download_flex.cgi?name=network:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=network:', error)
@@ -30,7 +28,6 @@ export async function fetchNetworkData() {
 export async function fetchHomepageData() {
     try {
         const data = await getHomepageData()
-        console.log('✓ 获取成功 - GET /download_flex.cgi?name=all:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_flex.cgi?name=all:', error)
@@ -42,7 +39,6 @@ export async function fetchHomepageData() {
 export async function fetchNetworkConfigData() {
     try {
         const data = await getNetworkConfig()
-        console.log('✓ 获取成功 - GET /download_nv.cgi?name=network:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=network:', error)
@@ -54,7 +50,6 @@ export async function fetchNetworkConfigData() {
 export async function fetchNetworkLanConfigData() {
     try {
         const data = await getNetworkLanConfig()
-        console.log('✓ 获取成功 - GET /download_nv.cgi?name=network_lan:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=network_lan:', error)
@@ -76,7 +71,6 @@ export async function fetchMiscData() {
 export async function fetchUartConfigData() {
     try {
         const data = await getUartConfig()
-        console.log('✓ 获取成功 - GET /download_nv.cgi?name=uart:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=uart:', error)
@@ -88,7 +82,6 @@ export async function fetchUartConfigData() {
 export async function fetchSocketConfigData() {
     try {
         const data = await getCommTunnel()
-        console.log('✓ 获取成功 - GET /download_nv.cgi?name=comm_tunnel:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=comm_tunnel:', error)
@@ -101,7 +94,6 @@ export async function fetchSocketConfigData() {
 export async function fetchOfflineCacheData() {
     try {
         const data = await getOfflineCache()
-        console.log('✓ 获取成功 - GET /download_nv.cgi?name=offline_cache:', data)
         return data
     } catch (error) {
         console.error('✗ 获取失败 - GET /download_nv.cgi?name=offline_cache:', error)

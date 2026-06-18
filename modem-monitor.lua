@@ -531,6 +531,8 @@ local function perform_slot_switch(target)
     os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
     local resp_slot = send_at("AT+SIMCROSS?")
     state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
+    os.execute("echo ".. tostring(state.current_slot) .. " > /tmp/lte_active_slot")
+    os.execute("apply_lte_forward.sh")
 end
 
 -- --- 统一切卡入口：执行切卡 + SIM ready 检测 + 日志 ---

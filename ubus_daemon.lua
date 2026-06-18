@@ -52,7 +52,7 @@ local status_data         = {
     socketb_sta = 0,
     mqtt1_sta = 0,
     mqtt2_sta = 0,
-    soft_ver = "V1.0.37",
+    soft_ver = "V1.0.38",
     os = "Openwrt",
     mac = "",
     sn = "03300225101400005387",
@@ -2393,19 +2393,19 @@ local function set_network_config_values(args)
     local lte_dns_mode = args["n_cell.dns_mode"] and tonumber(args["n_cell.dns_mode"])
     local lte_dns = args["s_cell.dns_ip[0]"]
     local lte_sdns = args["s_cell.dns_ip[1]"]
-    local lte_internal_forward_disable = args["n_cell.internal_forward_disable"] and
+    local internal_forward_disable = args["n_cell.internal_forward_disable"] and
         tonumber(args["n_cell.internal_forward_disable"])
-    local lte_external_forward_disable = args["n_cell.external_forward_disable"] and
+    local external_forward_disable = args["n_cell.external_forward_disable"] and
         tonumber(args["n_cell.external_forward_disable"])
 
-    if lte_internal_forward_disable ~= nil then
-        cursor:set("network", "lte", "lte_internal_forward_disable", lte_internal_forward_disable)
-        log_info("Set network.lte.lte_internal_forward_disable = " .. lte_internal_forward_disable)
+    if internal_forward_disable ~= nil then
+        cursor:set("network", "lte", "internal_forward_disable", internal_forward_disable)
+        log_info("Set network.lte.internal_forward_disable = " .. internal_forward_disable)
     end
 
-    if lte_external_forward_disable ~= nil then
-        cursor:set("network", "lte", "lte_external_forward_disable", lte_external_forward_disable)
-        log_info("Set network.lte.lte_external_forward_disable = " .. lte_external_forward_disable)
+    if external_forward_disable ~= nil then
+        cursor:set("network", "lte", "external_forward_disable", external_forward_disable)
+        log_info("Set network.lte.external_forward_disable = " .. external_forward_disable)
     end
 
     -- 设置 LTE 接口配置
@@ -3466,8 +3466,8 @@ local methods = {
                 local lte_pswd = get_uci("network.lte.modem_passwd") or ""
                 local lte_auth = get_uci("network.lte.modem_auth") or 0
                 local lte_simnum = get_uci("network.lte.modem_simnum") or 0
-                local lte_internal_forward_disable = get_uci("network.lte.lte_internal_forward_disable") or 1
-                local lte_external_forward_disable = get_uci("network.lte.lte_external_forward_disable") or 1
+                local internal_forward_disable = get_uci("network.lte.internal_forward_disable") or 1
+                local external_forward_disable = get_uci("network.lte.external_forward_disable") or 0
                 --local lte_allow_lan_forward = get_uci("network.lte.allow_lan_forward") or 1
 
                 -- Read DNS
@@ -3583,8 +3583,8 @@ local methods = {
                         dns_mode = lte_dns_enable,
                         dns_ip = { lte_dns[1] or "", lte_dns[2] or "" },
                         --allow_lan_forward = tonumber(lte_allow_lan_forward) or 0,
-                        internal_forward_disable = tonumber(lte_internal_forward_disable) or 1,
-                        external_forward_disable = tonumber(lte_external_forward_disable) or 1
+                        internal_forward_disable = tonumber(internal_forward_disable) or 1,
+                        external_forward_disable = tonumber(external_forward_disable) or 0
                     },
                     n_wifi = {
                         enable = wifi_enable,

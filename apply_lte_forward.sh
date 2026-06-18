@@ -21,8 +21,8 @@ iptables -C FORWARD -j "$CHAIN" 2>/dev/null || \
 # ============================================================
 # 2. 读取 UCI 配置
 # ============================================================
-
-INT_DISABLE=$(uci -q get network.lte.internal_forward_disable) || INT_DISABLE=0
+# 内置卡 默认阻断 外置卡默认开启
+INT_DISABLE=$(uci -q get network.lte.internal_forward_disable) || INT_DISABLE=1
 EXT_DISABLE=$(uci -q get network.lte.external_forward_disable) || EXT_DISABLE=0
 SIM_MODE=$(uci -q get network.lte.modem_simnum) || SIM_MODE=0
 
@@ -58,3 +58,4 @@ else
 fi
 
 #session_41f42d12.md
+# session_fc8e3b91.md
