@@ -1146,17 +1146,18 @@ local function monitor_main()
     init_service()
     local first = true
     --增加判断 是否配置为仅以太网模式，如果仅以太网模式，则不进行以下逻辑
-    local eth_only = is_eth_only_mode()
+    local eth_only
 
     while true do
         -- 阶段 0: 外部指令感知 (阻断检查)
+        eth_only = is_eth_only_mode()
+
         if not eth_only then
             check_internal_block()
 
             -- 阶段 1: 物理感知与模式强制矫正
 
             -- 阶段 2: 事件记录与基础状态
-            --handle_sim_slot_change_event()
             collect_modem_status()
             manage_flow_probe()
 
@@ -1170,6 +1171,10 @@ local function monitor_main()
 
             -- 阶段 5: IP 冲突检测 (独立运行，不受 skip 影响)
             check_ip_conflict_and_resolve()
+        else
+            collect_modem_status()
+            update_failure_counters()
+            report_all_status()
         end
 
         if first then

@@ -373,7 +373,7 @@ const socketConfig = ref([])
 // 处理重启 (改为重启服务)
 const handleRestart = async () => {
   showRestartModal.value = false
-  await restartService(miscConfig.value.web_port)
+  await restartService(window.location.hostname, miscConfig.value.web_port)
 }
 
 // misc 配置数据

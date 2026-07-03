@@ -11,20 +11,26 @@ export function useServiceControl() {
      * 每 2 秒请求一次轻量级接口，直到成功返回
      * @param {number|string} targetPort - 可选的目标端口号
      */
-    const pollServiceRecovery = (targetPort) => {
+    const pollServiceRecovery = (targetHost, targetPort) => {
         const pollInterval = 2000 // 2 秒
         const maxAttempts = 60 // 最多尝试 60 次 (2分钟)
         let attempts = 0
 
         const protocol = window.location.protocol
-        const hostname = window.location.hostname
+        const hostname = targetHost || window.location.hostname
         let requestUrl = '/favicon.ico'
         let targetUrl = null
 
-        // 检查端口是否发生改变
+        // 检查主机（IP）或端口是否发生改变
         const currentPort = window.location.port || (protocol === 'https:' ? '443' : '80')
-        if (targetPort && String(targetPort) !== String(currentPort)) {
-            const portSuffix = (String(targetPort) === '80' && protocol === 'http:') || (String(targetPort) === '443' && protocol === 'https:') ? '' : `:${targetPort}`
+        const currentHost = window.location.hostname
+
+        const hostChanged = targetHost && targetHost !== currentHost
+        const portChanged = targetPort && String(targetPort) !== String(currentPort)
+
+        if (hostChanged || portChanged) {
+            const effectivePort = targetPort || currentPort
+            const portSuffix = (String(effectivePort) === '80' && protocol === 'http:') || (String(effectivePort) === '443' && protocol === 'https:') ? '' : `:${effectivePort}`
             targetUrl = `${protocol}//${hostname}${portSuffix}`
             requestUrl = `${targetUrl}/favicon.ico?t=${Date.now()}`
         } else {
@@ -91,7 +97,7 @@ export function useServiceControl() {
         setTimeout(poll, 5000)
     }
 
-    const restartService = async (targetPort) => {
+    const restartService = async (targetHost, targetPort) => {
         // 1. 显示重启遮罩层
         isServiceRestarting.value = true
 
@@ -108,10 +114,10 @@ export function useServiceControl() {
                 console.log('Execute restart triggered expected network drop:', err)
             })
 
-            console.log('Service restart command sequence finished, starting recovery polling...')
+            //console.log('Service restart command sequence finished, starting recovery polling...')
 
             // 4. 开始轮询探测服务恢复
-            pollServiceRecovery(targetPort)
+            pollServiceRecovery(targetHost, targetPort)
         } catch (err) {
             console.log('Caught error during restart sequence:', err)
 

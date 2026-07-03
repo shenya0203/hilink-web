@@ -1306,7 +1306,7 @@ const saveConfig = async () => {
 
 const handleRestart = async () => {
   showRestartModal.value = false
-  await restartService()
+  await restartService(config.value.s_lan.ip)
 }
 
 const handleContinue = () => {
