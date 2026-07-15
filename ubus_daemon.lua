@@ -4042,7 +4042,19 @@ local methods = {
                 -- 实际应该调用: os.execute("firstboot -y && reboot")
                 -- 两阶段模式下不再需要 sleep 2，直接执行
                 os.execute(
-                    "(/etc/init.d/edge stop;/etc/init.d/socket stop;/etc/init.d/mqtt_app stop;/etc/init.d/cloud stop;/etc/init.d/modem-monitor stop;/etc/init.d/network stop; umount /dev/mtdblock6;sync; firstboot -y; reboot) &")
+                    "(/etc/init.d/edge stop;\
+                      /etc/init.d/socket stop;\
+                      /etc/init.d/mqtt_app stop;\
+                      /etc/init.d/cloud stop;\
+                      /etc/init.d/modem-monitor stop;\
+                      /etc/init.d/network stop;\
+                      /etc/init.d/nginx_hlk stop;\
+                      rm -rf /etc/config/device/*;\
+                      rm -rf /etc/config/cert/*;\
+                      sync;\
+                      jffs2mark -y;jffs2reset -y;\
+                      firstboot -y;\
+                      reboot -f) &")
             end,
             { apply = ubus.INT32 }
         },
