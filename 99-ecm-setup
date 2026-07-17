@@ -1,0 +1,83 @@
+#!/bin/sh
+
+# 脚本名称: 99-ecm-setup
+# 功能: 针对专网卡 ECM 模式，在接口 UP 时下发 AT+CPNETAPN 配置
+# 注意: 此脚本只发送配置，不检查 SIM 卡状态，不负责断网
+
+# 1. 基础环境检查
+[ "$ACTION" = "ifup" ] || exit 0
+
+# 调试日志
+logger -t "ECM-Setup" "Starting configuration for interface: $INTERFACE"
+
+# 仅针对 lte 接口
+if [ "$INTERFACE" != "lte" ]; then
+    exit 0
+fi
+
+iface="$INTERFACE"
+
+# 2. 读取 UCI 配置（与 ubus_daemon 对齐：modem_passwd；兼容旧键 modem_pass）
+device=$(uci -q get network.$iface.modem_device)
+apn=$(uci -q get network.$iface.modem_apn)
+user=$(uci -q get network.$iface.modem_user)
+pass=$(uci -q get network.$iface.modem_passwd)
+[ -z "$pass" ] && pass=$(uci -q get network.$iface.modem_pass)
+auth=$(uci -q get network.$iface.modem_auth)
+
+# 检查串口设备配置
+if [ -z "$device" ]; then
+    logger -t "ECM-Setup" "Error: modem_device not set in network config."
+    exit 0
+fi
+
+if [ ! -e "$device" ]; then
+    logger -t "ECM-Setup" "Error: Serial device $device not found."
+    exit 0
+fi
+
+# 3. 核心逻辑: 仅在配置了 APN 时才下发指令
+if [ -n "$apn" ]; then
+    logger -t "ECM-Setup" "APN config found: $apn. Preparing AT command..."
+
+    # --- 鉴权模式映射 ---
+    # AT+CPNETAPN 鉴权位: 0(None), 1(PAP), 2(CHAP)
+    # Web/UCI 存 0/1/2；兼容历史 PAP/CHAP 字符串
+    auth_mode=0
+    case "$auth" in
+        1|"1"|"PAP"|"pap")
+            auth_mode=1
+            ;;
+        2|"2"|"CHAP"|"chap")
+            auth_mode=2
+            ;;
+        *)
+            auth_mode=0
+            ;;
+    esac
+
+    # --- 构造指令 ---
+    # 语法: AT+CPNETAPN=<mode>,<apn>,<user>,<pwd>,<authmode>
+    # mode=2 表示保存并生效
+    # 注意: 即使 user/pass 为空，AT指令中也需要保留双引号 ""
+    logger -t "ECM-Setup" "APN: $apn, User: $user, Pass: $pass, Auth Mode: $auth_mode"
+    
+    cmd_str="AT+CPNETAPN=2,\"$apn\",\"$user\",\"$pass\",$auth_mode"
+    
+    logger -t "ECM-Setup" "Sending Command: $cmd_str"
+
+    # --- 发送指令 ---
+    # 发送指令到串口 (不等待返回，假设成功)
+    echo -e "${cmd_str}\r" > "$device"
+    
+    # 等待一秒让指令处理
+    sleep 1
+    
+    logger -t "ECM-Setup" "Configuration sent to $device."
+
+else
+    logger -t "ECM-Setup" "No APN configured. Skipping AT+CPNETAPN setup."
+fi
+
+# 脚本结束，总是返回成功，防止干扰 netifd 进程
+exit 0

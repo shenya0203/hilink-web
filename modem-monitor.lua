@@ -517,7 +517,7 @@ end
 local function perform_slot_switch(target)
     local resp
     log(string.format("!!! TRIGGER: Software Switch to SIM%d !!!", target))
-    os.execute(string.format("ubus call network.interface.%s down", INTERFACE))
+    os.execute(string.format("ubus call network.interface.%s down 2>/dev/null", INTERFACE))
     state.is_internal_switching = true
     resp = send_at("AT+CFUN=0")
     os.execute("sleep 1")
@@ -528,7 +528,7 @@ local function perform_slot_switch(target)
     state.fail_count = 0
     state.session_id = state.session_id + 1 -- 会话ID递增
     os.execute("sleep 1")
-    os.execute(string.format("ubus call network.interface.%s up", INTERFACE))
+    os.execute(string.format("ubus call network.interface.%s up 2>/dev/null", INTERFACE))
     local resp_slot = send_at("AT+SIMCROSS?")
     state.current_slot = tonumber(resp_slot and resp_slot:match(":%s*(%d)")) or -1
     os.execute("echo ".. tostring(state.current_slot) .. " > /tmp/lte_active_slot")
@@ -765,7 +765,7 @@ end
 -- 注意：SIM 未就绪时的切卡兜底已移入 handle_redial_and_switch_logic
 local function collect_network_data()
     if state.data.sim_ready == "ready" then
-        if state.data.local_ip == "0.0.0.0" then
+        if state.data.local_ip == "0.0.0.0" or state.data.local_ip == nil then
             local ip_resp = send_at("AT+CGPADDR=1")
             log("ip_resp: " .. ip_resp)
             if ip_resp then
