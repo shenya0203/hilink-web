@@ -343,6 +343,7 @@ export default {
         timeout: 'Timeout',
         collectFormula: 'Collect Formula',
         controlFormula: 'Control Formula',
+        dataCalc: 'Data Calculation',
         reportOnChange: 'Report on Change',
 
         // Data Types
@@ -447,6 +448,12 @@ export default {
         slaveNameDuplicate: 'Slave name duplicate',
         pointsLimitReached: 'Points limit reached (1000), cannot add more points',
         slavesLimitReached: 'Slaves limit reached (64), cannot add more slaves',
+        virtualPointsLimitReached: 'Virtual points limit reached (50), cannot add more',
+        formulaRefRequired: 'Data calculation must reference at least one physical point',
+        formulaRefTooMany: 'Data calculation can reference at most 20 physical points',
+        formulaRefCountMismatch: 'Number of %s placeholders does not match number of referenced points',
+        formulaRefInvalidName: "Invalid reference name (only 'a'-'z'/'A'-'Z'/'0'-'9'/'_')",
+        formulaRefNotFound: 'Referenced point does not exist or is not a physical point',
         refDataCalc: 'Virtual Point (Data Calc)',
         refCloudReport: 'Cloud Report Group (Cloud)',
         refLinkCtrl: 'Link Control (Trigger/Action)',

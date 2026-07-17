@@ -88,7 +88,7 @@
                 <td>{{ getSlaveSource(slave) }}</td>
                 <td>{{ slave.slaveAddress || t('edge.empty') }}</td>
                 <td class="action-cell">
-                  <template v-if="!slave.isSystem">
+                  <template v-if="!slave.isSystem && !slave.isVirtual">
                     <button class="btn-small" @click.stop="editSlave(index)">{{ t('edge.edit') }}</button>
                     <button class="btn-small btn-danger" @click.stop="deleteSlave(index)">{{ t('edge.delete') }}</button>
                   </template>
@@ -760,7 +760,7 @@
               <span v-if="pointDetailError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointDetailError }}</span>
             </div>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+          <div class="form-group" v-if="!pointForm.isDefault && !pointForm.isVirtual" style="align-items: flex-start;">
             <label style="margin-top: 5px;">{{ t('edge.registerType') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <div style="display: flex; align-items: center;">
@@ -796,7 +796,7 @@
           <div class="form-group">
             <label>{{ t('edge.dataType') }}:</label>
             <select v-model="pointForm.dataType" :disabled="pointForm.isDefault">
-              <option v-for="type in availableDataTypes" :key="type" :value="type">{{ type }}</option>
+              <option v-for="type in (pointForm.isVirtual ? virtualDataTypes : availableDataTypes)" :key="type" :value="type">{{ type }}</option>
             </select>
           </div>
           <div class="form-group" v-if="!pointForm.isDefault">
@@ -805,7 +805,7 @@
               <option v-for="n in 7" :key="n-1" :value="n-1">{{ n - 1 }}</option>
             </select>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+          <div class="form-group" v-if="!pointForm.isDefault && !pointForm.isVirtual" style="align-items: flex-start;">
             <label style="margin-top: 5px;">{{ t('edge.timeout') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <div class="input-with-unit">
@@ -820,7 +820,7 @@
               <span v-if="pointTimeoutError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointTimeoutError }}</span>
             </div>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+          <div class="form-group" v-if="!pointForm.isDefault && !pointForm.isVirtual" style="align-items: flex-start;">
             <label style="margin-top: 5px;">{{ t('edge.collectFormula') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <input 
@@ -832,7 +832,7 @@
               <span v-if="pointCollectFormulaError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointCollectFormulaError }}</span>
             </div>
           </div>
-          <div class="form-group" v-if="!pointForm.isDefault" style="align-items: flex-start;">
+          <div class="form-group" v-if="!pointForm.isDefault && !pointForm.isVirtual" style="align-items: flex-start;">
             <label style="margin-top: 5px;">{{ t('edge.controlFormula') }}:</label>
             <div style="flex: 1; display: flex; flex-direction: column;">
               <input 
@@ -842,6 +842,18 @@
                 :style="{ color: pointControlFormulaError ? 'red' : '', borderColor: pointControlFormulaError ? 'red' : '' }"
               />
               <span v-if="pointControlFormulaError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointControlFormulaError }}</span>
+            </div>
+          </div>
+          <div class="form-group" v-if="pointForm.isVirtual" style="align-items: flex-start;">
+            <label style="margin-top: 5px;">{{ t('edge.dataCalc') }}:</label>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <input 
+                v-model="pointForm.calcFormula" 
+                type="text" 
+                placeholder="=%s*65535+%s,node0101,node0203"
+                :style="{ color: pointCalcFormulaError ? 'red' : '', borderColor: pointCalcFormulaError ? 'red' : '' }"
+              />
+              <span v-if="pointCalcFormulaError" style="color: red; font-size: 12px; margin-top: 4px;">{{ pointCalcFormulaError }}</span>
             </div>
           </div>
           <div class="form-group" v-if="!pointForm.isDefault">
@@ -1613,6 +1625,13 @@ const slaveList = ref([
     isSystem: true,
     slaveAddress: '',
     points: [] // 初始化为空数组，后续填充
+  },
+  {
+    id: 'virtual',
+    name: 'Virtual',
+    isVirtual: true,
+    slaveAddress: '',
+    points: []
   }
 ])
 
@@ -1795,6 +1814,15 @@ const availableDataTypes = computed(() => {
   return ['Bit']
 })
 
+// 虚拟点可用数据类型（固定列表，与寄存器无关）
+const virtualDataTypes = [
+  'Unsigned',
+  'Signed',
+  '32 Bit Unsigned (AB CD)',
+  '32 Bit Signed (AB CD)',
+  '32 Bit Float(AB CD)'
+]
+
 // 计算属性：数据点名称校验
 // 数据点名称校验
 const pointNameError = ref('')
@@ -1850,9 +1878,16 @@ const pointRegisterAddressError = ref('')
 const pointChangeRangeError = ref('')
 const pointCollectFormulaError = ref('')
 const pointControlFormulaError = ref('')
+const pointCalcFormulaError = ref('')
 
 // 数据点表单验证状态计算属性
 const hasPointFormErrors = computed(() => {
+  if (pointForm.value.isVirtual) {
+    return !!pointNameError.value ||
+      !!pointDetailError.value ||
+      !!pointChangeRangeError.value ||
+      !!pointCalcFormulaError.value
+  }
   return !!pointNameError.value || 
     !!pointRegisterError.value ||
     !!pointDetailError.value || 
@@ -1862,6 +1897,35 @@ const hasPointFormErrors = computed(() => {
     !!pointCollectFormulaError.value ||
     !!pointControlFormulaError.value
 })
+
+// 虚拟点数据计算校验：仅允许引用物理从机的数据点，最多引用20个
+const isPhysicalPointName = (name) => {
+  return slaveList.value.some(s => !s.isSystem && !s.isVirtual && s.points.some(p => p.name === name))
+}
+
+const validateCalcFormula = (formula) => {
+  if (!formula) return t('edge.invalidFormula')
+
+  const parts = formula.split(',')
+  const expr = parts[0]
+  const refs = parts.slice(1).map(r => r.trim())
+
+  if (!isValidFormula(expr)) return t('edge.invalidFormula')
+
+  const placeholderCount = (expr.match(/%s/g) || []).length
+
+  if (refs.length === 0) return t('edge.formulaRefRequired')
+  if (refs.length > 20) return t('edge.formulaRefTooMany')
+  if (placeholderCount !== refs.length) return t('edge.formulaRefCountMismatch')
+
+  const nameRegex = /^[a-zA-Z0-9_]{1,20}$/
+  for (const refName of refs) {
+    if (!nameRegex.test(refName)) return t('edge.formulaRefInvalidName')
+    if (!isPhysicalPointName(refName)) return t('edge.formulaRefNotFound')
+  }
+
+  return ''
+}
 
 // 监听数据点表单字段变化
 watch(() => pointForm.value.detail, () => {
@@ -1937,6 +2001,13 @@ watch(() => pointForm.value.controlFormula, () => {
     }
   }
 })
+
+watch(() => pointForm.value.calcFormula, () => {
+  if (showPointModal.value && pointForm.value.isVirtual) {
+    pointCalcFormulaError.value = validateCalcFormula(pointForm.value.calcFormula)
+  }
+})
+
 
 // 获取下一个可用寄存器地址
 const getNextRegisterAddress = (type) => {
@@ -2237,6 +2308,7 @@ const computedRegisterAddress = computed(() => {
 
 // 监听寄存器类型变化，重置数据类型
 watch(() => pointForm.value.registerType, (newType) => {
+  if (pointForm.value.isVirtual) return
   const types = availableDataTypes.value
   if (!types.includes(pointForm.value.dataType)) {
     pointForm.value.dataType = types[0]
@@ -2258,6 +2330,7 @@ watch(() => pointForm.value.bitIndex, (newVal) => {
 // 获取从机来源显示
 const getSlaveSource = (slave) => {
   if (slave.isSystem) return 'System'
+  if (slave.isVirtual) return 'Virtual'
   if (slave.protocol === 1) {
     return `${slave.remoteAddress}:${slave.remotePort}`
   }
@@ -2590,17 +2663,21 @@ const importCsv = async () => {
     
     let slaveCount = 0
     let pointCount = 0
+    let virtualPointCount = 0
     const pointNamesInCsv = new Set()
+    const physicalPointNamesInCsv = new Set()
     const duplicateNames = []
+    const invalidFormulaRefs = []
     
     const lines = fileContent.split(/\r?\n/)
-    lines.forEach((line, index) => {
+    lines.forEach((line) => {
       const parts = line.split(',')
       if (parts[0] === 'SC') slaveCount++
       if (parts[0] === 'C') {
         pointCount++
         const pName = parts[2]
         if (!pName) return
+        physicalPointNamesInCsv.add(pName)
         
         // 1. 校验系统点位冲突
         if (systemPoints.value.some(sp => sp.name === pName)) {
@@ -2614,6 +2691,40 @@ const importCsv = async () => {
           pointNamesInCsv.add(pName)
         }
       }
+      if (parts[0] === 'A') {
+        pointCount++
+        virtualPointCount++
+        const pName = parts[2]
+        if (!pName) return
+        
+        if (systemPoints.value.some(sp => sp.name === pName)) {
+          duplicateNames.push(`${pName} (与系统点位名称冲突)`)
+        }
+        if (pointNamesInCsv.has(pName)) {
+          duplicateNames.push(`${pName} (文件内重复)`)
+        } else {
+          pointNamesInCsv.add(pName)
+        }
+        
+        // 3. 校验虚拟点数据计算：仅可引用物理点，且最多20个引用
+        const refs = (parts[11] || '').split(';').slice(1).map(r => r.trim()).filter(Boolean)
+        if (refs.length > 20) {
+          invalidFormulaRefs.push(`${pName} (引用点超过20个)`)
+        }
+      }
+    })
+    
+    // 引用点合法性需在遍历完所有 C 行后再校验
+    lines.forEach((line) => {
+      const parts = line.split(',')
+      if (parts[0] !== 'A') return
+      const pName = parts[2]
+      const refs = (parts[11] || '').split(';').slice(1).map(r => r.trim()).filter(Boolean)
+      refs.forEach(ref => {
+        if (!physicalPointNamesInCsv.has(ref)) {
+          invalidFormulaRefs.push(`${pName} (引用点不存在: ${ref})`)
+        }
+      })
     })
     
     // 发现冲突，中止导入
@@ -2621,6 +2732,13 @@ const importCsv = async () => {
       importing.value = false
       const errorMsg = duplicateNames.slice(0, 5).join('\n') + (duplicateNames.length > 5 ? '\n...' : '')
       alert(`导入失败！发现重复或非法的点位名称：\n${errorMsg}`)
+      return
+    }
+    
+    if (invalidFormulaRefs.length > 0) {
+      importing.value = false
+      const errorMsg = invalidFormulaRefs.slice(0, 5).join('\n') + (invalidFormulaRefs.length > 5 ? '\n...' : '')
+      alert(`导入失败！虚拟点数据计算引用非法：\n${errorMsg}`)
       return
     }
     
@@ -2632,6 +2750,11 @@ const importCsv = async () => {
     if (pointCount > 1000) {
       importing.value = false
       alert(t('edge.pointsLimitReached'))
+      return
+    }
+    if (virtualPointCount > 50) {
+      importing.value = false
+      alert(t('edge.virtualPointsLimitReached'))
       return
     }
 
@@ -2738,6 +2861,13 @@ const checkPointReference = (slaveName, pointName) => {
             if (regex.test(paramsStr)) hasFormulaRef = true
          }
       }
+      if (p.calcFormula) {
+         const parts = p.calcFormula.split(',')
+         if (parts.length > 1) {
+            const paramsStr = parts.slice(1).join(',')
+            if (regex.test(paramsStr)) hasFormulaRef = true
+         }
+      }
       
       if (hasFormulaRef) {
          referenced = true
@@ -2792,6 +2922,13 @@ const cleanUpPointReference = (slaveName, pointName) => {
          if (parts.length > 1) {
             const paramsStr = parts.slice(1).join(',')
             if (regex.test(paramsStr)) p.controlFormula = ''
+         }
+       }
+       if (p.calcFormula) {
+         const parts = p.calcFormula.split(',')
+         if (parts.length > 1) {
+            const paramsStr = parts.slice(1).join(',')
+            if (regex.test(paramsStr)) p.calcFormula = ''
          }
        }
      })
@@ -2871,14 +3008,18 @@ const syncSlaveNameChange = (oldName, newName) => {
 }
 
 // 从机禁用的计算属性
+const physicalSlaveCount = computed(() => {
+  return slaveList.value.filter(s => !s.isSystem && !s.isVirtual).length
+})
+
 const isAddSlaveDisabled = computed(() => {
-  return totalPoints.value >= 1000 || (slaveList.value.length - 1) >= 64
+  return totalPoints.value >= 1000 || physicalSlaveCount.value >= 64
 })
 
 // 从机对话框操作
 const showAddSlaveModal = () => {
   if (isAddSlaveDisabled.value) {
-    if ((slaveList.value.length - 1) >= 64) {
+    if (physicalSlaveCount.value >= 64) {
       alert(t('edge.slavesLimitReached'))
     } else {
       alert(t('edge.pointsLimitReached'))
@@ -2918,7 +3059,7 @@ const showAddSlaveModal = () => {
 
 const editSlave = (index) => {
   const slave = slaveList.value[index]
-  if (slave.isSystem) return
+  if (slave.isSystem || slave.isVirtual) return
   
   isEditingSlave.value = true
   editingSlaveIndex.value = index
@@ -2993,7 +3134,7 @@ const saveSlave = () => {
 
 const deleteSlave = (index) => {
   const slave = slaveList.value[index]
-  if (slave.isSystem) return
+  if (slave.isSystem || slave.isVirtual) return
   
   const { referenced, refTypes } = checkSlaveReference(slave.name)
   let confirmMsg = `${t('edge.confirmSlaveDelete1')} "${slave.name}" ?\n${t('edge.confirmSlaveDelete2')}`
@@ -3028,6 +3169,12 @@ const deleteSlave = (index) => {
   }
 }
 
+// 全局查重辅助函数（点位名称需在系统点位、所有从机间唯一）
+const isGlobalNameDuplicate = (name) => {
+  if (systemPoints.value.some(p => p.name === name)) return true
+  return slaveList.value.some(s => s.points.some(p => p.name === name))
+}
+
 // 数据点对话框操作
 const showAddPointModal = () => {
   console.log("totalPoints.value", totalPoints.value)
@@ -3041,21 +3188,46 @@ const showAddPointModal = () => {
   
   isEditingPoint.value = false
   editingPointIndex.value = -1
+
+  if (currentSlave.value.isVirtual) {
+    if (currentSlave.value.points.length >= 50) {
+      alert(t('edge.virtualPointsLimitReached'))
+      return
+    }
+
+    let counter = currentSlave.value.points.length + 1
+    let defaultName = `virl_${counter}`
+    while (isGlobalNameDuplicate(defaultName)) {
+      counter++
+      defaultName = `virl_${counter}`
+    }
+
+    pointForm.value = {
+      name: defaultName,
+      detail: '',
+      dataType: 'Unsigned',
+      decimalPlaces: 3,
+      calcFormula: '',
+      reportOnChange: false,
+      changeRange: 2,
+      isVirtual: true
+    }
+    showPointModal.value = true
+    pointNameError.value = ''
+    return
+  }
+
   // Calculate default name
-  // 1. Slave Index (slaveList[0] is System, so selectedSlaveIndex is the 1-based index for CSV devices)
-  const slaveIdxStr = String(selectedSlaveIndex.value).padStart(2, '0')
+  // 1. Slave Index：物理从机在剔除 System/Virtual 后的从机列表中的序号（1-based），不受常驻 Virtual 从机位置影响
+  const physicalSlaves = slaveList.value.filter(s => !s.isSystem && !s.isVirtual)
+  const physicalIndex = physicalSlaves.indexOf(currentSlave.value) + 1
+  const slaveIdxStr = String(physicalIndex).padStart(2, '0')
   
   // 2. Point Index (ignoring default points like State)
   const existingUserPoints = currentSlave.value.points.filter(p => !p.isDefault).length
   let counter = existingUserPoints + 1
   let pointIdxStr = String(counter).padStart(2, '0')
   let defaultName = `node${slaveIdxStr}${pointIdxStr}`
-  
-  // 定义全局查重辅助函数
-  const isGlobalNameDuplicate = (name) => {
-    if (systemPoints.value.some(p => p.name === name)) return true
-    return slaveList.value.some(s => s.points.some(p => p.name === name))
-  }
 
   // 确保全局唯一性
   while (isGlobalNameDuplicate(defaultName)) {
@@ -3104,15 +3276,20 @@ const savePoint = () => {
   }
   
   validatePointName()
-  
-  if (pointNameError.value || pointRegisterError.value) {
+
+  if (pointForm.value.isVirtual) {
+    pointCalcFormulaError.value = validateCalcFormula(pointForm.value.calcFormula)
+    if (pointNameError.value || pointCalcFormulaError.value) {
+      return
+    }
+  } else if (pointNameError.value || pointRegisterError.value) {
     return
   }
   
   const newPoint = {
     id: isEditingPoint.value ? currentSlave.value.points[editingPointIndex.value].id : `point_${Date.now()}`,
     ...pointForm.value,
-    registerDisplay: pointForm.value.isDefault ? pointForm.value.registerDisplay : computedRegisterAddress.value,
+    registerDisplay: pointForm.value.isVirtual ? undefined : (pointForm.value.isDefault ? pointForm.value.registerDisplay : computedRegisterAddress.value),
     value: null
   }
   
@@ -3396,7 +3573,7 @@ const generateCsvContent = () => {
   let csv = 'V,V1.0,N7X0,;\n'
   
   slaveList.value.forEach(slave => {
-    if (slave.isSystem) return
+    if (slave.isSystem || slave.isVirtual) return
     
     // 从机行格式: SC,name,detail,protocol,slaveAddress,pollInterval,0,mergeCollect,remoteAddress:remotePort,deviceName,;
     const proto = slave.protocol === 1 ? 2 : 1
@@ -3430,6 +3607,22 @@ const generateCsvContent = () => {
       }
     })
   })
+
+  // 虚拟从机常驻：即使没有虚拟点也写出 SV 行
+  const virtualSlave = slaveList.value.find(s => s.isVirtual)
+  const virtualName = virtualSlave?.name || 'Virtual'
+  csv += `SV,${virtualName},,1,;\n`
+
+  if (virtualSlave) {
+    // 虚拟点行格式: A, SlaveName, PointName, Detail, Type, Decimal, 0,0,0,0,0, CalcFormula(引用点用;分隔), Register占位, Report, ChangeRange, ;
+    virtualSlave.points.forEach(point => {
+      const typeCode = dataTypeMap[point.dataType] || 1
+      const report = point.reportOnChange ? 1 : 0
+      const formula = (point.calcFormula || '').replace(/,/g, ';')
+
+      csv += `A,${virtualName},${point.name},${point.detail || ''},${typeCode},${point.decimalPlaces ?? 0},0,0,0,0,0,${formula},000001',${report},${point.changeRange ?? 2},;\n`
+    })
+  }
   
   return csv
 }
@@ -3439,11 +3632,51 @@ const parseCsvContent = (content) => {
   const lines = content.split('\n').filter(line => line.trim())
   const newSlaves = []
   let currentSlave = null
+  let virtualSlave = null
   
   lines.forEach(line => {
     const parts = line.split(',')
     
-    if (parts[0] === 'SC') {
+    if (parts[0] === 'SV') {
+      // 虚拟从机定义（常驻，不影响 currentSlave 指向的物理从机块）
+      virtualSlave = virtualSlave || {
+        id: 'virtual',
+        name: parts[1] || 'Virtual',
+        isVirtual: true,
+        slaveAddress: '',
+        points: []
+      }
+      virtualSlave.name = parts[1] || virtualSlave.name
+    } else if (parts[0] === 'A') {
+      // 虚拟点定义
+      // 索引映射: 1: SlaveName, 2: PointName, 3: Detail, 4: Type, 5: Decimal,
+      // 11: CalcFormula(引用点用;分隔), 13: Report, 14: ChangeRange
+      if (!virtualSlave) {
+        virtualSlave = {
+          id: 'virtual',
+          name: parts[1] || 'Virtual',
+          isVirtual: true,
+          slaveAddress: '',
+          points: []
+        }
+      }
+
+      const rawFormula = parts[11] || ''
+
+      virtualSlave.points.push({
+        id: `point_${Date.now()}_${Math.random()}`,
+        name: parts[2],
+        detail: parts[3] || '',
+        dataType: getDataTypeName(parseInt(parts[4])),
+        decimalPlaces: parseInt(parts[5]) || 0,
+        calcFormula: rawFormula ? rawFormula.replace(/;/g, ',') : '',
+        reportOnChange: parts[13] === '1',
+        changeRange: parseFloat(parts[14]) || 0,
+        isVirtual: true,
+        value: null,
+        isDefault: false
+      })
+    } else if (parts[0] === 'SC') {
       // 从机定义
       currentSlave = {
         id: `slave_${Date.now()}_${Math.random()}`,
@@ -3531,7 +3764,7 @@ const parseCsvContent = (content) => {
     }
   })
   
-  return newSlaves
+  return { slaves: newSlaves, virtualSlave }
 }
 
 // 协议转换CSV文件选择处理
@@ -4090,10 +4323,12 @@ const loadData = async () => {
     // C,PointName,SlaveName,DataType,MappingAddr
     // 解析CSV文件内容
     if (edgeFileContent.value) {
-      const parsedSlaves = parseCsvContent(edgeFileContent.value)
+      const { slaves: parsedSlaves, virtualSlave: parsedVirtualSlave } = parseCsvContent(edgeFileContent.value)
       // 移除 length > 0 的判断。无论解析结果是否为空（如导入空表时），都应重置 slaveList 以实现数据同步
       const systemSlave = slaveList.value[0]
-      slaveList.value = [systemSlave, ...parsedSlaves]
+      // 虚拟从机常驻：文件中缺少 SV 行时，仍保留一个空的虚拟从机
+      const virtualSlave = parsedVirtualSlave || { id: 'virtual', name: 'Virtual', isVirtual: true, slaveAddress: '', points: [] }
+      slaveList.value = [systemSlave, virtualSlave, ...parsedSlaves]
     }
 
     if (edgeProtoAccessContent) {
