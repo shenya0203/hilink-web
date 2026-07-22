@@ -1,0 +1,124 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2015 OpenWrt.org
+#START=99
+USE_PROCD=1
+G_OPTS="daemon off;"
+
+NGINX_CONF_SRC="/etc/nginx/nginx.conf"
+NGINX_CONF_RUN="/tmp/nginx/nginx.conf"
+NGINX_CONF_TMP="/etc/nginx/nginx_tmp.conf"
+SSL_DIR="/etc/nginx/ssl"
+HTTP_PORT="80"
+
+ensure_ssl_cert() {
+        [ -d "${SSL_DIR}" ] || mkdir -p "${SSL_DIR}"
+        if [ ! -f "${SSL_DIR}/server.crt" ] || [ ! -f "${SSL_DIR}/server.key" ]; then
+                openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+                        -keyout "${SSL_DIR}/server.key" \
+                        -out "${SSL_DIR}/server.crt" \
+                        -subj "/CN=HLK-Gateway" >/dev/null 2>&1
+                chmod 600 "${SSL_DIR}/server.key" 2>/dev/null
+                logger -t "nginx_init" -p "daemon.info" "Generated self-signed SSL certificate in ${SSL_DIR}"
+        fi
+}
+
+ensure_login_rsa_keys() {
+        [ -d "${SSL_DIR}" ] || mkdir -p "${SSL_DIR}"
+        if [ ! -f "${SSL_DIR}/web_login.key" ] || [ ! -f "${SSL_DIR}/web_login.pub" ]; then
+                openssl genrsa -out "${SSL_DIR}/web_login.key" 2048 >/dev/null 2>&1
+                openssl rsa -in "${SSL_DIR}/web_login.key" -pubout -out "${SSL_DIR}/web_login.pub" >/dev/null 2>&1
+                chmod 600 "${SSL_DIR}/web_login.key" 2>/dev/null
+                chmod 644 "${SSL_DIR}/web_login.pub" 2>/dev/null
+                logger -t "nginx_init" -p "daemon.info" "Generated web login RSA keypair in ${SSL_DIR}"
+        fi
+}
+
+prepare_env() {
+        local port
+
+        config_load nginx
+        config_get port global uci_port
+
+        # HTTPS 管理端口；避免与 HTTP:80 冲突
+        port="${port:-443}"
+        if [ "${port}" = "80" ]; then
+                port="443"
+                uci -q set nginx.global.uci_port='443'
+                uci -q commit nginx
+                logger -t "nginx_init" -p "daemon.warn" "uci_port was 80, migrated to 443 for HTTPS"
+        fi
+
+        [ -d /tmp/nginx ] || mkdir -p /tmp/nginx
+        [ -d /tmp/web_sessions ] || mkdir -p /tmp/web_sessions
+        [ -d /tmp/web_login_lock ] || mkdir -p /tmp/web_login_lock
+        [ -d /tmp/web_login_nonce ] || mkdir -p /tmp/web_login_nonce
+
+        ensure_ssl_cert
+        ensure_login_rsa_keys
+
+        cp "${NGINX_CONF_SRC}" "${NGINX_CONF_RUN}"
+
+        # 源配置默认 listen 80 / 443，可直接 nginx -t；非 443 时只改 HTTPS listen 与跳转
+        if [ "${port}" != "443" ]; then
+                sed -i "s/listen 443 ssl;/listen ${port} ssl;/" "${NGINX_CONF_RUN}"
+                sed -i "s|return 301 https://\$host\$request_uri;|return 301 https://\$host:${port}\$request_uri;|" "${NGINX_CONF_RUN}"
+        fi
+
+        if [ ! -f "/etc/nginx/nginx_tmp.conf" ]; then
+                cd /etc/nginx/
+                ln -s /tmp/nginx/nginx.conf nginx_tmp.conf
+        fi
+
+        logger -t "nginx_init" -p "daemon.info" "Prepared config in /tmp: http=${HTTP_PORT}, https=${port}"
+}
+
+nginx_init() {
+        [ -d /var/log/nginx ] || mkdir -p /var/log/nginx
+        [ -d /var/lib/nginx ] || mkdir -p /var/lib/nginx
+
+        local message
+        message="$(/usr/sbin/nginx -t -c "${NGINX_CONF_TMP}" -g "${G_OPTS}" 2>&1)" ||
+        {
+                echo -e "${message}" | logger -t "nginx_init" -p "daemon.err"
+                logger -s -t "nginx_init" -p "daemon.err" "NOT using conf file!"
+                echo "show config to be used by: nginx -T -c '${NGINX_CONF_RUN}'" >&2
+                exit 1
+        }
+        logger -t "nginx_init" -p "daemon.info" "using ${NGINX_CONF_RUN} (the test is ok)"
+}
+
+start_service() {
+        prepare_env
+
+        nginx_init
+
+        procd_open_instance
+        procd_set_param command /usr/sbin/nginx -c "${NGINX_CONF_TMP}" -g "${G_OPTS}"
+        procd_set_param stdout 1
+        procd_set_param stderr 1
+        procd_set_param file "${NGINX_CONF_SRC}"
+        procd_set_param respawn
+        procd_close_instance
+}
+
+reload_service() {
+        prepare_env
+        nginx_init
+
+        if [ -f /var/run/nginx.pid ] && [ -d "/proc/$(cat /var/run/nginx.pid 2>/dev/null)" ]; then
+                procd_send_signal nginx
+        else
+                restart
+        fi
+}
+
+service_triggers() {
+        procd_add_raw_trigger acme.renew 5000 /etc/init.d/nginx reload
+        procd_add_reload_trigger "nginx"
+}
+
+extra_command "relog" "Reopen log files (without reloading)"
+relog() {
+        [ -d /var/log/nginx ] || mkdir -p /var/log/nginx
+        procd_send_signal nginx '*' USR1
+}

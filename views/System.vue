@@ -72,7 +72,13 @@
         <div class="form-group" :class="{ 'has-error': passwordError }">
           <label>{{ t('system.password') }}:</label>
           <div class="input-wrapper">
-            <input v-model="miscConfig.web_psw" type="password" :class="{ 'input-error': passwordError }" />
+            <input
+              v-model="miscConfig.web_psw"
+              type="password"
+              :placeholder="t('system.passwordPlaceholder')"
+              :class="{ 'input-error': passwordError }"
+              autocomplete="new-password"
+            />
             <span v-if="passwordError" class="field-error-text">{{ passwordError }}</span>
           </div>
         </div>
@@ -343,7 +349,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
-import { FEATURE_TF_CARD_ENABLED, DEFAULT_DEVICE_IP } from '../config/features.js'
+import { FEATURE_TF_CARD_ENABLED, DEFAULT_DEVICE_IP, DEFAULT_DEVICE_URL } from '../config/features.js'
 import { isValidStringSafe } from '../utils/validation.js'
 
 // 使用 i18n
@@ -1185,10 +1191,7 @@ const startRebootProcess = (totalTime, statusText, isFactory = false) => {
 
 // 跳转到默认 IP
 const goToDefaultIp = () => {
-  const protocol = window.location.protocol
-  const port = window.location.port ? `:${window.location.port}` : ''
-  // 注意：如果恢复出厂后端口也恢复了 80，这里可能需要处理
-  window.location.href = `${protocol}//${DEFAULT_DEVICE_IP}${port}/`
+  window.location.href = DEFAULT_DEVICE_URL
 }
 
 // 手动刷新当前页
@@ -1225,24 +1228,14 @@ const finishReboot = async () => {
   if (isFactoryResetMode.value) {
     // 1. 清理应用相关的各类本地存储参数
     localStorage.removeItem('status_panel_collapse')
-    // 如果有其他 auth 相关的 token 也应在此清除
-    // localStorage.removeItem('auth_token') 
-    
-    // 2. 尝试清除浏览器的 Basic Auth 凭证 (Trick: 通过 XMLHttpRequest 发送一个错误的凭证)
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', '/favicon.ico?logout=' + Date.now(), true, 'logout', 'logout');
-      xhr.send();
-    } catch (e) {
-      console.warn('Attempt to clear basic auth failed', e);
-    }
+    sessionStorage.removeItem('hlk_csrf')
   }
 
   // 延迟后刷新，确保用户看到成功状态
   setTimeout(() => {
     const buster = Math.random().toString(36).substring(7);
     // 恢复出厂或重启后，跳转回根目录（强制展示登录页）
-    window.location.replace(`/?t=${Date.now()}&v=${buster}#/`);
+    window.location.replace(`/?t=${Date.now()}&v=${buster}#/login`);
   }, 2000)
 }
 
@@ -1326,8 +1319,11 @@ const saveParamsConfig = async () => {
       file: 'misc',
       's_host_name': miscConfig.value.host_name,
       's_web_user': miscConfig.value.web_user,
-      's_web_psw': miscConfig.value.web_psw,
       'n_web_port': miscConfig.value.web_port
+    }
+    // 仅在用户填写了新密码时提交
+    if (miscConfig.value.web_psw) {
+      params['s_web_psw'] = miscConfig.value.web_psw
     }
     
     const queryString = Object.entries(params)
@@ -1527,6 +1523,11 @@ const webPortError = computed(() => {
   if (!Number.isInteger(p) || p < 1 || p > 65535) {
     return t('system.invalidPortRange')
   }
+
+  // HTTPS 端口不能占用 HTTP 跳转口 80
+  if (p === 80) {
+    return t('system.portConflictWith', { service: 'HTTP(80)' })
+  }
   
   // 冲突排查：Telnet 和 WebSocket
   if (p === Number(miscConfig.value.telnet_port)) {
@@ -1554,7 +1555,7 @@ const webPortError = computed(() => {
 const isParamsConfigValid = computed(() => {
   return !hostNameError.value && !userNameError.value && !passwordError.value && !webPortError.value && 
          miscConfig.value.host_name && miscConfig.value.web_user && 
-         miscConfig.value.web_psw && miscConfig.value.web_port
+         miscConfig.value.web_port
 })
 
 // 加载数据

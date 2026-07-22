@@ -44,7 +44,19 @@ export default {
     // Top Navigation Bar
     navbar: {
         title: 'Industrial Router Gateway',
-        subtitle: 'Web Configuration System'
+        subtitle: 'Web Configuration System',
+        logout: 'Logout'
+    },
+
+    login: {
+        title: 'Device Login',
+        subtitle: 'Enter administrator credentials',
+        username: 'Username',
+        password: 'Password',
+        submit: 'Login',
+        loggingIn: 'Signing in...',
+        invalid: 'Invalid username or password',
+        locked: 'Too many failed attempts. Try again in {minutes} minute(s)'
     },
 
     // Sidebar Menu
@@ -484,7 +496,8 @@ export default {
         hostName: 'Host Name',
         username: 'Username',
         password: 'Password',
-        webPort: 'Web Port',
+        webPort: 'HTTPS Port',
+        passwordPlaceholder: 'Leave blank to keep current password',
         exportParams: 'Export Parameters',
         importParams: 'Import Parameters',
 

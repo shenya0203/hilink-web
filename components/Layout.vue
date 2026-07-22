@@ -22,6 +22,8 @@
             :class="{ active: locale === 'en-US' }" 
             @click="setLocale('en-US')"
           >English</span>
+          <span class="divider">|</span>
+          <span class="logout-btn" @click="onLogout">{{ t('navbar.logout') }}</span>
         </div>
       </div>
     </header>
@@ -85,6 +87,7 @@ import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from '../i18n/useI18n.js';
 import { APP_DEVICE_MODEL } from '../config/features.js';
+import { logout } from '../api/services.js';
 
 const router = useRouter();
 const route = useRoute();
@@ -92,6 +95,15 @@ const expandedMenus = ref(['comm', 'port']); // 默认展开
 
 // 使用 i18n
 const { t, locale, setLocale } = useI18n();
+
+const onLogout = async () => {
+  try {
+    await logout();
+  } catch (e) {
+    // ignore
+  }
+  router.replace({ name: 'login' });
+};
 
 // 菜单配置（使用翻译键）
 const menuItems = computed(() => [
@@ -155,5 +167,13 @@ const isSubmenuActive = (item) => {
 .language-switcher .divider {
   margin: 0 5px;
   color: #999;
+}
+
+.language-switcher .logout-btn {
+  color: #ffcc00;
+}
+
+.language-switcher .logout-btn:hover {
+  color: #ffe066;
 }
 </style>

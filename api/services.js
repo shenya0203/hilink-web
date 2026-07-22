@@ -1,26 +1,104 @@
 import axios from 'axios'
-// import { getBasicAuth } from '../config/auth'
 
-// 获取 Basic Auth 凭证
-// const BASIC_AUTH = getBasicAuth()
+const CSRF_KEY = 'hlk_csrf'
 
-// 创建 axios 实例，带有代理配置和 Basic Auth
+export function getCsrfToken() {
+    return sessionStorage.getItem(CSRF_KEY) || ''
+}
+
+export function setCsrfToken(token) {
+    if (token) {
+        sessionStorage.setItem(CSRF_KEY, token)
+    } else {
+        sessionStorage.removeItem(CSRF_KEY)
+    }
+}
+
+function needsCsrf(url, method) {
+    const m = (method || 'get').toUpperCase()
+    const u = url || ''
+    if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS') return true
+    if (u.includes('/upload/')) return true
+    if (u.includes('/update_')) return true
+    if (u.includes('/action_')) return true
+    return false
+}
+
 const apiClient = axios.create({
     timeout: 5000,
-    headers: {
-        // 'Content-Type': 'application/json', // 移除默认 Content-Type，让 axios 根据数据类型自动处理 (特别是 FormData)
-        // 'Authorization': `Basic ${BASIC_AUTH}`  // 移除硬编码的 Basic Auth，生产环境由浏览器自动处理
-    }
+    withCredentials: true
 })
 
-// 响应拦截器处理错误
+apiClient.interceptors.request.use((config) => {
+    const url = config.url || ''
+    if (needsCsrf(url, config.method)) {
+        const csrf = getCsrfToken()
+        if (csrf) {
+            config.headers = config.headers || {}
+            config.headers['X-CSRF-Token'] = csrf
+        }
+    }
+    return config
+})
+
 apiClient.interceptors.response.use(
-    response => response,
-    error => {
+    (response) => response,
+    (error) => {
+        const status = error.response && error.response.status
+        if (status === 401) {
+            setCsrfToken('')
+            const hash = window.location.hash || ''
+            if (!hash.includes('/login')) {
+                const redirect = hash.replace(/^#/, '') || '/'
+                window.location.hash = `#/login?redirect=${encodeURIComponent(redirect)}`
+            }
+        }
         console.error('API 请求错误:', error.message)
         return Promise.reject(error)
     }
 )
+
+export function fetchLoginPubkey() {
+    return apiClient.get('/login_pubkey.cgi')
+        .then((res) => {
+            if (!res.data || !res.data.pubkey) {
+                throw new Error('no pubkey')
+            }
+            return res.data.pubkey
+        })
+}
+
+export function login(username, password_enc, nonce) {
+    return apiClient.post('/login.cgi', { username, password_enc, nonce })
+        .then((res) => {
+            if (res.data && res.data.csrf) {
+                setCsrfToken(res.data.csrf)
+            }
+            return res.data
+        })
+}
+
+export function logout() {
+    return apiClient.post('/logout.cgi')
+        .then((res) => {
+            setCsrfToken('')
+            return res.data
+        })
+        .catch((err) => {
+            setCsrfToken('')
+            throw err
+        })
+}
+
+export function authCheck() {
+    return apiClient.get('/auth_check.cgi')
+        .then((res) => {
+            if (res.data && res.data.csrf) {
+                setCsrfToken(res.data.csrf)
+            }
+            return res.data
+        })
+}
 
 /**
  * 获取设备状态数据
@@ -87,7 +165,7 @@ export function getUartConfig() {
 }
 
 /**
- * 获取断网缓存配置
+ * 获取离线缓存配置
  */
 export function getOfflineCache() {
     return apiClient.get('/download_nv.cgi?name=offline_cache')
@@ -95,8 +173,8 @@ export function getOfflineCache() {
 }
 
 /**
- * 保存配置 (通用)
- * @param {string} file 模块名称 (如 uart, network)
+ * 更新配置
+ * @param {string} file 配置文件名
  * @param {string} queryString 参数字符串
  */
 export function updateConfig(file, queryString) {

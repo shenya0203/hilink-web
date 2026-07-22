@@ -1,23 +1,27 @@
-import { createRouter, createWebHashHistory } from 'vue-router';
-import Layout from '../components/Layout.vue';
-import Status from '../views/Status.vue';
-import NetworkConfig from '../views/NetworkConfig.vue';
-import Uart from '../views/Uart.vue';
-import Socket from '../views/Socket.vue';
-import Mqtt from '../views/Mqtt.vue';
-import System from '../views/System.vue';
-import EdgeCompute from '../views/EdgeCompute.vue';
-import Cloud from '../views/Cloud.vue';
-
-// 简单的占位组件
-const Placeholder = { template: '<div class="main"><h3>功能开发中...</h3></div>' };
+import { createRouter, createWebHashHistory } from 'vue-router'
+import Layout from '../components/Layout.vue'
+import Login from '../views/Login.vue'
+import Status from '../views/Status.vue'
+import NetworkConfig from '../views/NetworkConfig.vue'
+import Uart from '../views/Uart.vue'
+import Socket from '../views/Socket.vue'
+import Mqtt from '../views/Mqtt.vue'
+import System from '../views/System.vue'
+import EdgeCompute from '../views/EdgeCompute.vue'
+import { authCheck } from '../api/services.js'
 
 const routes = [
+    {
+        path: '/login',
+        name: 'login',
+        component: Login,
+        meta: { public: true }
+    },
     {
         path: '/',
         component: Layout,
         children: [
-            { path: '', name: 'status', component: Status }, // 默认首页
+            { path: '', name: 'status', component: Status },
             { path: 'network', name: 'network', component: NetworkConfig },
             { path: 'port/uart', name: 'uart', component: Uart },
             { path: 'comm/Socket', name: 'Socket', component: Socket },
@@ -27,11 +31,26 @@ const routes = [
             { path: 'system', name: 'system', component: System }
         ]
     }
-];
+]
 
 const router = createRouter({
     history: createWebHashHistory(),
     routes
-});
+})
 
-export default router;
+router.beforeEach(async (to) => {
+    if (to.meta.public) {
+        return true
+    }
+    try {
+        await authCheck()
+        return true
+    } catch (e) {
+        return {
+            name: 'login',
+            query: { redirect: to.fullPath }
+        }
+    }
+})
+
+export default router

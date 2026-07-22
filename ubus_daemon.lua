@@ -120,7 +120,7 @@ local misc_config         = {
     host_name = "",
     websock_port = 6432,
     websocket_point = 9,
-    web_port = 80,
+    web_port = 443,
     web_user = "admin",
     web_psw = "admin",
     cache_buf = 0,
@@ -681,16 +681,41 @@ local function set_nginx_config(port, user, pass)
     -- Ensure section exists
     cursor:set("nginx", "global", "global")
 
+    local old_user = cursor:get("nginx", "global", "uci_user")
+    local old_pass = cursor:get("nginx", "global", "uci_pass")
+    local cred_changed = false
+
     if port then cursor:set("nginx", "global", "uci_port", tostring(port)) end
-    if user then cursor:set("nginx", "global", "uci_user", user) end
-    if pass then cursor:set("nginx", "global", "uci_pass", pass) end
+    if user then
+        cursor:set("nginx", "global", "uci_user", user)
+        if user ~= old_user then cred_changed = true end
+    end
+    if pass then
+        cursor:set("nginx", "global", "uci_pass", pass)
+        if pass ~= old_pass then cred_changed = true end
+    end
 
     cursor:commit("nginx")
     os.execute("touch /tmp/nginx_commit")
 
-    -- Also update real nginx config file if needed, or trigger reload
-    -- os.execute("/etc/init.d/nginx reload")
+    -- 改账号/密码后踢掉全部 Web Session
+    if cred_changed then
+        os.execute("rm -rf /tmp/web_sessions/*")
+        log_info("Cleared web sessions after credential change")
+    end
+
     return true
+end
+
+-- API 下发用：不返回明文 web_psw
+local function sanitize_misc_for_api(cfg)
+    local copy = deep_copy(cfg)
+    if copy then
+        local has_psw = (copy.web_psw ~= nil and tostring(copy.web_psw) ~= "")
+        copy.web_psw = ""
+        copy.web_psw_set = has_psw and 1 or 0
+    end
+    return copy
 end
 
 local function set_system_config(hostname, timezone_num)
@@ -1875,9 +1900,9 @@ misc_config = {
     productModel = "HLK-IR01",
     websock_port = 6432,
     websocket_point = 9,
-    web_port = 80, -- 默认值，启动时会被 sync_nginx_settings 覆盖
+    web_port = 443, -- HTTPS 默认端口，启动时会被 sync_nginx_settings 覆盖
     web_user = "", -- 默认值
-    web_psw = "",  -- 默认值
+    web_psw = "",  -- 默认值（不下发给前端）
     cache_buf = 0,
     reset_time = 0,
     telnet_en = 0,
@@ -1950,8 +1975,9 @@ local function sync_nginx_settings()
         if i <= 4 then misc_config.ntp_url[i] = s end
     end
 
-    misc_config.web_port = nginx_conf.port or 80
+    misc_config.web_port = nginx_conf.port or 443
     misc_config.web_user = nginx_conf.user or "admin"
+    -- 明文密码仅保存在内存/UCI，API 下发时脱敏
     misc_config.web_psw = nginx_conf.pass or "admin"
     misc_config.timing_reset = {
         enable = timing_reset_conf.enable,
@@ -2055,7 +2081,12 @@ function set_misc_config_values(msg)
     if msg.n_web_port or msg.s_web_user or msg.s_web_psw then
         local port = msg.n_web_port or misc_config.web_port
         local user = msg.s_web_user or misc_config.web_user
-        local pass = msg.s_web_psw or misc_config.web_psw
+        -- 空密码或占位符表示未改密，沿用原密码
+        local new_psw = msg.s_web_psw
+        local pass = misc_config.web_psw
+        if new_psw and new_psw ~= "" and new_psw ~= "********" then
+            pass = new_psw
+        end
 
         -- 只有当参数有实际意义时才调用设置
         set_nginx_config(port, user, pass)
@@ -2063,7 +2094,9 @@ function set_misc_config_values(msg)
         -- 更新内存缓存
         if msg.n_web_port then misc_config.web_port = port end
         if msg.s_web_user then misc_config.web_user = user end
-        if msg.s_web_psw then misc_config.web_psw = pass end
+        if new_psw and new_psw ~= "" and new_psw ~= "********" then
+            misc_config.web_psw = pass
+        end
     end
 
     -- ============================================================
@@ -3300,7 +3333,7 @@ local methods = {
 
                 -- 3. 杂项配置 (misc)
                 sync_nginx_settings()
-                data.misc = deep_copy(misc_config)
+                data.misc = sanitize_misc_for_api(misc_config)
 
                 reply(req, data)
             end,
@@ -3630,7 +3663,7 @@ local methods = {
                 -- Refresh from UCI to ensure we have latest values (e.g. if changed by other means)
                 --log_info("get misc config")
                 sync_nginx_settings()
-                reply(req, deep_copy(misc_config))
+                reply(req, sanitize_misc_for_api(misc_config))
             end,
             {}
         },
@@ -4038,6 +4071,7 @@ local methods = {
 
                 -- 执行阶段
                 log_info("Executing factory reset now...")
+                os.execute("rm -rf /tmp/web_sessions/*")
                 reply(req, { result = true })
                 -- 实际应该调用: os.execute("firstboot -y && reboot")
                 -- 两阶段模式下不再需要 sleep 2，直接执行

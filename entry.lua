@@ -560,50 +560,172 @@ local function handle_wifi_scan(args)
 end
 
 -- ==========================================================
--- 3. 主路由入口
+-- 3. Session 认证 / 登录接口
+-- ==========================================================
+
+local session = require "session"
+
+local function send_auth_error(status, msg, extra)
+    ngx.status = status
+    ngx.header["Content-Type"] = "application/json"
+    -- 禁止 WWW-Authenticate，避免浏览器弹出 BasicAuth
+    local body = { err = 1, msg = msg or "unauthorized" }
+    if extra then
+        for k, v in pairs(extra) do
+            body[k] = v
+        end
+    end
+    ngx.say(cjson.encode(body))
+    ngx.exit(status)
+end
+
+local function read_json_body()
+    ngx.req.read_body()
+    local data = ngx.req.get_body_data()
+    if not data or data == "" then
+        return nil
+    end
+    local ok, obj = pcall(cjson.decode, data)
+    if ok then return obj end
+    return nil
+end
+
+local function handle_login_pubkey()
+    if ngx.req.get_method() ~= "GET" then
+        send_auth_error(405, "method not allowed")
+    end
+    local pem = session.read_login_pubkey()
+    if not pem or pem == "" then
+        send_auth_error(503, "login key not ready")
+    end
+    send_json({ err = 0, pubkey = pem })
+end
+
+local function handle_login()
+    if ngx.req.get_method() ~= "POST" then
+        send_auth_error(405, "method not allowed")
+    end
+
+    local body = read_json_body() or {}
+    local username = body.username or body.user or ""
+    -- 拒绝明文 password
+    if body.password ~= nil or body.pass ~= nil then
+        send_auth_error(400, "plaintext password not allowed")
+    end
+
+    local password_enc = body.password_enc or ""
+    local nonce = body.nonce or ""
+
+    local locked, retry_after = session.is_locked(username)
+    if locked then
+        ngx.log(ngx.WARN, "web login locked user=", username, " ip=", ngx.var.remote_addr)
+        send_auth_error(429, "locked", { retry_after = retry_after })
+    end
+
+    local password = session.decrypt_login_payload(password_enc, nonce)
+    if not password then
+        local now_locked, wait = session.record_fail(username)
+        ngx.log(ngx.WARN, "web login decrypt/nonce fail user=", username, " ip=", ngx.var.remote_addr)
+        if now_locked then
+            send_auth_error(429, "locked", { retry_after = wait })
+        end
+        send_auth_error(401, "invalid credentials")
+    end
+
+    local expect_user, expect_pass = session.get_credentials()
+    if username == expect_user and password == expect_pass then
+        session.clear_fail(username)
+        local _, csrf = session.create(username)
+        ngx.log(ngx.INFO, "web login ok user=", username, " ip=", ngx.var.remote_addr)
+        send_json({ err = 0, user = username, csrf = csrf })
+    end
+
+    local now_locked, wait = session.record_fail(username)
+    ngx.log(ngx.WARN, "web login fail user=", username, " ip=", ngx.var.remote_addr)
+    if now_locked then
+        send_auth_error(429, "locked", { retry_after = wait })
+    end
+    send_auth_error(401, "invalid credentials")
+end
+
+local function handle_logout()
+    session.destroy()
+    send_json({ err = 0 })
+end
+
+local function handle_auth_check()
+    local data = session.check()
+    if not data then
+        send_auth_error(401, "unauthorized")
+    end
+    send_json({ err = 0, user = data.user, csrf = data.csrf })
+end
+
+-- ==========================================================
+-- 4. 主路由入口
 -- ==========================================================
 
 local uri = ngx.var.uri
 local method = ngx.req.get_method()
 local args = ngx.req.get_uri_args(0) -- 获取 GET 参数
 
--- 路由分发
-if uri == "/download_cert_bundle.cgi" then
-    handle_download_cert_bundle(args)
-elseif uri == "/download_nv.cgi" then
-    handle_download_nv(args)
-elseif uri == "/download_flex.cgi" then
-    handle_download_flex(args)
-elseif uri == "/update_nv.cgi" then
-    handle_update_nv(args)
-elseif uri == "/download_file.cgi" then
-    handle_download_file(args)
-elseif uri == "/download_multi_file.cgi" then
-    handle_download_multi_file(args)
-elseif uri == "/action_restart.cgi" then
-    handle_restart()
-elseif uri == "/action_restart_service.cgi" then
-    handle_restart_service()
-elseif uri == "/action_tf.cgi" then
-    handle_tf_action(args)
-elseif uri == "/action_time.cgi" then
-    handle_time_action(args)
-elseif uri == "/action_reset.cgi" then
-    handle_reset(args)
-elseif uri == "/action_upgrade.cgi" then
-    handle_upgrade(args)
-elseif uri == "/action_wifi.cgi" then
-    handle_wifi_scan(args)
-
-    -- 匹配 /upload/ 开头的 URI
-elseif string.sub(uri, 1, 8) == "/upload/" then
-    if method == "POST" then
-        handle_upload(uri)
-    else
-        send_error("Method not allowed")
-    end
+-- 公开认证接口
+if uri == "/login_pubkey.cgi" then
+    handle_login_pubkey()
+elseif uri == "/login.cgi" then
+    handle_login()
+elseif uri == "/logout.cgi" then
+    handle_logout()
+elseif uri == "/auth_check.cgi" then
+    handle_auth_check()
 else
-    ngx.status = 404
-    ngx.say("Not Found")
-    ngx.exit(404)
+    -- 受保护接口：Session +（写操作 / action / update / upload）CSRF
+    local sess = session.check()
+    if not sess then
+        send_auth_error(401, "unauthorized")
+    end
+    if session.needs_csrf(uri, method) and not session.validate_csrf(sess) then
+        send_auth_error(403, "csrf invalid")
+    end
+
+    -- 路由分发
+    if uri == "/download_cert_bundle.cgi" then
+        handle_download_cert_bundle(args)
+    elseif uri == "/download_nv.cgi" then
+        handle_download_nv(args)
+    elseif uri == "/download_flex.cgi" then
+        handle_download_flex(args)
+    elseif uri == "/update_nv.cgi" then
+        handle_update_nv(args)
+    elseif uri == "/download_file.cgi" then
+        handle_download_file(args)
+    elseif uri == "/download_multi_file.cgi" then
+        handle_download_multi_file(args)
+    elseif uri == "/action_restart.cgi" then
+        handle_restart()
+    elseif uri == "/action_restart_service.cgi" then
+        handle_restart_service()
+    elseif uri == "/action_tf.cgi" then
+        handle_tf_action(args)
+    elseif uri == "/action_time.cgi" then
+        handle_time_action(args)
+    elseif uri == "/action_reset.cgi" then
+        handle_reset(args)
+    elseif uri == "/action_upgrade.cgi" then
+        handle_upgrade(args)
+    elseif uri == "/action_wifi.cgi" then
+        handle_wifi_scan(args)
+
+        -- 匹配 /upload/ 开头的 URI
+    elseif string.sub(uri, 1, 8) == "/upload/" then
+        if method == "POST" then
+            handle_upload(uri)
+        else
+            send_error("Method not allowed")
+        end
+    else
+        ngx.status = 404
+        ngx.say("Not Found")
+        ngx.exit(404)
+    end
 end

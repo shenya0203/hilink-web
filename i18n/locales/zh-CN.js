@@ -45,7 +45,19 @@ export default {
     // 顶部导航栏
     navbar: {
         title: '工业路由网关',
-        subtitle: 'Web 配置管理系统'
+        subtitle: 'Web 配置管理系统',
+        logout: '退出'
+    },
+
+    login: {
+        title: '设备登录',
+        subtitle: '请输入管理账号密码',
+        username: '用户名',
+        password: '密码',
+        submit: '登录',
+        loggingIn: '登录中...',
+        invalid: '用户名或密码错误',
+        locked: '登录失败次数过多，请 {minutes} 分钟后再试'
     },
 
     // 侧边栏菜单
@@ -506,7 +518,8 @@ export default {
         hostName: '主机名称',
         username: '用户名',
         password: '密码',
-        webPort: '网页端口号',
+        webPort: 'HTTPS 端口号',
+        passwordPlaceholder: '留空表示不修改密码',
         exportParams: '参数导出',
         importParams: '参数导入',
 
