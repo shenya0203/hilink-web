@@ -332,8 +332,12 @@ export default {
         featureDisabled: 'Feature not enabled',
         featureDisabledHint: 'This UART is not assigned the Serial DTU role. Open the UART Roles tab, set it to Serial DTU, and apply.',
         gotoRoles: 'Go to UART Roles',
+        gotoSocket: 'Go to Socket',
+        gotoMqtt: 'Go to MQTT',
         invalidPackLen: 'Pack length must be 5-2048 bytes',
         invalidPackTime: 'Pack time must be 10-60000 ms',
+        sockDisabled: 'Enable the UART-mapped Socket channel first',
+        mqttDisabled: 'Enable the UART-mapped MQTT channel first',
         httpModeRequired: 'HTTP mode requires the UART-mapped Socket to be HTTP Client',
         netModeConflict: 'NET mode cannot use a Socket set to HTTP Client',
         topicRequired: 'Configure at least a publish topic or one subscribe topic'

@@ -345,8 +345,12 @@ export default {
         featureDisabled: '功能未开启',
         featureDisabledHint: '该串口未选择数传角色。请到「串口角色」选项卡将该串口设为数传并点击应用。',
         gotoRoles: '前往串口角色',
+        gotoSocket: '前往 Socket',
+        gotoMqtt: '前往 MQTT',
         invalidPackLen: '打包长度范围为 5-2048 字节',
         invalidPackTime: '打包时间范围为 10-60000 ms',
+        sockDisabled: '请先开启本串口对应的 Socket 通道',
+        mqttDisabled: '请先开启本串口对应的 MQTT 通道',
         httpModeRequired: 'HTTP 模式需将本串口对应 Socket 设为 HTTP Client',
         netModeConflict: '网络透传不能使用已设为 HTTP Client 的 Socket 通道',
         topicRequired: '请至少配置发布主题或一条订阅主题'

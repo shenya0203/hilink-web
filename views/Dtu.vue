@@ -77,23 +77,29 @@
 
         <div v-if="current.wkmod === 0" class="form-section">
           <div class="section-title">{{ t('dtu.modeNet') }}</div>
-          <div v-if="getFieldError(activeTab, 'httpMode')" class="field-error-text block">
-            {{ getFieldError(activeTab, 'httpMode') }}
+          <div v-if="getFieldError(activeTab, 'bind')" class="field-error-text block">
+            {{ getFieldError(activeTab, 'bind') }}
           </div>
           <div class="hint-text">{{ fixedChannelHint(activeTab) }} {{ t('dtu.sockHint') }}</div>
+          <button type="button" class="btn-link hint-link" @click="goSocket">{{ t('dtu.gotoSocket') }}</button>
         </div>
 
         <div v-if="current.wkmod === 1" class="form-section">
           <div class="section-title">{{ t('dtu.modeHttp') }}</div>
-          <div v-if="getFieldError(activeTab, 'httpMode')" class="field-error-text block">
-            {{ getFieldError(activeTab, 'httpMode') }}
+          <div v-if="getFieldError(activeTab, 'bind')" class="field-error-text block">
+            {{ getFieldError(activeTab, 'bind') }}
           </div>
           <div class="hint-text">{{ fixedChannelHint(activeTab) }} {{ t('dtu.httpHint') }}</div>
+          <button type="button" class="btn-link hint-link" @click="goSocket">{{ t('dtu.gotoSocket') }}</button>
         </div>
 
         <div v-if="current.wkmod === 2" class="form-section">
           <div class="section-title">{{ t('dtu.modeMqtt') }}</div>
+          <div v-if="getFieldError(activeTab, 'bind')" class="field-error-text block">
+            {{ getFieldError(activeTab, 'bind') }}
+          </div>
           <div class="hint-text">{{ fixedChannelHint(activeTab) }} {{ t('dtu.mqttConnHint') }}</div>
+          <button type="button" class="btn-link hint-link" @click="goMqtt">{{ t('dtu.gotoMqtt') }}</button>
 
           <div class="form-group">
             <label>{{ t('dtu.pubTopic') }}:</label>
@@ -164,6 +170,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { getDtuConfig, getCommTunnel, updateConfig } from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
@@ -180,6 +187,7 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'goto-roles'])
 
 const { t } = useI18n()
+const router = useRouter()
 const { isServiceRestarting, restartService } = useServiceControl()
 
 const loading = ref(true)
@@ -188,6 +196,7 @@ const showRestartModal = ref(false)
 const activeTab = ref(0)
 const dtuList = ref([])
 const sockList = ref([])
+const mqttList = ref([])
 
 const tabName = (i) => `Uart${i + 1}`
 
@@ -219,24 +228,43 @@ const fixedChannelHint = (uartIndex) => {
   return t('dtu.fixedChannelUart2')
 }
 
+const goSocket = () => router.push({ name: 'Socket' })
+const goMqtt = () => router.push({ name: 'MQTT' })
+
 const channelErrors = (ch, index) => {
   const errors = {}
   const treatEnabled = props.embedded
     ? isChannelEnabled(index)
     : (ch && ch.enable === 1)
   if (!ch || !treatEnabled) return errors
+
   const pl = Number(ch.pack_len)
   if (!Number.isInteger(pl) || pl < 5 || pl > 2048) errors.pack_len = t('dtu.invalidPackLen')
   const pt = Number(ch.pack_time)
   if (!Number.isInteger(pt) || pt < 10 || pt > 60000) errors.pack_time = t('dtu.invalidPackTime')
+
   const s = sockList.value[index]
-  if (ch.wkmod === 1) {
-    if (!s || s.mode !== 3) errors.httpMode = t('dtu.httpModeRequired')
-  }
+  const m = mqttList.value[index]
+
   if (ch.wkmod === 0) {
-    if (s && s.mode === 3) errors.httpMode = t('dtu.netModeConflict')
-  }
-  if (ch.wkmod === 2) {
+    // NET：Socket 须使能，且为 TCP/UDP（非 HTTP）
+    if (!s || Number(s.enable) !== 1) {
+      errors.bind = t('dtu.sockDisabled')
+    } else if (Number(s.mode) === 3) {
+      errors.bind = t('dtu.netModeConflict')
+    }
+  } else if (ch.wkmod === 1) {
+    // HTTP：Socket 须使能且 HTTP Client
+    if (!s || Number(s.enable) !== 1) {
+      errors.bind = t('dtu.sockDisabled')
+    } else if (Number(s.mode) !== 3) {
+      errors.bind = t('dtu.httpModeRequired')
+    }
+  } else if (ch.wkmod === 2) {
+    // MQTT：对应 MQTT 通道须使能；本页主题
+    if (!m || Number(m.enable) !== 1) {
+      errors.bind = t('dtu.mqttDisabled')
+    }
     const pub = (ch.pub_topic || '').trim()
     const hasSub = (ch.subsActive || []).some(sub => (sub.topic || '').trim())
     if (!pub && !hasSub) errors.pub_topic = t('dtu.topicRequired')
@@ -324,6 +352,8 @@ const loadData = async () => {
     ]
     sockList.value = Array.isArray(tunnel?.SOCK) ? tunnel.SOCK : []
     if (!sockList.value.length) sockList.value = [{ name: 'SOCKA' }, { name: 'SOCKB' }]
+    mqttList.value = Array.isArray(tunnel?.MQTT) ? tunnel.MQTT : []
+    if (!mqttList.value.length) mqttList.value = [{ name: 'MQTT1' }, { name: 'MQTT2' }]
     const tabs = visibleTabIndices.value
     if (tabs.length && !tabs.includes(activeTab.value)) {
       activeTab.value = tabs[0]
@@ -430,6 +460,11 @@ defineExpose({
   font-size: 13px;
   font-weight: 600;
   text-decoration: underline;
+}
+.btn-link.hint-link {
+  display: inline-block;
+  margin: 8px 15px 0;
+  padding: 0;
 }
 .form-section { padding: 20px 15px; background: white; border-bottom: 1px solid #e8e8e8; }
 .section-title { font-weight: 600; font-size: 13px; color: #333; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e8e8e8; }
