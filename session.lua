@@ -203,7 +203,11 @@ function _M.destroy_all()
 end
 
 -- 返回 session data 或 nil
-function _M.check()
+-- touch=false 时只校验不滑动续期（只读/轮询接口用）；默认 true
+function _M.check(touch)
+    if touch == nil then
+        touch = true
+    end
     local sid = get_cookie(COOKIE_NAME)
     if not sid or sid == "" then
         return nil
@@ -220,9 +224,11 @@ function _M.check()
         clear_session_cookie()
         return nil
     end
-    -- 滑动空闲续期
-    data.expire = now + IDLE_TIMEOUT
-    write_json(path, data)
+    if touch then
+        -- 滑动空闲续期
+        data.expire = now + IDLE_TIMEOUT
+        write_json(path, data)
+    end
     return data
 end
 

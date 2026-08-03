@@ -121,10 +121,7 @@ const menuItems = computed(() => [
       //{ name: 'hlk_cld', labelKey: 'menu.usrCld' }
     ] 
   },
-  { 
-    name: 'gateway', labelKey: 'menu.gateway', 
-    submenu: [{ name: 'edge_gw', labelKey: 'menu.edgeCompute' }] 
-  },
+  { name: 'gateway', labelKey: 'menu.gateway' },
   { name: 'system', labelKey: 'menu.system' }
 ]);
 

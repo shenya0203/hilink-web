@@ -138,6 +138,16 @@ export const isValidServerAddress = (addr) => {
 };
 
 /**
+ * 验证服务端口（HTTP/通用远端端口）
+ * 规则：整数，范围 1 ~ 65535（允许 80/443 等常用端口）
+ */
+export const isValidServicePort = (port) => {
+    if (port === '' || port === null || port === undefined) return false;
+    const p = Number(port);
+    return Number.isInteger(p) && p >= 1 && p <= 65535;
+};
+
+/**
  * 验证端口
  * 规则：整数，范围 1024 ~ 65534
  * @param {number|string} port 端口号

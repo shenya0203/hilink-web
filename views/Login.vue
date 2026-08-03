@@ -55,6 +55,13 @@ const onSubmit = async () => {
       const sec = (data && data.retry_after) || 600
       const min = Math.ceil(sec / 60)
       errorMsg.value = t('login.locked', { minutes: min })
+    } else if (!err.response) {
+      // 超时 / 连接被重置（常见：nginx worker OOM 被 kill）
+      errorMsg.value = t('login.networkError')
+    } else if (status === 503) {
+      errorMsg.value = t('login.keyNotReady')
+    } else if (status === 401) {
+      errorMsg.value = t('login.invalid')
     } else {
       errorMsg.value = t('login.invalid')
     }

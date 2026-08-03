@@ -1,6 +1,52 @@
 -- /usr/lib/lua/web_backend/entry.lua
 local cjson = require "cjson"
-local ubus_adapter = require "ubus_adapter" -- Import the adapter
+
+-- 延迟加载 ubus_adapter：登录/公钥等公开接口不依赖 ubus。
+-- 设备内存紧张时，入口即 require ubus 会导致 worker 被 OOM kill (signal 9)，
+-- 表现为 login_pubkey.cgi pending / wget 无输出。
+local ubus_adapter = {}
+do
+    local real
+    setmetatable(ubus_adapter, {
+        __index = function(_, key)
+            if not real then
+                real = require("ubus_adapter")
+            end
+            return real[key]
+        end
+    })
+end
+
+-- 公钥接口极简路径：不加载 session / ubus，避免 worker OOM
+do
+    local uri0 = ngx.var.uri
+    if uri0 == "/login_pubkey.cgi" then
+        if ngx.req.get_method() ~= "GET" then
+            ngx.status = 405
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say(cjson.encode({ err = 1, msg = "method not allowed" }))
+            ngx.exit(405)
+        end
+        local f = io.open("/etc/nginx/ssl/web_login.pub", "r")
+        if not f then
+            ngx.status = 503
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say(cjson.encode({ err = 1, msg = "login key not ready" }))
+            ngx.exit(503)
+        end
+        local pem = f:read("*a")
+        f:close()
+        if not pem or pem == "" then
+            ngx.status = 503
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say(cjson.encode({ err = 1, msg = "login key not ready" }))
+            ngx.exit(503)
+        end
+        ngx.header["Content-Type"] = "application/json"
+        ngx.say(cjson.encode({ err = 0, pubkey = pem }))
+        ngx.exit(ngx.HTTP_OK)
+    end
+end
 
 -- ==========================================================
 -- 1. 基础工具函数
@@ -231,6 +277,8 @@ local function handle_download_nv(args)
         response = ubus_adapter.get_offline_cache_config()
     elseif name == "edge" then
         response = ubus_adapter.get_edge_config()
+    elseif name == "dtu" then
+        response = ubus_adapter.get_dtu_config()
     elseif name == "edge_report" then
         response = ubus_adapter.get_edge_report_config()
     elseif name == "edge_access" then
@@ -654,11 +702,23 @@ local function handle_logout()
 end
 
 local function handle_auth_check()
-    local data = session.check()
+    -- 路由鉴权视为用户活跃，续期空闲超时
+    local data = session.check(true)
     if not data then
         send_auth_error(401, "unauthorized")
     end
     send_json({ err = 0, user = data.user, csrf = data.csrf })
+end
+
+-- 只读 download 接口不续期，避免轮询把空闲超时一直推后
+local function should_touch_session(uri, method)
+    method = string.upper(method or "GET")
+    if method == "GET" or method == "HEAD" then
+        if string.match(uri, "^/download_") then
+            return false
+        end
+    end
+    return true
 end
 
 -- ==========================================================
@@ -680,7 +740,8 @@ elseif uri == "/auth_check.cgi" then
     handle_auth_check()
 else
     -- 受保护接口：Session +（写操作 / action / update / upload）CSRF
-    local sess = session.check()
+    -- 只读轮询不续期；写操作续期
+    local sess = session.check(should_touch_session(uri, method))
     if not sess then
         send_auth_error(401, "unauthorized")
     end

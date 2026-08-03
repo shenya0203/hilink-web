@@ -36,6 +36,7 @@ export default {
         saveFailed: 'Failed to save',
         uploadSuccess: 'Upload successful',
         uploadFailed: 'Upload failed',
+        delete: 'Delete',
         uploadedFile: 'Uploaded File',
         action: 'Action',
         select: 'Select',
@@ -56,7 +57,9 @@ export default {
         submit: 'Login',
         loggingIn: 'Signing in...',
         invalid: 'Invalid username or password',
-        locked: 'Too many failed attempts. Try again in {minutes} minute(s)'
+        locked: 'Too many failed attempts. Try again in {minutes} minute(s)',
+        networkError: 'Cannot reach login service. Check network or retry later (restart nginx if it persists)',
+        keyNotReady: 'Login key is not ready. Retry later or reboot the device'
     },
 
     // Sidebar Menu
@@ -70,6 +73,7 @@ export default {
         mqtt: 'MQTT',
         usrCld: 'HLK_CLD',
         gateway: 'Gateway',
+        dtu: 'Serial DTU',
         edgeCompute: 'Edge Computing',
         system: 'System Settings'
     },
@@ -218,6 +222,22 @@ export default {
         tcpServer: 'TCP Server',
         udpClient: 'UDP Client',
         udpServer: 'UDP Server',
+        httpClient: 'HTTP Client',
+        httpMethod: 'HTTP Method',
+        httpHeader: 'Custom Header',
+        cutHeader: 'Filter Response Header',
+        respTimeout: 'Response Timeout (s)',
+        httpHint: 'POST: serial data as body; GET: append serial data to URL; when filter is on, only body is returned.',
+        shortConnect: 'Short Connection',
+        longConnect: 'Long Connection',
+        shortTimeout: 'Short Timeout (s)',
+        keepaliveSec: 'Keepalive (s, 0=off)',
+        sockTimeout: 'Socket Timeout (s)',
+        invalidShortTimeout: 'Short timeout must be 1-600 seconds',
+        invalidKeepalive: 'Keepalive must be 0-65535 seconds',
+        invalidSockTimeout: 'Socket timeout must be 1-600 seconds',
+        invalidHttpUrl: 'URL path is required (max 200 bytes)',
+        invalidRespTimeout: 'Response timeout must be 1-600 seconds',
         maxConnections: 'Max Connections',
         overflowHandle: 'Overflow Handle',
         config: 'Config',
@@ -226,6 +246,7 @@ export default {
         continueConfig: 'Continue Configuration',
         customContentHint: '(1-128 bytes, supports a-z/A-Z/0-9 and -.@)',
         invalidMaxConnections: 'Max connections must be between 1 and 32',
+        invalidServicePort: 'Port must be between 1 and 65535',
     },
 
     // MQTT Configuration Page
@@ -279,6 +300,63 @@ export default {
         restartRequired: 'Cloud configuration requires a device restart to take effect.',
     },
 
+    // Serial DTU Page
+    dtu: {
+        title: 'Serial DTU',
+        description: 'Transparent serial-to-network (Socket / HTTP / MQTT). Each UART can independently use DTU or Edge Computing.',
+        enable: 'DTU Enable',
+        workMode: 'Work Mode',
+        modeNet: 'Network (NET)',
+        modeHttp: 'HTTP',
+        modeMqtt: 'MQTT',
+        uartSection: 'UART & Packing',
+        uartBind: 'Bind UART',
+        packLen: 'Pack Length (bytes)',
+        packTime: 'Pack Time (ms)',
+        sockBind: 'Bind Socket',
+        mqttBind: 'Bind MQTT',
+        sockHint: 'Uses the fixed Socket channel for this UART. Configure connection under Communication → Socket (Client or Server).',
+        httpHint: 'Set the UART-mapped Socket mode to HTTP Client; details are on the Socket page.',
+        mqttConnHint: 'Uses the fixed MQTT channel for this UART. Broker/auth/SSL are on Communication → MQTT; topics are configured here.',
+        fixedChannelUart1: 'This channel is fixed to SOCKA / MQTT1.',
+        fixedChannelUart2: 'This channel is fixed to SOCKB / MQTT2.',
+        pubTopic: 'Publish Topic',
+        prefixEnable: 'Downlink Format',
+        prefixOn: 'topic,payload',
+        prefixOff: 'payload only',
+        subList: 'Subscribe Topics',
+        subTopic: 'Subscribe Topic',
+        addSub: 'Add Subscribe',
+        restartRequired: 'DTU configuration requires a service restart to take effect.',
+        edgeConflict: 'This UART is used by Edge Computing. Change its role to DTU on the Gateway page first.',
+        featureDisabled: 'Feature not enabled',
+        featureDisabledHint: 'This UART is not assigned the Serial DTU role. Open the UART Roles tab, set it to Serial DTU, and apply.',
+        gotoRoles: 'Go to UART Roles',
+        invalidPackLen: 'Pack length must be 5-2048 bytes',
+        invalidPackTime: 'Pack time must be 10-60000 ms',
+        httpModeRequired: 'HTTP mode requires the UART-mapped Socket to be HTTP Client',
+        netModeConflict: 'NET mode cannot use a Socket set to HTTP Client',
+        topicRequired: 'Configure at least a publish topic or one subscribe topic'
+    },
+
+    gatewayPage: {
+        title: 'Gateway',
+        description: 'Assign each UART as Off, Serial DTU, or Edge Computing. Different UARTs can use different roles. Edge Computing also supports Modbus TCP without a UART edge role.',
+        mode: 'Gateway Mode',
+        tabRole: 'UART Roles',
+        tabDtu: 'Serial DTU',
+        tabEdge: 'Edge Computing',
+        uartRole: 'Uart{n} Role',
+        modeOff: 'Off',
+        modeDtu: 'Serial DTU',
+        modeEdge: 'Edge Computing',
+        modeHint: 'Choose a role per UART, then click Apply. Configure details under the Serial DTU and Edge Computing tabs.',
+        applyMode: 'Apply',
+        pendingTip: 'Roles changed — click Apply to save',
+        closedTip: 'Both UARTs are off. Select Serial DTU or Edge Computing on a UART and apply to configure.',
+        restartRequired: 'Gateway role change requires a service restart to take effect.'
+    },
+
     // Edge Computing Page
     edge: {
         title: 'Edge Computing',
@@ -292,6 +370,7 @@ export default {
 
         // Gateway Enable
         gatewayEnable: 'Gateway Enable',
+        dtuConflict: 'This UART is used by Serial DTU. Change its role to Edge Computing on the Gateway page first.',
         close: 'Close',
         open: 'Open',
         saveCurrentPage: 'Save Current Page',

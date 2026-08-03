@@ -7,7 +7,7 @@ import Uart from '../views/Uart.vue'
 import Socket from '../views/Socket.vue'
 import Mqtt from '../views/Mqtt.vue'
 import System from '../views/System.vue'
-import EdgeCompute from '../views/EdgeCompute.vue'
+import Gateway from '../views/Gateway.vue'
 import { authCheck } from '../api/services.js'
 
 const routes = [
@@ -27,7 +27,9 @@ const routes = [
             { path: 'comm/Socket', name: 'Socket', component: Socket },
             { path: 'comm/MQTT', name: 'MQTT', component: Mqtt },
             //{ path: 'comm/HLK_CLD', name: 'hlk_cld', component: Cloud },
-            { path: 'gateway/edge_gw', name: 'edge_gw', component: EdgeCompute },
+            { path: 'gateway', name: 'gateway', component: Gateway },
+            { path: 'gateway/dtu', redirect: { name: 'gateway' } },
+            { path: 'gateway/edge_gw', redirect: { name: 'gateway' } },
             { path: 'system', name: 'system', component: System }
         ]
     }

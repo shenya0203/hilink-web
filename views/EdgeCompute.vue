@@ -6,8 +6,8 @@
     <!-- 错误提示 -->
     <div v-if="error" class="error">{{ error }}</div>
 
-    <!-- 边缘计算标题 -->
-    <div class="description-box">
+    <!-- 边缘计算标题（嵌入网关页时由外层展示） -->
+    <div class="description-box" v-if="!hideGatewayEnable">
       <div class="desc-title">{{ t('edge.title') }}</div>
       <div class="desc-content">{{ t('edge.description') }}</div>
     </div>
@@ -25,8 +25,8 @@
       </button>
     </div>
 
-    <!-- Tab 1: 网关使能 -->
-    <div v-if="activeTab === 0" class="tab-content">
+    <!-- Tab 1: 网关使能（嵌入网关页时由顶部模式选择控制，不单独展示） -->
+    <div v-if="activeTab === 0 && !hideGatewayEnable" class="tab-content">
       <div class="form-section">
         <div class="form-group">
           <label>{{ t('edge.gatewayEnable') }}:</label>
@@ -678,8 +678,13 @@
             <div class="form-group">
               <label>{{ t('edge.serialConfig') }}:</label>
               <select v-model.number="slaveForm.serialPort">
-                <option :value="1">{{ t('edge.serial1') }}</option>
-                <option :value="2">{{ t('edge.serial2') }}</option>
+                <option
+                  v-for="port in availableSerialPorts"
+                  :key="port"
+                  :value="port"
+                >
+                  {{ port === 1 ? t('edge.serial1') : t('edge.serial2') }}
+                </option>
               </select>
             </div>
           </template>
@@ -1116,6 +1121,12 @@ import {
 } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 
+const props = defineProps({
+  hideGatewayEnable: { type: Boolean, default: false },
+  // 嵌入网关页时仅允许选择「边缘」角色串口，如 [1] / [2] / [1,2]；空/未传则两路都可选
+  allowedSerialPorts: { type: Array, default: null }
+})
+
 // 使用 i18n
 const { t } = useI18n()
 const { isServiceRestarting, restartService } = useServiceControl()
@@ -1124,7 +1135,7 @@ const { isServiceRestarting, restartService } = useServiceControl()
 const loading = ref(true)
 const error = ref(null)
 const importing = ref(false)
-const activeTab = ref(0)
+const activeTab = ref(props.hideGatewayEnable ? 1 : 0)
 
 // 标签页配置
 const tabList = ref([
@@ -1756,13 +1767,41 @@ const pointForm = ref({
 
 // 超时时间输入处理 (Removed)
 
-// 计算属性：可见的标签页（网关使能关闭时只显示网关使能标签）
+// 计算属性：可见的标签页（网关使能关闭时只显示网关使能标签；嵌入网关页时隐藏使能页）
+const availableSerialPorts = computed(() => {
+  // null/undefined = 不限制；[] = 无 RTU 口（仅 TCP）
+  if (!Array.isArray(props.allowedSerialPorts)) {
+    return [1, 2]
+  }
+  return props.allowedSerialPorts.filter(p => p === 1 || p === 2)
+})
+
 const visibleTabs = computed(() => {
+  if (props.hideGatewayEnable) {
+    return tabList.value.slice(1).map((tab, index) => ({
+      name: tab.name,
+      originalIndex: index + 1
+    }))
+  }
   if (edgeConfig.value.all_en === 0) {
     return [{ name: tabList.value[0].name, originalIndex: 0 }]
   }
   return tabList.value.map((tab, index) => ({ name: tab.name, originalIndex: index }))
 })
+
+watch(() => props.hideGatewayEnable, (hide) => {
+  if (hide) {
+    edgeConfig.value.all_en = 1
+    if (activeTab.value === 0) activeTab.value = 1
+  }
+}, { immediate: true })
+
+watch(availableSerialPorts, (ports) => {
+  if (!ports.length) return
+  if (!ports.includes(slaveForm.value.serialPort)) {
+    slaveForm.value.serialPort = ports[0]
+  }
+}, { immediate: true })
 
 // 计算属性：当前选中的从机
 const currentSlave = computed(() => {

@@ -37,8 +37,8 @@
             <select v-model.number="socketList[activeTab].mode">
               <option :value="0">{{ t('socket.tcpClient') }}</option>
               <option :value="1">{{ t('socket.tcpServer') }}</option>
-              <!-- <option :value="2">{{ t('socket.udpClient') }}</option> -->
-              <!-- <option :value="3">HTTP Client</option> -->
+              <option :value="2">{{ t('socket.udpClient') }}</option>
+              <option :value="3">{{ t('socket.httpClient') }}</option>
             </select>
           </div>
         </div>
@@ -309,16 +309,15 @@
           </div>
         </div>
 
-        <!-- UDP Client 配置 -->
-        <!-- 已隐藏：设备不支持 UDP Client 模式
+        <!-- UDP Client（对齐 SDK sock_ch_cfg_t） -->
         <div v-if="socketList[activeTab].mode === 2" class="form-section">
           <div class="section-title">{{ t('socket.udpClient') }} {{ t('socket.config') }}</div>
           <div class="form-group">
             <label>{{ t('socket.serverAddress') }}:</label>
             <div class="input-wrapper">
-              <input 
-                v-model="socketList[activeTab].udpc.server_ip" 
-                type="text" 
+              <input
+                v-model="socketList[activeTab].udpc.server_ip"
+                type="text"
                 :class="{ 'input-error': getFieldError(activeTab, 'udpc_server_ip') }"
               />
               <span v-if="getFieldError(activeTab, 'udpc_server_ip')" class="field-error-text">
@@ -329,9 +328,9 @@
           <div class="form-group">
             <label>{{ t('socket.localPort') }}:</label>
             <div class="input-wrapper">
-              <input 
-                v-model.number="socketList[activeTab].udpc.local_port" 
-                type="number" 
+              <input
+                v-model.number="socketList[activeTab].udpc.local_port"
+                type="number"
                 :class="{ 'input-error': getFieldError(activeTab, 'udpc_local_port') }"
               />
               <span v-if="getFieldError(activeTab, 'udpc_local_port')" class="field-error-text">
@@ -342,9 +341,9 @@
           <div class="form-group">
             <label>{{ t('socket.remotePort') }}:</label>
             <div class="input-wrapper">
-              <input 
-                v-model.number="socketList[activeTab].udpc.server_port" 
-                type="number" 
+              <input
+                v-model.number="socketList[activeTab].udpc.server_port"
+                type="number"
                 :class="{ 'input-error': getFieldError(activeTab, 'udpc_server_port') }"
               />
               <span v-if="getFieldError(activeTab, 'udpc_server_port')" class="field-error-text">
@@ -353,21 +352,58 @@
             </div>
           </div>
           <div class="form-group">
-            <label>{{ t('socket.offlineCache') }}:</label>
-            <select v-model.number="offlineCacheList[activeTab]">
-              <option :value="0">{{ t('common.disable') }}</option>
-              <option :value="1">{{ t('common.enable') }}</option>
+            <label>{{ t('socket.shortConnect') }}:</label>
+            <select v-model.number="socketList[activeTab].udpc.short_en">
+              <option :value="0">{{ t('socket.longConnect') }}</option>
+              <option :value="1">{{ t('socket.shortConnect') }}</option>
             </select>
           </div>
-        </div>
-        -->
-
-        <!-- HTTP Client 配置 -->
-        <!-- 已隐藏：设备不支持 HTTP Client 模式
-        <div v-if="socketList[activeTab].mode === 3" class="form-section">
-          <div class="section-title">HTTP Client {{ t('socket.config') }}</div>
+          <div v-if="socketList[activeTab].udpc.short_en === 1" class="form-group">
+            <label>{{ t('socket.shortTimeout') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model.number="socketList[activeTab].udpc.short_timeout"
+                type="number"
+                :class="{ 'input-error': getFieldError(activeTab, 'udpc_short_timeout') }"
+              />
+              <span v-if="getFieldError(activeTab, 'udpc_short_timeout')" class="field-error-text">
+                {{ getFieldError(activeTab, 'udpc_short_timeout') }}
+              </span>
+            </div>
+          </div>
           <div class="form-group">
-            <label>HTTP {{ t('socket.workMode') }}:</label>
+            <label>{{ t('socket.keepaliveSec') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model.number="socketList[activeTab].udpc.keepalive"
+                type="number"
+                :class="{ 'input-error': getFieldError(activeTab, 'udpc_keepalive') }"
+              />
+              <span v-if="getFieldError(activeTab, 'udpc_keepalive')" class="field-error-text">
+                {{ getFieldError(activeTab, 'udpc_keepalive') }}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('socket.sockTimeout') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model.number="socketList[activeTab].udpc.sock_timeout"
+                type="number"
+                :class="{ 'input-error': getFieldError(activeTab, 'udpc_sock_timeout') }"
+              />
+              <span v-if="getFieldError(activeTab, 'udpc_sock_timeout')" class="field-error-text">
+                {{ getFieldError(activeTab, 'udpc_sock_timeout') }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- HTTP Client（对齐 SDK http_cfg_t） -->
+        <div v-if="socketList[activeTab].mode === 3" class="form-section">
+          <div class="section-title">{{ t('socket.httpClient') }} {{ t('socket.config') }}</div>
+          <div class="form-group">
+            <label>{{ t('socket.httpMethod') }}:</label>
             <select v-model.number="socketList[activeTab].httpc.mode">
               <option :value="0">GET</option>
               <option :value="1">POST</option>
@@ -376,9 +412,9 @@
           <div class="form-group">
             <label>{{ t('socket.serverAddress') }}:</label>
             <div class="input-wrapper">
-              <input 
-                v-model="socketList[activeTab].httpc.server_ip" 
-                type="text" 
+              <input
+                v-model="socketList[activeTab].httpc.server_ip"
+                type="text"
                 :class="{ 'input-error': getFieldError(activeTab, 'httpc_server_ip') }"
               />
               <span v-if="getFieldError(activeTab, 'httpc_server_ip')" class="field-error-text">
@@ -389,9 +425,9 @@
           <div class="form-group">
             <label>{{ t('socket.serverPort') }}:</label>
             <div class="input-wrapper">
-              <input 
-                v-model.number="socketList[activeTab].httpc.server_port" 
-                type="number" 
+              <input
+                v-model.number="socketList[activeTab].httpc.server_port"
+                type="number"
                 :class="{ 'input-error': getFieldError(activeTab, 'httpc_server_port') }"
               />
               <span v-if="getFieldError(activeTab, 'httpc_server_port')" class="field-error-text">
@@ -401,17 +437,50 @@
           </div>
           <div class="form-group">
             <label>URL {{ t('socket.path') }}:</label>
-            <input v-model="socketList[activeTab].httpc.url" type="text" />
+            <div class="input-wrapper">
+              <input
+                v-model="socketList[activeTab].httpc.url"
+                type="text"
+                maxlength="200"
+                :class="{ 'input-error': getFieldError(activeTab, 'httpc_url') }"
+              />
+              <span v-if="getFieldError(activeTab, 'httpc_url')" class="field-error-text">
+                {{ getFieldError(activeTab, 'httpc_url') }}
+              </span>
+            </div>
           </div>
           <div class="form-group">
-            <label>{{ t('socket.offlineCache') }}:</label>
-            <select v-model.number="offlineCacheList[activeTab]">
-              <option :value="0">{{ t('common.disable') }}</option>
+            <label>{{ t('socket.httpHeader') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model="socketList[activeTab].httpc.header"
+                type="text"
+                maxlength="200"
+              />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('socket.cutHeader') }}:</label>
+            <select v-model.number="socketList[activeTab].httpc.cut_header">
               <option :value="1">{{ t('common.enable') }}</option>
+              <option :value="0">{{ t('common.disable') }}</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>{{ t('socket.respTimeout') }}:</label>
+            <div class="input-wrapper">
+              <input
+                v-model.number="socketList[activeTab].httpc.resp_timeout"
+                type="number"
+                :class="{ 'input-error': getFieldError(activeTab, 'httpc_resp_timeout') }"
+              />
+              <span v-if="getFieldError(activeTab, 'httpc_resp_timeout')" class="field-error-text">
+                {{ getFieldError(activeTab, 'httpc_resp_timeout') }}
+              </span>
+            </div>
+          </div>
+          <div class="hint-text">{{ t('socket.httpHint') }}</div>
         </div>
-        -->
       </template>
     </form>
 
@@ -453,7 +522,7 @@ import { fetchSocketConfigData, fetchOfflineCacheData } from '../api/mockData'
 import { updateConfig, restartDevice } from '../api/services'
 import apiClient from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
-import { isValidServerAddress, isValidPort, isValidReconnectInterval, isValidCustomContent, isValidMaxConnections } from '../utils/validation.js'
+import { isValidServerAddress, isValidPort, isValidServicePort, isValidReconnectInterval, isValidCustomContent, isValidMaxConnections } from '../utils/validation.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
 import { FEATURE_TF_CARD_ENABLED } from '../config/features.js'
 
@@ -530,25 +599,47 @@ const socketErrors = computed(() => {
         errors[`${index}_tcps_conn_max_num`] = t('socket.invalidMaxConnections') || 'Max connections must be between 1-32'
       }
     }
-    // UDP Client
+    // UDP Client（SDK：本地端口允许 0）
     else if (sock.mode === 2) {
       if (!isValidServerAddress(sock.udpc.server_ip)) {
         errors[`${index}_udpc_server_ip`] = t('socket.invalidServerAddress') || 'Invalid Server Address'
       }
-      if (!isValidPort(sock.udpc.local_port)) {
-        errors[`${index}_udpc_local_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      if (!isValidPort(sock.udpc.local_port, true)) {
+        errors[`${index}_udpc_local_port`] = t('socket.invalidPort') || 'Invalid Port'
       }
       if (!isValidPort(sock.udpc.server_port)) {
-        errors[`${index}_udpc_server_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+        errors[`${index}_udpc_server_port`] = t('socket.invalidPort') || 'Invalid Port'
+      }
+      if (sock.udpc.short_en === 1) {
+        const st = Number(sock.udpc.short_timeout)
+        if (!Number.isInteger(st) || st < 1 || st > 600) {
+          errors[`${index}_udpc_short_timeout`] = t('socket.invalidShortTimeout')
+        }
+      }
+      const ka = Number(sock.udpc.keepalive ?? 0)
+      if (!Number.isInteger(ka) || ka < 0 || ka > 65535) {
+        errors[`${index}_udpc_keepalive`] = t('socket.invalidKeepalive')
+      }
+      const to = Number(sock.udpc.sock_timeout ?? 5)
+      if (!Number.isInteger(to) || to < 1 || to > 600) {
+        errors[`${index}_udpc_sock_timeout`] = t('socket.invalidSockTimeout')
       }
     }
-    // HTTP Client
+    // HTTP Client（SDK：httpc.mode=GET/POST，timeout 1~600）
     else if (sock.mode === 3) {
       if (!isValidServerAddress(sock.httpc.server_ip)) {
         errors[`${index}_httpc_server_ip`] = t('socket.invalidServerAddress') || 'Invalid Server Address'
       }
-      if (!isValidPort(sock.httpc.server_port)) {
-        errors[`${index}_httpc_server_port`] = t('socket.invalidPort') || 'Invalid Port (1024-65534)'
+      if (!isValidServicePort(sock.httpc.server_port)) {
+        errors[`${index}_httpc_server_port`] = t('socket.invalidServicePort')
+      }
+      const url = sock.httpc.url || ''
+      if (!url || url.length > 200) {
+        errors[`${index}_httpc_url`] = t('socket.invalidHttpUrl')
+      }
+      const rt = Number(sock.httpc.resp_timeout)
+      if (!Number.isInteger(rt) || rt < 1 || rt > 600) {
+        errors[`${index}_httpc_resp_timeout`] = t('socket.invalidRespTimeout')
       }
     }
   })
@@ -672,7 +763,34 @@ const loadData = async () => {
     loading.value = true
     error.value = null
     const [socketConfig, cacheConfig] = await Promise.all([fetchSocketConfigData(), fetchOfflineCacheData()])
-    if (socketConfig?.SOCK && Array.isArray(socketConfig.SOCK)) socketList.value = socketConfig.SOCK.slice(0, 2)
+    if (socketConfig?.SOCK && Array.isArray(socketConfig.SOCK)) {
+      socketList.value = socketConfig.SOCK.slice(0, 2).map(s => ({
+        ...s,
+        udpc: {
+          server_ip: '192.168.20.21',
+          local_port: 0,
+          server_port: 1593,
+          dns_timeout: 30,
+          ip_port_verify: 0,
+          short_en: 0,
+          short_timeout: 60,
+          keepalive: 0,
+          sock_timeout: 5,
+          ...(s.udpc || {})
+        },
+        httpc: {
+          mode: 0,
+          url: '/Api/echo?',
+          header: 'Connection: close\r\n',
+          cut_header: 1,
+          server_ip: 'test.hlktech.com',
+          server_port: 80,
+          resp_timeout: 10,
+          local_port: 0,
+          ...(s.httpc || {})
+        }
+      }))
+    }
     if (cacheConfig?.tunnel) {
       // 如果 TF 卡功能禁用，强制显示关闭状态
       const t0 = FEATURE_TF_CARD_ENABLED ? (cacheConfig.tunnel[0]?.enable || 0) : 0
@@ -700,15 +818,20 @@ const buildSocketParams = (sock, i) => {
   // TCP Server
   p.push(`n_SOCK[${i}].tcps.local_port=${sock.tcps.local_port}`, `n_SOCK[${i}].tcps.conn_max_num=${sock.tcps.conn_max_num}`)
   p.push(`n_SOCK[${i}].tcps.timeout_handling=${sock.tcps.timeout_handling}`)
-  // UDP Client
-  p.push(`s_SOCK[${i}].udpc.server_ip=${sock.udpc.server_ip}`, `n_SOCK[${i}].udpc.dns_timeout=${sock.udpc.dns_timeout}`)
-  p.push(`n_SOCK[${i}].udpc.local_port=${sock.udpc.local_port}`, `n_SOCK[${i}].udpc.server_port=${sock.udpc.server_port}`)
-  p.push(`n_SOCK[${i}].udpc.ip_port_verify=${sock.udpc.ip_port_verify}`)
-  // HTTP Client
-  p.push(`n_SOCK[${i}].httpc.mode=${sock.httpc.mode}`, `s_SOCK[${i}].httpc.url=${sock.httpc.url}`)
-  p.push(`s_SOCK[${i}].httpc.header=${sock.httpc.header}`, `s_SOCK[${i}].httpc.server_ip=${sock.httpc.server_ip}`)
-  p.push(`n_SOCK[${i}].httpc.local_port=${sock.httpc.local_port}`, `n_SOCK[${i}].httpc.server_port=${sock.httpc.server_port}`)
-  p.push(`n_SOCK[${i}].httpc.resp_timeout=${sock.httpc.resp_timeout}`, `n_SOCK[${i}].httpc.cut_header=${sock.httpc.cut_header}`)
+  // UDP Client（SDK 字段）
+  const udpc = sock.udpc || {}
+  p.push(`s_SOCK[${i}].udpc.server_ip=${udpc.server_ip || ''}`)
+  p.push(`n_SOCK[${i}].udpc.local_port=${udpc.local_port ?? 0}`, `n_SOCK[${i}].udpc.server_port=${udpc.server_port ?? 1593}`)
+  p.push(`n_SOCK[${i}].udpc.short_en=${udpc.short_en ?? 0}`, `n_SOCK[${i}].udpc.short_timeout=${udpc.short_timeout ?? 60}`)
+  p.push(`n_SOCK[${i}].udpc.keepalive=${udpc.keepalive ?? 0}`, `n_SOCK[${i}].udpc.sock_timeout=${udpc.sock_timeout ?? 5}`)
+  p.push(`n_SOCK[${i}].udpc.dns_timeout=${udpc.dns_timeout ?? 30}`, `n_SOCK[${i}].udpc.ip_port_verify=${udpc.ip_port_verify ?? 0}`)
+  // HTTP Client（SDK：mode=GET/POST）
+  const httpc = sock.httpc || {}
+  p.push(`n_SOCK[${i}].httpc.mode=${httpc.mode ?? 0}`, `s_SOCK[${i}].httpc.url=${encodeURIComponent(httpc.url || '')}`)
+  p.push(`s_SOCK[${i}].httpc.header=${encodeURIComponent(httpc.header || '')}`, `s_SOCK[${i}].httpc.server_ip=${httpc.server_ip || ''}`)
+  p.push(`n_SOCK[${i}].httpc.server_port=${httpc.server_port ?? 80}`)
+  p.push(`n_SOCK[${i}].httpc.resp_timeout=${httpc.resp_timeout ?? 10}`, `n_SOCK[${i}].httpc.cut_header=${httpc.cut_header ?? 1}`)
+  p.push(`n_SOCK[${i}].httpc.local_port=${httpc.local_port ?? 0}`)
   return p
 }
 

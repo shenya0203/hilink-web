@@ -968,10 +968,14 @@ end
 local function save_uart_config_to_uci(config)
     local cursor = uci_lib.cursor()
 
-    -- 先删除所有现有的uart section
+    -- 先收集再删除，避免 foreach 中 delete 导致死循环/卡住
+    local to_delete = {}
     cursor:foreach("uart", "uart", function(section)
-        cursor:delete("uart", section[".name"])
+        table.insert(to_delete, section[".name"])
     end)
+    for _, name in ipairs(to_delete) do
+        cursor:delete("uart", name)
+    end
 
     -- 写入新的配置
     for i, uart_item in ipairs(config.UART) do
@@ -1047,14 +1051,18 @@ local function load_comm_tunnel_config_from_uci()
                 local_port = tonumber(section.udpc_local_port) or 0,
                 server_port = tonumber(section.udpc_server_port) or 1593,
                 dns_timeout = tonumber(section.udpc_dns_timeout) or 30,
-                ip_port_verify = tonumber(section.udpc_ip_port_verify) or 0
+                ip_port_verify = tonumber(section.udpc_ip_port_verify) or 0,
+                short_en = tonumber(section.udpc_short_en) or 0,
+                short_timeout = tonumber(section.udpc_short_timeout) or 60,
+                keepalive = tonumber(section.udpc_keepalive) or 0,
+                sock_timeout = tonumber(section.udpc_sock_timeout) or 5
             },
             httpc = {
-                mode = tonumber(section.httpc_mode) or 0,
-                url = section.httpc_url or "/1.php?",
-                header = section.httpc_header or "Accept:text/html",
+                mode = tonumber(section.httpc_mode) or 0, -- 0=GET 1=POST（对齐 SDK HTPTP）
+                url = section.httpc_url or "/Api/echo?",
+                header = section.httpc_header or "Connection: close\r\n",
                 cut_header = tonumber(section.httpc_cut_header) or 1,
-                server_ip = section.httpc_server_ip or "test.usr.cn",
+                server_ip = section.httpc_server_ip or "test.hlktech.com",
                 server_port = tonumber(section.httpc_server_port) or 80,
                 resp_timeout = tonumber(section.httpc_resp_timeout) or 10,
                 local_port = tonumber(section.httpc_local_port) or 0
@@ -1171,22 +1179,26 @@ local function save_comm_tunnel_config_to_uci(config)
             cursor:set("comm_tunnel", section_name, "tcps_idle_timeout", tostring(sock_item.tcps.idle_timeout or 3600))
         end
 
-        -- udpc 配置
+        -- udpc 配置（含 SDK 短连接/keepalive/超时）
         if sock_item.udpc then
             cursor:set("comm_tunnel", section_name, "udpc_server_ip", sock_item.udpc.server_ip or "192.168.20.21")
             cursor:set("comm_tunnel", section_name, "udpc_local_port", tostring(sock_item.udpc.local_port or 0))
             cursor:set("comm_tunnel", section_name, "udpc_server_port", tostring(sock_item.udpc.server_port or 1593))
             cursor:set("comm_tunnel", section_name, "udpc_dns_timeout", tostring(sock_item.udpc.dns_timeout or 30))
             cursor:set("comm_tunnel", section_name, "udpc_ip_port_verify", tostring(sock_item.udpc.ip_port_verify or 0))
+            cursor:set("comm_tunnel", section_name, "udpc_short_en", tostring(sock_item.udpc.short_en or 0))
+            cursor:set("comm_tunnel", section_name, "udpc_short_timeout", tostring(sock_item.udpc.short_timeout or 60))
+            cursor:set("comm_tunnel", section_name, "udpc_keepalive", tostring(sock_item.udpc.keepalive or 0))
+            cursor:set("comm_tunnel", section_name, "udpc_sock_timeout", tostring(sock_item.udpc.sock_timeout or 5))
         end
 
-        -- httpc 配置
+        -- httpc 配置（mode: 0=GET 1=POST）
         if sock_item.httpc then
             cursor:set("comm_tunnel", section_name, "httpc_mode", tostring(sock_item.httpc.mode or 0))
-            cursor:set("comm_tunnel", section_name, "httpc_url", sock_item.httpc.url or "/1.php?")
-            cursor:set("comm_tunnel", section_name, "httpc_header", sock_item.httpc.header or "Accept:text/html")
+            cursor:set("comm_tunnel", section_name, "httpc_url", sock_item.httpc.url or "/Api/echo?")
+            cursor:set("comm_tunnel", section_name, "httpc_header", sock_item.httpc.header or "Connection: close\r\n")
             cursor:set("comm_tunnel", section_name, "httpc_cut_header", tostring(sock_item.httpc.cut_header or 1))
-            cursor:set("comm_tunnel", section_name, "httpc_server_ip", sock_item.httpc.server_ip or "test.usr.cn")
+            cursor:set("comm_tunnel", section_name, "httpc_server_ip", sock_item.httpc.server_ip or "test.hlktech.com")
             cursor:set("comm_tunnel", section_name, "httpc_server_port", tostring(sock_item.httpc.server_port or 80))
             cursor:set("comm_tunnel", section_name, "httpc_resp_timeout", tostring(sock_item.httpc.resp_timeout or 10))
             cursor:set("comm_tunnel", section_name, "httpc_local_port", tostring(sock_item.httpc.local_port or 0))
@@ -1737,6 +1749,27 @@ end
 local function set_uart_config(args)
     -- 参数格式: {"UART":[{...}, {...}]}
     if args.UART and type(args.UART) == "table" then
+        -- 同口互斥：work_mode=边缘 时该路数传必须已关闭
+        local cursor = uci_lib.cursor()
+        for i, uart_item in ipairs(args.UART) do
+            if tonumber(uart_item.work_mode) == 1 then
+                local section = (i == 1) and "uart0" or "uart1"
+                local dtu_en = tonumber(cursor:get("dtu", section, "enable")) or 0
+                if dtu_en == 0 then
+                    -- 兼容旧版 main section
+                    local main_en = tonumber(cursor:get("dtu", "main", "enable")) or 0
+                    local main_uart = tonumber(cursor:get("dtu", "main", "uart_index")) or 0
+                    if main_en == 1 and main_uart == (i - 1) then
+                        dtu_en = 1
+                    end
+                end
+                if dtu_en == 1 then
+                    log_error("Cannot set uart" .. i .. " to edge: dtu channel enabled")
+                    return false, "uart_dtu_conflict"
+                end
+            end
+        end
+
         -- 更新内存缓存
         uart_config.UART = args.UART
 
@@ -1822,9 +1855,10 @@ local function set_comm_tunnel_config(args)
 
                 local target = comm_tunnel_config.SOCK[index]
                 for i = 1, #parts - 1 do
-                    if target[parts[i]] then
-                        target = target[parts[i]]
+                    if type(target[parts[i]]) ~= "table" then
+                        target[parts[i]] = {}
                     end
+                    target = target[parts[i]]
                 end
                 target[parts[#parts]] = tonumber(v) or v
             end
@@ -2727,10 +2761,281 @@ local function set_network_config_values(args)
     return true
 end
 
+-- ==========================================================
+-- 数传 (DTU) 配置：固定两路，对应 Uart1 / Uart2
+-- ==========================================================
+
+local function default_dtu_channel(uart_index)
+    local idx = uart_index or 0
+    local subs = {}
+    for i = 1, 15 do
+        subs[i] = { topic = "", qos = 0 }
+    end
+    return {
+        enable = 0,
+        wkmod = 0,          -- 0=NET 1=HTTP 2=MQTT
+        uart_index = idx,
+        -- 默认 Uart1→SOCKA/MQTT1，Uart2→SOCKB/MQTT2，避免双路抢同一通道
+        sock_index = idx,
+        mqtt_index = idx,
+        pack_len = 1024,
+        pack_time = 50,
+        pub_topic = "",
+        prefix_enable = 1,
+        subs = subs
+    }
+end
+
+local function default_dtu_list()
+    return {
+        DTU = {
+            default_dtu_channel(0),
+            default_dtu_channel(1)
+        }
+    }
+end
+
+local function parse_dtu_section(section, uart_index)
+    local cfg = default_dtu_channel(uart_index)
+    if not section then return cfg end
+    cfg.enable = tonumber(section.enable) or 0
+    cfg.wkmod = tonumber(section.wkmod) or 0
+    cfg.uart_index = uart_index
+    cfg.sock_index = tonumber(section.sock_index) or 0
+    cfg.mqtt_index = tonumber(section.mqtt_index) or 0
+    cfg.pack_len = tonumber(section.pack_len) or 1024
+    cfg.pack_time = tonumber(section.pack_time) or 50
+    cfg.pub_topic = section.pub_topic or ""
+    cfg.prefix_enable = tonumber(section.prefix_enable) or 1
+    for i = 1, 15 do
+        cfg.subs[i] = {
+            topic = section["sub" .. i .. "_topic"] or "",
+            qos = tonumber(section["sub" .. i .. "_qos"]) or 0
+        }
+    end
+    return cfg
+end
+
+local function load_dtu_config_from_uci()
+    local list = default_dtu_list()
+    os.execute("[ -f /etc/config/dtu ] || touch /etc/config/dtu")
+    local cursor = uci_lib.cursor()
+
+    local uart0 = cursor:get_all("dtu", "uart0")
+    local uart1 = cursor:get_all("dtu", "uart1")
+    local legacy = cursor:get_all("dtu", "main")
+
+    if uart0 or uart1 then
+        list.DTU[1] = parse_dtu_section(uart0, 0)
+        list.DTU[2] = parse_dtu_section(uart1, 1)
+        return list
+    end
+
+    -- 兼容旧版单 section main → 迁到 uart0
+    if legacy then
+        local migrated = parse_dtu_section(legacy, tonumber(legacy.uart_index) or 0)
+        local idx = (tonumber(migrated.uart_index) or 0) + 1
+        if idx < 1 then idx = 1 end
+        if idx > 2 then idx = 2 end
+        migrated.uart_index = idx - 1
+        list.DTU[idx] = migrated
+    else
+        -- 再扫任意 dtu section
+        cursor:foreach("dtu", "dtu", function(s)
+            local name = s[".name"] or ""
+            if name == "uart0" then
+                list.DTU[1] = parse_dtu_section(s, 0)
+            elseif name == "uart1" then
+                list.DTU[2] = parse_dtu_section(s, 1)
+            elseif name == "main" or not uart0 then
+                local m = parse_dtu_section(s, tonumber(s.uart_index) or 0)
+                local idx = (tonumber(m.uart_index) or 0) + 1
+                if idx >= 1 and idx <= 2 then
+                    m.uart_index = idx - 1
+                    list.DTU[idx] = m
+                end
+            end
+        end)
+    end
+    return list
+end
+
+local function write_dtu_section(cursor, section_name, cfg, uart_index)
+    cursor:set("dtu", section_name, "dtu")
+    cursor:set("dtu", section_name, "enable", tostring(cfg.enable or 0))
+    cursor:set("dtu", section_name, "wkmod", tostring(cfg.wkmod or 0))
+    cursor:set("dtu", section_name, "uart_index", tostring(uart_index))
+    cursor:set("dtu", section_name, "sock_index", tostring(cfg.sock_index or 0))
+    cursor:set("dtu", section_name, "mqtt_index", tostring(cfg.mqtt_index or 0))
+    cursor:set("dtu", section_name, "pack_len", tostring(cfg.pack_len or 1024))
+    cursor:set("dtu", section_name, "pack_time", tostring(cfg.pack_time or 50))
+    cursor:set("dtu", section_name, "pub_topic", cfg.pub_topic or "")
+    cursor:set("dtu", section_name, "prefix_enable", tostring(cfg.prefix_enable or 0))
+    for i = 1, 15 do
+        local sub = (cfg.subs and cfg.subs[i]) or { topic = "", qos = 0 }
+        cursor:set("dtu", section_name, "sub" .. i .. "_topic", sub.topic or "")
+        cursor:set("dtu", section_name, "sub" .. i .. "_qos", tostring(sub.qos or 0))
+    end
+end
+
+local function save_dtu_config_to_uci(list)
+    os.execute("[ -f /etc/config/dtu ] || touch /etc/config/dtu")
+    local cursor = uci_lib.cursor()
+    local to_delete = {}
+    cursor:foreach("dtu", "dtu", function(section)
+        table.insert(to_delete, section[".name"])
+    end)
+    for _, name in ipairs(to_delete) do
+        cursor:delete("dtu", name)
+    end
+    local dtu = (list and list.DTU) or {}
+    write_dtu_section(cursor, "uart0", dtu[1] or default_dtu_channel(0), 0)
+    write_dtu_section(cursor, "uart1", dtu[2] or default_dtu_channel(1), 1)
+    cursor:commit("dtu")
+    os.execute("touch /tmp/dtu_commit")
+    return true
+end
+
+local function dtu_any_enabled(list)
+    if not list or not list.DTU then return false end
+    for _, ch in ipairs(list.DTU) do
+        if tonumber(ch.enable) == 1 then return true end
+    end
+    return false
+end
+
+local function apply_dtu_uart_side_effects(list, roles)
+    -- roles: optional { [1]=0|1|2, [2]=0|1|2 }  0关闭 1数传 2边缘
+    if not uart_config_loaded then
+        local loaded = load_uart_config_from_uci()
+        if loaded then
+            uart_config = loaded
+            uart_config_loaded = true
+        end
+    end
+    if not uart_config.UART then return true end
+
+    for i = 1, 2 do
+        local cfg = list.DTU and list.DTU[i]
+        if cfg and uart_config.UART[i] then
+            local role = roles and tonumber(roles[i]) or nil
+            if role == 1 or tonumber(cfg.enable) == 1 then
+                -- 数传
+                uart_config.UART[i].work_mode = 0
+                uart_config.UART[i].pack_len = tonumber(cfg.pack_len) or 1024
+                uart_config.UART[i].pack_time = tonumber(cfg.pack_time) or 50
+            elseif role == 2 then
+                -- 边缘
+                uart_config.UART[i].work_mode = 1
+            elseif role == 0 then
+                -- 关闭
+                uart_config.UART[i].work_mode = 2
+            else
+                -- 未传角色：保持旧逻辑
+                if tonumber(cfg.enable) == 1 then
+                    uart_config.UART[i].work_mode = 0
+                    uart_config.UART[i].pack_len = tonumber(cfg.pack_len) or 1024
+                    uart_config.UART[i].pack_time = tonumber(cfg.pack_time) or 50
+                elseif tonumber(uart_config.UART[i].work_mode) == 0 then
+                    uart_config.UART[i].work_mode = 2
+                end
+            end
+        end
+    end
+    save_uart_config_to_uci(uart_config)
+    return true
+end
+
+local function set_dtu_config_values(args)
+    local list = load_dtu_config_from_uci()
+    local roles = nil
+
+    for k, v in pairs(args) do
+        -- 网关页角色：n_role[0]=0|1|2
+        local role_index = string.match(k, "n_role%[(%d+)%]")
+        if role_index then
+            role_index = tonumber(role_index) + 1
+            if role_index >= 1 and role_index <= 2 then
+                if not roles then roles = {} end
+                roles[role_index] = tonumber(v) or 0
+            end
+        end
+
+        -- n_DTU[0].enable / s_DTU[1].pub_topic / s_DTU[0].sub1_topic
+        local prefix, index, key = string.match(k, "([ns])_DTU%[(%d+)%]%.(.+)")
+        if prefix and index and key then
+            index = tonumber(index) + 1
+            if index >= 1 and index <= 2 then
+                if not list.DTU[index] then
+                    list.DTU[index] = default_dtu_channel(index - 1)
+                end
+                local ch = list.DTU[index]
+                ch.uart_index = index - 1
+                if key == "enable" then
+                    ch.enable = tonumber(v) or 0
+                elseif key == "wkmod" then
+                    ch.wkmod = tonumber(v) or 0
+                elseif key == "sock_index" then
+                    ch.sock_index = tonumber(v) or 0
+                elseif key == "mqtt_index" then
+                    ch.mqtt_index = tonumber(v) or 0
+                elseif key == "pack_len" then
+                    ch.pack_len = tonumber(v) or 1024
+                elseif key == "pack_time" then
+                    ch.pack_time = tonumber(v) or 50
+                elseif key == "pub_topic" then
+                    ch.pub_topic = tostring(v or "")
+                elseif key == "prefix_enable" then
+                    ch.prefix_enable = tonumber(v) or 0
+                else
+                    local si, f2 = string.match(key, "sub(%d+)_(.+)")
+                    if si and f2 then
+                        si = tonumber(si)
+                        if si >= 1 and si <= 15 then
+                            if not ch.subs[si] then ch.subs[si] = { topic = "", qos = 0 } end
+                            if f2 == "topic" then
+                                ch.subs[si].topic = tostring(v or "")
+                            elseif f2 == "qos" then
+                                ch.subs[si].qos = tonumber(v) or 0
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 若带了角色，强制 enable 与角色一致，避免同口冲突
+    if roles then
+        for i = 1, 2 do
+            if list.DTU[i] then
+                list.DTU[i].enable = (tonumber(roles[i]) == 1) and 1 or 0
+            end
+        end
+    end
+
+    -- 通道固定：Uart1→SOCKA/MQTT1，Uart2→SOCKB/MQTT2（纠正历史交叉绑定）
+    for i = 1, 2 do
+        if list.DTU[i] then
+            list.DTU[i].uart_index = i - 1
+            list.DTU[i].sock_index = i - 1
+            list.DTU[i].mqtt_index = i - 1
+        end
+    end
+
+    local ok = save_dtu_config_to_uci(list)
+    if ok then
+        -- 数传使能口强制 work_mode=0；若带 n_role 则按角色写 work_mode
+        apply_dtu_uart_side_effects(list, roles)
+    end
+    return ok
+end
+
 local function set_edge_config_values(args)
+    local new_all_en = edge_config.all_en
     for k, v in pairs(args) do
         if k == "n_all_en" then
-            edge_config.all_en = tonumber(v) or 0
+            new_all_en = tonumber(v) or 0
         elseif k == "n_refresh_frequency" then
             edge_config.refresh_frequency = tonumber(v) or 100
         elseif k == "n_calc_period" then
@@ -2739,7 +3044,9 @@ local function set_edge_config_values(args)
             edge_config.poll_interval = tonumber(v) or 100
         end
     end
-    -- 将 edge enable 写入 UCI实现持久化
+
+    -- 允许与数传按串口共存：all_en 仅表示是否存在边缘角色串口
+    edge_config.all_en = new_all_en
     local cursor = uci_lib.cursor()
     cursor:set("edge", "@edge[0]", "enable", tostring(edge_config.all_en))
     cursor:commit("edge")
@@ -3829,6 +4136,8 @@ local methods = {
                     result = set_network_config_values(args)
                 elseif module == "edge" then
                     result = set_edge_config_values(args)
+                elseif module == "dtu" then
+                    result = set_dtu_config_values(args)
                 else
                     log_error("Unknown module: " .. tostring(module))
                 end
@@ -3853,11 +4162,29 @@ local methods = {
             {}
         },
 
+        -- 获取数传配置
+        get_dtu_config = {
+            function(req, msg)
+                local cfg = load_dtu_config_from_uci()
+                reply(req, cfg)
+            end,
+            {}
+        },
+
+        -- 设置数传配置
+        set_dtu_config = {
+            function(req, msg)
+                local res, err = set_dtu_config_values(msg)
+                reply(req, { result = res, msg = err or "" })
+            end,
+            {}
+        },
+
         -- 设置边缘计算配置
         set_edge_config = {
             function(req, msg)
-                local res = set_edge_config_values(msg)
-                reply(req, { result = res })
+                local res, err = set_edge_config_values(msg)
+                reply(req, { result = res, msg = err or "" })
             end,
             {}
         },
@@ -4186,7 +4513,8 @@ local methods = {
                     (os.execute("test -f /tmp/misc_commit") == 0) or
                     (os.execute("test -f /tmp/uart_commit") == 0) or
                     (os.execute("test -f /tmp/comm_commit") == 0) or
-                    (os.execute("test -f /tmp/edge_commit") == 0)
+                    (os.execute("test -f /tmp/edge_commit") == 0) or
+                    (os.execute("test -f /tmp/dtu_commit") == 0)
 
                 if not has_any_commit then
                     log_info("No configuration changes detected, skipping restart.")
@@ -4221,6 +4549,14 @@ local methods = {
                 table.insert(cmd_parts, "/etc/init.d/cloud restart")
                 os.execute("rm -f /tmp/cloud_CLOUD_status")
                 table.insert(cmd_parts, "/etc/init.d/cron restart")
+
+                -- 数传：UCI -> bin 后重启 hlk_dtu（init 内也会再 sync 一次）
+                if (os.execute("test -f /tmp/dtu_commit") == 0) or
+                   (os.execute("test -f /tmp/uart_commit") == 0) or
+                   (os.execute("test -f /tmp/comm_commit") == 0) then
+                    table.insert(cmd_parts, "/usr/sbin/hlk_dtu_sync uci2bin all")
+                    table.insert(cmd_parts, "/etc/init.d/hlk_dtu restart")
+                end
 
                 if need_network or need_nginx then
                     table.insert(cmd_parts, "/etc/init.d/firewall restart")

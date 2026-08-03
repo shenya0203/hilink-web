@@ -288,6 +288,10 @@ function _M.set_config(module, args)
         return _M.set_edge_config(args)
     end
 
+    if module == "dtu" then
+        return _M.set_dtu_config(args)
+    end
+
     if module == "edge_access" then
         -- 在 adapter 侧完成参数解析，组装成结构化 group 数组传给 daemon
         local group = {}
@@ -346,6 +350,23 @@ function _M.get_edge_config()
         return result
     end
     return nil
+end
+
+function _M.get_dtu_config()
+    local result = ubus_call("hilink", "get_dtu_config", {})
+    if result then
+        return result
+    end
+    return nil
+end
+
+function _M.set_dtu_config(args)
+    local result = ubus_call("hilink", "set_dtu_config", args)
+    if result and result.result then
+        return true
+    else
+        return false
+    end
 end
 
 function _M.set_edge_config(args)

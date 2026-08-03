@@ -165,6 +165,22 @@ export function getUartConfig() {
 }
 
 /**
+ * 获取数传配置
+ */
+export function getDtuConfig() {
+    return apiClient.get('/download_nv.cgi?name=dtu')
+        .then(res => res.data)
+}
+
+/**
+ * 获取边缘计算配置
+ */
+export function getEdgeConfig() {
+    return apiClient.get('/download_nv.cgi?name=edge')
+        .then(res => res.data)
+}
+
+/**
  * 获取离线缓存配置
  */
 export function getOfflineCache() {
