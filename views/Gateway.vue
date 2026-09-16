@@ -1,71 +1,84 @@
 <template>
-  <div>
-    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
-    <div v-if="error" class="error">{{ error }}</div>
-
-    <div class="description-box">
-      <div class="desc-title">{{ t('gatewayPage.title') }}</div>
-      <div class="desc-content">{{ t('gatewayPage.description') }}</div>
+  <div class="gateway-root">
+    <div v-if="!pageReady" class="page-boot">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">{{ bootStatusText }}</p>
     </div>
 
-    <div class="tabs">
-      <button
-        v-for="tab in mainTabs"
-        :key="tab.id"
-        type="button"
-        class="tab-btn"
-        :class="{ active: mainTab === tab.id }"
-        @click="mainTab = tab.id"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
+    <div v-show="pageReady" class="gateway-body">
+      <div class="description-box">
+        <div class="desc-title">{{ t('gatewayPage.title') }}</div>
+        <div class="desc-content">{{ t('gatewayPage.description') }}</div>
+      </div>
 
-    <!-- Tab: 串口角色 -->
-    <div v-show="mainTab === 'role'" class="tab-panel">
-      <div class="form-section">
-        <div
-          v-for="(role, i) in pendingRoles"
-          :key="i"
-          class="form-group"
+      <div class="tabs">
+        <button
+          v-for="tab in mainTabs"
+          :key="tab.id"
+          type="button"
+          class="tab-btn"
+          :class="{ active: mainTab === tab.id }"
+          @click="mainTab = tab.id"
         >
-          <label>{{ t('gatewayPage.uartRole', { n: i + 1 }) }}:</label>
-          <select v-model.number="pendingRoles[i]">
-            <option :value="0">{{ t('gatewayPage.modeOff') }}</option>
-            <option :value="1">{{ t('gatewayPage.modeDtu') }}</option>
-            <option :value="2">{{ t('gatewayPage.modeEdge') }}</option>
-          </select>
-        </div>
-        <div class="hint-text">{{ t('gatewayPage.modeHint') }}</div>
-        <div class="mode-actions">
-          <button
-            class="btn-save"
-            :disabled="!rolesDirty"
-            :class="{ 'btn-disabled': !rolesDirty }"
-            @click="applyRoles"
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <div v-show="mainTab === 'role'" class="tab-panel">
+        <div class="form-section">
+          <div
+            v-for="(role, i) in pendingRoles"
+            :key="i"
+            class="form-group"
           >
-            {{ t('gatewayPage.applyMode') }}
-          </button>
-          <span v-if="rolesDirty" class="pending-tip">{{ t('gatewayPage.pendingTip') }}</span>
+            <label>{{ t('gatewayPage.uartRole', { n: i + 1 }) }}:</label>
+            <select v-model.number="pendingRoles[i]">
+              <option :value="0">{{ t('gatewayPage.modeOff') }}</option>
+              <option :value="1">{{ t('gatewayPage.modeDtu') }}</option>
+              <option :value="2">{{ t('gatewayPage.modeEdge') }}</option>
+            </select>
+          </div>
+          <div class="hint-text">{{ t('gatewayPage.modeHint') }}</div>
+          <div class="mode-actions">
+            <button
+              class="btn-save"
+              :disabled="!rolesDirty"
+              :class="{ 'btn-disabled': !rolesDirty }"
+              @click="applyRoles"
+            >
+              {{ t('gatewayPage.applyMode') }}
+            </button>
+            <span v-if="rolesDirty" class="pending-tip">{{ t('gatewayPage.pendingTip') }}</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Tab: 数传（始终可进；未开数传的串口在子页提示） -->
-    <div v-show="mainTab === 'dtu'" class="tab-panel">
+    <!-- boot 期间挂载但不可见，避免与转圈叠出半屏配置 -->
+    <div
+      v-show="!pageReady || mainTab === 'dtu'"
+      :class="{ 'boot-hidden': !pageReady }"
+    >
       <Dtu
         ref="dtuRef"
         embedded
         skip-edge-check
+        :auto-load="false"
         :enabled-channels="dtuChannelIndices"
         @saved="onChildSaved"
         @goto-roles="mainTab = 'role'"
       />
     </div>
 
-    <!-- Tab: 边缘（始终可进；支持纯 TCP） -->
-    <div v-show="mainTab === 'edge'" class="tab-panel">
-      <EdgeCompute :allowed-serial-ports="edgeSerialPorts" />
+    <div
+      v-show="!pageReady || mainTab === 'edge'"
+      :class="{ 'boot-hidden': !pageReady }"
+    >
+      <EdgeCompute
+        ref="edgeRef"
+        :auto-load="false"
+        :allowed-serial-ports="edgeSerialPorts"
+      />
     </div>
 
     <div v-if="showRestartModal" class="modal-overlay">
@@ -94,26 +107,32 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import Dtu from './Dtu.vue'
 import EdgeCompute from './EdgeCompute.vue'
-import { getDtuConfig, getUartConfig, updateConfig } from '../api/services'
+import { getDtuConfig, getUartConfig, updateConfig, logout, setCsrfToken } from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
+import { withRetry } from '../utils/withRetry.js'
 
 const { t } = useI18n()
+const router = useRouter()
 const { isServiceRestarting, restartService } = useServiceControl()
 
 const ROLE_OFF = 0
 const ROLE_DTU = 1
 const ROLE_EDGE = 2
+const BOOT_TRIES = 3
+const BOOT_DELAY_MS = 1500
 
-const loading = ref(true)
-const error = ref(null)
+const pageReady = ref(false)
+const bootAttempt = ref(0)
 const pendingRoles = ref([ROLE_OFF, ROLE_OFF])
 const activeRoles = ref([ROLE_OFF, ROLE_OFF])
 const showRestartModal = ref(false)
 const dtuRef = ref(null)
+const edgeRef = ref(null)
 const mainTab = ref('role')
 
 const mainTabs = computed(() => [
@@ -121,6 +140,13 @@ const mainTabs = computed(() => [
   { id: 'dtu', label: t('gatewayPage.tabDtu') },
   { id: 'edge', label: t('gatewayPage.tabEdge') }
 ])
+
+const bootStatusText = computed(() => {
+  if (bootAttempt.value > 1) {
+    return t('common.loadingRetry', { n: bootAttempt.value, total: BOOT_TRIES })
+  }
+  return t('common.loading')
+})
 
 const rolesDirty = computed(() =>
   pendingRoles.value.some((r, i) => r !== activeRoles.value[i])
@@ -132,7 +158,6 @@ const dtuChannelIndices = computed(() =>
     .filter(i => i >= 0)
 )
 
-// 空数组 = 无 RTU 口（仅 TCP）；勿回退成 [1,2]
 const edgeSerialPorts = computed(() =>
   activeRoles.value
     .map((r, i) => (r === ROLE_EDGE ? i + 1 : -1))
@@ -155,17 +180,51 @@ const buildDtuRoleParams = (roles) => {
 }
 
 const loadRoles = async () => {
+  const [dtu, uart] = await Promise.all([getDtuConfig(), getUartConfig()])
+  if (!dtu || !uart) {
+    throw new Error('empty roles payload')
+  }
+  const roles = [inferRole(0, dtu, uart), inferRole(1, dtu, uart)]
+  pendingRoles.value = [...roles]
+  activeRoles.value = [...roles]
+}
+
+const bootOnce = async () => {
+  await nextTick()
+  if (!dtuRef.value?.loadData || !edgeRef.value?.loadData) {
+    throw new Error('gateway children not ready')
+  }
+  await Promise.all([
+    loadRoles(),
+    dtuRef.value.loadData(),
+    edgeRef.value.loadData()
+  ])
+}
+
+const blockDeviceAccess = async () => {
   try {
-    loading.value = true
-    error.value = null
-    const [dtu, uart] = await Promise.all([getDtuConfig(), getUartConfig()])
-    const roles = [inferRole(0, dtu, uart), inferRole(1, dtu, uart)]
-    pendingRoles.value = [...roles]
-    activeRoles.value = [...roles]
-  } catch (err) {
-    error.value = t('common.loadError') + ': ' + err.message
-  } finally {
-    loading.value = false
+    await logout()
+  } catch (_) {
+    /* ignore */
+  }
+  setCsrfToken('')
+  await router.replace({ name: 'login', query: { error: 'unreachable' } })
+}
+
+const bootGateway = async () => {
+  pageReady.value = false
+  bootAttempt.value = 0
+  try {
+    await withRetry(
+      async (attempt) => {
+        bootAttempt.value = attempt
+        await bootOnce()
+      },
+      { times: BOOT_TRIES, delayMs: BOOT_DELAY_MS }
+    )
+    pageReady.value = true
+  } catch (_) {
+    await blockDeviceAccess()
   }
 }
 
@@ -173,7 +232,6 @@ const applyRoles = async () => {
   const roles = pendingRoles.value.map(Number)
   try {
     await updateConfig('dtu', buildDtuRoleParams(roles))
-    // 有串口选边缘时打开 all_en；没有时不强制关闭，避免关掉纯 TCP 边缘
     if (roles.some(r => r === ROLE_EDGE)) {
       await updateConfig('edge', 'n_all_en=1')
     }
@@ -191,10 +249,43 @@ const handleRestart = async () => {
   await restartService()
 }
 
-onMounted(() => { loadRoles() })
+onMounted(() => { bootGateway() })
 </script>
 
 <style scoped>
+.gateway-root { position: relative; min-height: 320px; }
+.boot-hidden {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.page-boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 320px;
+  padding: 80px 20px;
+  background: white;
+}
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0066cc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+.loading-text { color: #666; font-size: 14px; margin: 0; }
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 .description-box { background: white; padding: 15px; border-bottom: 1px solid #e8e8e8; }
 .desc-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
 .desc-content { font-size: 12px; color: #666; }
@@ -228,8 +319,6 @@ onMounted(() => { loadRoles() })
 .btn-save { padding: 10px 32px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
 .btn-disabled { background: #ccc !important; cursor: not-allowed; }
 .pending-tip { color: #e65100; font-size: 12px; }
-.loading { text-align: center; padding: 40px; color: #666; }
-.error { background: #ffebee; border: 1px solid #ffcdd2; color: #c62828; padding: 12px; border-radius: 4px; margin-bottom: 16px; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
 .modal { background: white; border-radius: 8px; width: 400px; overflow: hidden; }
 .modal-header { padding: 15px 20px; border-bottom: 1px solid #eee; background: #f8f9fa; }

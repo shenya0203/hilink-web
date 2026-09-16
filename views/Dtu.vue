@@ -41,18 +41,44 @@
 
       <template v-if="embedded || current.enable === 1">
         <div class="form-section">
-          <div class="form-group">
-            <label>{{ t('dtu.workMode') }}:</label>
-            <select v-model.number="current.wkmod">
-              <option :value="0">{{ t('dtu.modeNet') }}</option>
-              <option :value="1">{{ t('dtu.modeHttp') }}</option>
-              <option :value="2">{{ t('dtu.modeMqtt') }}</option>
+          <div class="section-title">{{ t('dtu.uartSection') }}</div>
+          <div class="hint-text">{{ fixedChannelHint(activeTab) }}</div>
+          <div class="form-group" v-if="currentUart">
+            <label>{{ t('uart.baudRate') }}:</label>
+            <select v-model.number="currentUart.baud_rate">
+              <option :value="1200">1200</option>
+              <option :value="2400">2400</option>
+              <option :value="4800">4800</option>
+              <option :value="9600">9600</option>
+              <option :value="19200">19200</option>
+              <option :value="38400">38400</option>
+              <option :value="57600">57600</option>
+              <option :value="115200">115200</option>
+              <option :value="230400">230400</option>
             </select>
           </div>
-        </div>
-
-        <div class="form-section">
-          <div class="section-title">{{ t('dtu.uartSection') }}</div>
+          <div class="form-group" v-if="currentUart">
+            <label>{{ t('uart.dataBits') }}:</label>
+            <select v-model.number="currentUart.data_bit">
+              <option :value="7">7</option>
+              <option :value="8">8</option>
+            </select>
+          </div>
+          <div class="form-group" v-if="currentUart">
+            <label>{{ t('uart.parity') }}:</label>
+            <select v-model.number="currentUart.parity">
+              <option :value="0">{{ t('uart.parityNone') }}</option>
+              <option :value="1">{{ t('uart.parityOdd') }}</option>
+              <option :value="2">{{ t('uart.parityEven') }}</option>
+            </select>
+          </div>
+          <div class="form-group" v-if="currentUart">
+            <label>{{ t('uart.stopBits') }}:</label>
+            <select v-model.number="currentUart.stop_bit">
+              <option :value="1">1</option>
+              <option :value="2">2</option>
+            </select>
+          </div>
           <div class="form-group">
             <label>{{ t('dtu.packLen') }}:</label>
             <div class="input-wrapper">
@@ -75,32 +101,109 @@
           </div>
         </div>
 
+        <div class="form-section">
+          <div class="form-group">
+            <label>{{ t('dtu.workMode') }}:</label>
+            <select v-model.number="current.wkmod">
+              <option :value="0">{{ t('dtu.modeNet') }}</option>
+              <option :value="1">{{ t('dtu.modeHttp') }}</option>
+              <option :value="2">{{ t('dtu.modeMqtt') }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- NET：数传专用 Socket（mode 非 HTTP） -->
         <div v-if="current.wkmod === 0" class="form-section">
-          <div class="section-title">{{ t('dtu.modeNet') }}</div>
+          <div class="section-title">{{ t('dtu.sockSection') }}</div>
           <div v-if="getFieldError(activeTab, 'bind')" class="field-error-text block">
             {{ getFieldError(activeTab, 'bind') }}
           </div>
-          <div class="hint-text">{{ fixedChannelHint(activeTab) }} {{ t('dtu.sockHint') }}</div>
-          <button type="button" class="btn-link hint-link" @click="goSocket">{{ t('dtu.gotoSocket') }}</button>
+          <div class="hint-text">{{ t('dtu.sockHint') }}</div>
+          <DtuSockFields v-if="currentSock" :sock="currentSock" />
         </div>
 
+        <!-- HTTP：数传 Socket 强制 HTTP Client -->
         <div v-if="current.wkmod === 1" class="form-section">
           <div class="section-title">{{ t('dtu.modeHttp') }}</div>
           <div v-if="getFieldError(activeTab, 'bind')" class="field-error-text block">
             {{ getFieldError(activeTab, 'bind') }}
           </div>
-          <div class="hint-text">{{ fixedChannelHint(activeTab) }} {{ t('dtu.httpHint') }}</div>
-          <button type="button" class="btn-link hint-link" @click="goSocket">{{ t('dtu.gotoSocket') }}</button>
+          <div class="hint-text">{{ t('dtu.httpHint') }}</div>
+          <DtuSockFields v-if="currentSock" :sock="currentSock" />
         </div>
 
+        <!-- MQTT：连接参数 + 透传主题 -->
         <div v-if="current.wkmod === 2" class="form-section">
           <div class="section-title">{{ t('dtu.modeMqtt') }}</div>
           <div v-if="getFieldError(activeTab, 'bind')" class="field-error-text block">
             {{ getFieldError(activeTab, 'bind') }}
           </div>
-          <div class="hint-text">{{ fixedChannelHint(activeTab) }} {{ t('dtu.mqttConnHint') }}</div>
-          <button type="button" class="btn-link hint-link" @click="goMqtt">{{ t('dtu.gotoMqtt') }}</button>
+          <div class="hint-text">{{ t('dtu.mqttConnHint') }}</div>
 
+          <template v-if="currentMqtt">
+            <div class="form-group">
+              <label>{{ t('mqtt.enable') }}:</label>
+              <select v-model.number="currentMqtt.enable">
+                <option :value="0">{{ t('common.disable') }}</option>
+                <option :value="1">{{ t('common.enable') }}</option>
+              </select>
+            </div>
+            <template v-if="currentMqtt.enable === 1">
+              <div class="form-group">
+                <label>{{ t('mqtt.protocol') }}:</label>
+                <select v-model.number="currentMqtt.mqtt_ver">
+                  <option :value="3">MQTT-3.1</option>
+                  <option :value="4">MQTT-3.1.1</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.clientId') }}:</label>
+                <input v-model="currentMqtt.client_id" type="text" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.serverAddress') }}:</label>
+                <input v-model="currentMqtt.server_ip" type="text" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.remotePort') }}:</label>
+                <input v-model.number="currentMqtt.server_port" type="number" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.keepalive') }}:</label>
+                <input v-model.number="currentMqtt.keepalive" type="number" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.reconnectInterval') }}:</label>
+                <input v-model.number="currentMqtt.reconn_space" type="number" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.cleanSession') }}:</label>
+                <select v-model.number="currentMqtt.clean_session">
+                  <option :value="0">{{ t('common.disable') }}</option>
+                  <option :value="1">{{ t('common.enable') }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>{{ t('mqtt.connectionAuth') }}:</label>
+                <select v-model.number="currentMqtt.conn_verify">
+                  <option :value="0">{{ t('common.disable') }}</option>
+                  <option :value="1">{{ t('common.enable') }}</option>
+                </select>
+              </div>
+              <template v-if="currentMqtt.conn_verify === 1">
+                <div class="form-group">
+                  <label>{{ t('mqtt.username') }}:</label>
+                  <input v-model="currentMqtt.conn_user_name" type="text" />
+                </div>
+                <div class="form-group">
+                  <label>{{ t('mqtt.password') }}:</label>
+                  <input v-model="currentMqtt.conn_user_password" type="password" />
+                </div>
+              </template>
+            </template>
+          </template>
+
+          <div class="section-title" style="margin-top: 20px;">{{ t('dtu.topicSection') }}</div>
           <div class="form-group">
             <label>{{ t('dtu.pubTopic') }}:</label>
             <div class="input-wrapper">
@@ -118,7 +221,6 @@
               <option :value="0">{{ t('dtu.prefixOff') }}</option>
             </select>
           </div>
-
           <div class="section-title" style="margin-top: 20px;">{{ t('dtu.subList') }}</div>
           <div v-for="(sub, idx) in current.subsActive" :key="idx" class="sub-row">
             <span class="sub-index">#{{ idx + 1 }}</span>
@@ -170,33 +272,32 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { getDtuConfig, getCommTunnel, updateConfig } from '../api/services'
+import { getDtuConfig, getUartConfig, updateConfig } from '../api/services'
 import { useI18n } from '../i18n/useI18n.js'
 import { useServiceControl } from '../composables/useServiceControl.js'
+import DtuSockFields from '../components/DtuSockFields.vue'
 
 const props = defineProps({
   embedded: { type: Boolean, default: false },
   skipEdgeCheck: { type: Boolean, default: false },
-  // 嵌入时：可配置数传的通道下标；未列入的通道显示「功能未开启」。null = 全部可配
+  autoLoad: { type: Boolean, default: true },
   enabledChannels: { type: Array, default: null },
-  // 兼容旧 prop：若传入则等同于只展示这些通道（已废弃，优先用 enabledChannels）
   visibleChannels: { type: Array, default: null }
 })
 
 const emit = defineEmits(['saved', 'goto-roles'])
 
 const { t } = useI18n()
-const router = useRouter()
 const { isServiceRestarting, restartService } = useServiceControl()
 
-const loading = ref(true)
+const loading = ref(props.autoLoad)
 const error = ref(null)
 const showRestartModal = ref(false)
 const activeTab = ref(0)
 const dtuList = ref([])
 const sockList = ref([])
 const mqttList = ref([])
+const uartList = ref([])
 
 const tabName = (i) => `Uart${i + 1}`
 
@@ -209,11 +310,8 @@ const isChannelEnabled = (index) => {
   return list.includes(index)
 }
 
-// 嵌入时始终展示两路，便于看到未开启状态
 const visibleTabIndices = computed(() => {
-  if (props.embedded) {
-    return dtuList.value.map((_, i) => i)
-  }
+  if (props.embedded) return dtuList.value.map((_, i) => i)
   if (!Array.isArray(props.visibleChannels) || props.visibleChannels.length === 0) {
     return dtuList.value.map((_, i) => i)
   }
@@ -221,21 +319,29 @@ const visibleTabIndices = computed(() => {
 })
 
 const current = computed(() => dtuList.value[activeTab.value] || null)
+const currentSock = computed(() => sockList.value[activeTab.value] || null)
+const currentMqtt = computed(() => mqttList.value[activeTab.value] || null)
+const currentUart = computed(() => uartList.value[activeTab.value] || null)
 
-/** Uart1→SOCKA/MQTT1，Uart2→SOCKB/MQTT2 */
 const fixedChannelHint = (uartIndex) => {
   if (uartIndex === 0) return t('dtu.fixedChannelUart1')
   return t('dtu.fixedChannelUart2')
 }
 
-const goSocket = () => router.push({ name: 'Socket' })
-const goMqtt = () => router.push({ name: 'MQTT' })
+watch(() => current.value?.wkmod, (mod) => {
+  const sock = currentSock.value
+  if (!sock) return
+  if (mod === 1) {
+    sock.mode = 3
+    sock.enable = 1
+  } else if (mod === 0 && Number(sock.mode) === 3) {
+    sock.mode = 0
+  }
+})
 
 const channelErrors = (ch, index) => {
   const errors = {}
-  const treatEnabled = props.embedded
-    ? isChannelEnabled(index)
-    : (ch && ch.enable === 1)
+  const treatEnabled = props.embedded ? isChannelEnabled(index) : (ch && ch.enable === 1)
   if (!ch || !treatEnabled) return errors
 
   const pl = Number(ch.pack_len)
@@ -247,27 +353,21 @@ const channelErrors = (ch, index) => {
   const m = mqttList.value[index]
 
   if (ch.wkmod === 0) {
-    // NET：Socket 须使能，且为 TCP/UDP（非 HTTP）
-    if (!s || Number(s.enable) !== 1) {
-      errors.bind = t('dtu.sockDisabled')
-    } else if (Number(s.mode) === 3) {
+    // Socket 关闭仅表示功能不生效，仍允许保存其它配置
+    if (s && Number(s.enable) === 1 && Number(s.mode) === 3) {
       errors.bind = t('dtu.netModeConflict')
     }
   } else if (ch.wkmod === 1) {
-    // HTTP：Socket 须使能且 HTTP Client
-    if (!s || Number(s.enable) !== 1) {
-      errors.bind = t('dtu.sockDisabled')
-    } else if (Number(s.mode) !== 3) {
+    if (s && Number(s.enable) === 1 && Number(s.mode) !== 3) {
       errors.bind = t('dtu.httpModeRequired')
     }
   } else if (ch.wkmod === 2) {
-    // MQTT：对应 MQTT 通道须使能；本页主题
-    if (!m || Number(m.enable) !== 1) {
-      errors.bind = t('dtu.mqttDisabled')
+    // MQTT 关闭时不强制主题；开启时至少配一项才有意义
+    if (m && Number(m.enable) === 1) {
+      const pub = (ch.pub_topic || '').trim()
+      const hasSub = (ch.subsActive || []).some(sub => (sub.topic || '').trim())
+      if (!pub && !hasSub) errors.pub_topic = t('dtu.topicRequired')
     }
-    const pub = (ch.pub_topic || '').trim()
-    const hasSub = (ch.subsActive || []).some(sub => (sub.topic || '').trim())
-    if (!pub && !hasSub) errors.pub_topic = t('dtu.topicRequired')
   }
   return errors
 }
@@ -333,11 +433,71 @@ const normalizeChannel = (raw, uartIndex) => ({
   subsActive: normalizeSubs(raw?.subs)
 })
 
+const emptySock = (i) => ({
+  enable: 0,
+  name: `SOCK_DTU${i}`,
+  mode: 0,
+  tcpc: {
+    server_ip: '', local_port: 0, server_port: 8234, dns_timeout: 30, reconn_interval: 5,
+    ssl_mode: 0, ssl_verify: 0, ssl_server_name: 'null', ssl_client_name: 'null', ssl_client_key: 'null',
+    regp_en: 0, regp_fmt: 0, regp_ctx: '', regp_tim: 0, hrtp_en: 0, hrtp_fmt: 0, hrtp_ctx: '', hrtp_tim: 60
+  },
+  tcps: { local_port: 8029, conn_max_num: 4, timeout_handling: 0, idle_handling: 0, idle_timeout: 3600 },
+  udpc: {
+    server_ip: '192.168.20.21', local_port: 0, server_port: 1593, dns_timeout: 30, ip_port_verify: 0,
+    short_en: 0, short_timeout: 60, keepalive: 0, sock_timeout: 5
+  },
+  httpc: {
+    mode: 0, url: '/Api/echo?', header: 'Connection: close\r\n', cut_header: 1,
+    server_ip: 'test.hlktech.com', server_port: 80, resp_timeout: 10, local_port: 0
+  }
+})
+
+const normalizeSock = (raw, i) => {
+  const base = emptySock(i)
+  if (!raw) return base
+  return {
+    ...base,
+    ...raw,
+    name: `SOCK_DTU${i}`,
+    tcpc: { ...base.tcpc, ...(raw.tcpc || {}) },
+    tcps: { ...base.tcps, ...(raw.tcps || {}) },
+    udpc: { ...base.udpc, ...(raw.udpc || {}) },
+    httpc: { ...base.httpc, ...(raw.httpc || {}) }
+  }
+}
+
+const emptyMqtt = (i) => ({
+  enable: 0,
+  name: `MQTT_DTU${i}`,
+  mqtt_ver: 4,
+  client_id: '',
+  server_ip: '',
+  server_port: 1883,
+  keepalive: 60,
+  reconn_space: 5,
+  clean_session: 1,
+  conn_verify: 0,
+  conn_user_name: '',
+  conn_user_password: '',
+  ssl_mode: 0,
+  ssl_verify: 0,
+  will_flag: 0,
+  will: { topic: '/will', msg: 'offline', qos: 0, retention: 0 }
+})
+
+const normalizeMqtt = (raw, i) => ({
+  ...emptyMqtt(i),
+  ...(raw || {}),
+  name: `MQTT_DTU${i}`,
+  will: { ...emptyMqtt(i).will, ...(raw?.will || {}) }
+})
+
 const loadData = async () => {
   try {
     loading.value = true
     error.value = null
-    const [dtu, tunnel] = await Promise.all([getDtuConfig(), getCommTunnel()])
+    const [dtu, uart] = await Promise.all([getDtuConfig(), getUartConfig()])
     let arr = []
     if (Array.isArray(dtu?.DTU)) {
       arr = dtu.DTU
@@ -346,32 +506,97 @@ const loadData = async () => {
       arr = [emptyChannel(0), emptyChannel(1)]
       arr[Math.min(Math.max(idx, 0), 1)] = dtu
     }
-    dtuList.value = [
-      normalizeChannel(arr[0], 0),
-      normalizeChannel(arr[1], 1)
+    dtuList.value = [normalizeChannel(arr[0], 0), normalizeChannel(arr[1], 1)]
+
+    const dtuSocks = Array.isArray(dtu?.SOCK) ? dtu.SOCK : []
+    sockList.value = [normalizeSock(dtuSocks[0], 0), normalizeSock(dtuSocks[1], 1)]
+
+    const mqtts = Array.isArray(dtu?.MQTT) ? dtu.MQTT : []
+    mqttList.value = [normalizeMqtt(mqtts[0], 0), normalizeMqtt(mqtts[1], 1)]
+
+    const uarts = Array.isArray(uart?.UART) ? uart.UART : []
+    uartList.value = [
+      { baud_rate: 115200, data_bit: 8, stop_bit: 1, parity: 0, ...(uarts[0] || {}) },
+      { baud_rate: 9600, data_bit: 8, stop_bit: 1, parity: 0, ...(uarts[1] || {}) }
     ]
-    sockList.value = Array.isArray(tunnel?.SOCK) ? tunnel.SOCK : []
-    if (!sockList.value.length) sockList.value = [{ name: 'SOCKA' }, { name: 'SOCKB' }]
-    mqttList.value = Array.isArray(tunnel?.MQTT) ? tunnel.MQTT : []
-    if (!mqttList.value.length) mqttList.value = [{ name: 'MQTT1' }, { name: 'MQTT2' }]
+
     const tabs = visibleTabIndices.value
-    if (tabs.length && !tabs.includes(activeTab.value)) {
-      activeTab.value = tabs[0]
-    }
+    if (tabs.length && !tabs.includes(activeTab.value)) activeTab.value = tabs[0]
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
+    throw err
   } finally {
     loading.value = false
   }
+}
+
+const buildDtuSockParams = (sock, i) => {
+  const p = []
+  const pre = (ns, key, val) => p.push(`${ns}_DTU_SOCK[${i}].${key}=${val}`)
+  pre('n', 'enable', sock.enable)
+  pre('n', 'mode', sock.mode)
+  pre('s', 'tcpc.server_ip', sock.tcpc.server_ip || '')
+  pre('n', 'tcpc.local_port', sock.tcpc.local_port ?? 0)
+  pre('n', 'tcpc.server_port', sock.tcpc.server_port ?? 8234)
+  pre('n', 'tcpc.reconn_interval', sock.tcpc.reconn_interval ?? 5)
+  pre('n', 'tcpc.ssl_mode', sock.tcpc.ssl_mode || 0)
+  pre('n', 'tcpc.ssl_verify', sock.tcpc.ssl_verify || 0)
+  pre('n', 'tcpc.regp_en', sock.tcpc.regp_en || 0)
+  pre('n', 'tcpc.regp_tim', sock.tcpc.regp_tim || 0)
+  pre('n', 'tcpc.regp_fmt', sock.tcpc.regp_fmt || 0)
+  pre('s', 'tcpc.regp_ctx', sock.tcpc.regp_ctx || '')
+  pre('n', 'tcpc.hrtp_en', sock.tcpc.hrtp_en || 0)
+  pre('n', 'tcpc.hrtp_tim', sock.tcpc.hrtp_tim || 60)
+  pre('n', 'tcpc.hrtp_fmt', sock.tcpc.hrtp_fmt || 0)
+  pre('s', 'tcpc.hrtp_ctx', sock.tcpc.hrtp_ctx || '')
+  pre('n', 'tcps.local_port', sock.tcps.local_port ?? 8029)
+  pre('n', 'tcps.conn_max_num', sock.tcps.conn_max_num ?? 4)
+  pre('n', 'tcps.timeout_handling', sock.tcps.timeout_handling ?? 0)
+  const udpc = sock.udpc || {}
+  pre('s', 'udpc.server_ip', udpc.server_ip || '')
+  pre('n', 'udpc.local_port', udpc.local_port ?? 0)
+  pre('n', 'udpc.server_port', udpc.server_port ?? 1593)
+  pre('n', 'udpc.short_en', udpc.short_en ?? 0)
+  pre('n', 'udpc.short_timeout', udpc.short_timeout ?? 60)
+  pre('n', 'udpc.keepalive', udpc.keepalive ?? 0)
+  pre('n', 'udpc.sock_timeout', udpc.sock_timeout ?? 5)
+  const httpc = sock.httpc || {}
+  pre('n', 'httpc.mode', httpc.mode ?? 0)
+  pre('s', 'httpc.url', encodeURIComponent(httpc.url || ''))
+  pre('s', 'httpc.header', encodeURIComponent(httpc.header || ''))
+  pre('s', 'httpc.server_ip', httpc.server_ip || '')
+  pre('n', 'httpc.server_port', httpc.server_port ?? 80)
+  pre('n', 'httpc.resp_timeout', httpc.resp_timeout ?? 10)
+  pre('n', 'httpc.cut_header', httpc.cut_header ?? 1)
+  pre('n', 'httpc.local_port', httpc.local_port ?? 0)
+  return p
+}
+
+const buildMqttParams = (mqtt, i) => {
+  const p = []
+  const pre = (ns, key, val) => p.push(`${ns}_DTU_MQTT[${i}].${key}=${val}`)
+  pre('n', 'enable', mqtt.enable)
+  pre('s', 'name', mqtt.name || `MQTT_DTU${i}`)
+  pre('n', 'mqtt_ver', mqtt.mqtt_ver || 4)
+  pre('s', 'client_id', mqtt.client_id || '')
+  pre('s', 'server_ip', mqtt.server_ip || '')
+  pre('n', 'server_port', mqtt.server_port || 1883)
+  pre('n', 'keepalive', mqtt.keepalive || 60)
+  pre('n', 'reconn_space', mqtt.reconn_space || 5)
+  pre('n', 'clean_session', mqtt.clean_session || 0)
+  pre('n', 'conn_verify', mqtt.conn_verify || 0)
+  pre('s', 'conn_user_name', mqtt.conn_user_name || '')
+  pre('s', 'conn_user_password', mqtt.conn_user_password || '')
+  pre('n', 'ssl_mode', mqtt.ssl_mode || 0)
+  pre('n', 'ssl_verify', mqtt.ssl_verify || 0)
+  return p
 }
 
 const buildParams = () => {
   const p = []
   dtuList.value.forEach((c, i) => {
     let enable = c.enable
-    if (props.embedded) {
-      enable = isChannelEnabled(i) ? 1 : 0
-    }
+    if (props.embedded) enable = isChannelEnabled(i) ? 1 : 0
     p.push(`n_DTU[${i}].enable=${enable}`)
     p.push(`n_DTU[${i}].wkmod=${c.wkmod}`)
     p.push(`n_DTU[${i}].sock_index=${i}`)
@@ -384,6 +609,25 @@ const buildParams = () => {
       const sub = c.subsActive[s - 1] || { topic: '', qos: 0 }
       p.push(`s_DTU[${i}].sub${s}_topic=${encodeURIComponent(sub.topic || '')}`)
       p.push(`n_DTU[${i}].sub${s}_qos=${sub.qos || 0}`)
+    }
+
+    const treatOn = props.embedded ? isChannelEnabled(i) : enable === 1
+    if (treatOn) {
+      const uart = uartList.value[i]
+      if (uart) {
+        p.push(`n_UART[${i}].baud_rate=${uart.baud_rate}`)
+        p.push(`n_UART[${i}].data_bit=${uart.data_bit}`)
+        p.push(`n_UART[${i}].stop_bit=${uart.stop_bit}`)
+        p.push(`n_UART[${i}].parity=${uart.parity}`)
+      }
+      if (c.wkmod === 0 || c.wkmod === 1) {
+        const sock = sockList.value[i]
+        if (sock) p.push(...buildDtuSockParams(sock, i))
+      }
+      if (c.wkmod === 2) {
+        const mqtt = mqttList.value[i]
+        if (mqtt) p.push(...buildMqttParams(mqtt, i))
+      }
     }
   })
   return p.join('&')
@@ -410,9 +654,7 @@ const handleRestart = async () => {
 }
 
 watch(visibleTabIndices, (tabs) => {
-  if (tabs.length && !tabs.includes(activeTab.value)) {
-    activeTab.value = tabs[0]
-  }
+  if (tabs.length && !tabs.includes(activeTab.value)) activeTab.value = tabs[0]
 })
 
 watch(() => props.enabledChannels, () => {
@@ -422,7 +664,9 @@ watch(() => props.enabledChannels, () => {
   if (firstOn !== undefined) activeTab.value = firstOn
 })
 
-onMounted(() => { loadData() })
+onMounted(() => {
+  if (props.autoLoad) loadData()
+})
 
 defineExpose({
   saveConfig,
@@ -461,11 +705,6 @@ defineExpose({
   font-weight: 600;
   text-decoration: underline;
 }
-.btn-link.hint-link {
-  display: inline-block;
-  margin: 8px 15px 0;
-  padding: 0;
-}
 .form-section { padding: 20px 15px; background: white; border-bottom: 1px solid #e8e8e8; }
 .section-title { font-weight: 600; font-size: 13px; color: #333; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e8e8e8; }
 .form-group { display: flex; align-items: flex-start; margin-bottom: 15px; gap: 20px; }
@@ -475,7 +714,7 @@ defineExpose({
 .input-error { border-color: #d32f2f !important; background: #ffebee; }
 .field-error-text { color: #d32f2f; font-size: 12px; margin-top: 4px; }
 .field-error-text.block { margin: 8px 0 8px 15px; }
-.hint-text { color: #888; font-size: 12px; margin: 4px 15px 0; line-height: 1.5; }
+.hint-text { color: #888; font-size: 12px; margin: 0 0 12px 15px; line-height: 1.5; }
 .sub-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; margin-left: 40px; }
 .sub-index { width: 28px; font-size: 12px; color: #666; }
 .sub-topic { flex: 1; max-width: 280px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; }
@@ -497,4 +736,10 @@ defineExpose({
 .modal-actions { display: flex; justify-content: center; gap: 15px; margin-top: 20px; }
 .btn-restart { padding: 8px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
 .btn-continue { padding: 8px 20px; background: white; color: #666; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-weight: 600; }
+.loading-spinner {
+  width: 36px; height: 36px; margin: 0 auto;
+  border: 3px solid #e5e7eb; border-top-color: #0066cc; border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

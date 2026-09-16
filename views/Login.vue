@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from '../i18n/useI18n.js'
 import { fetchLoginPubkey, login } from '../api/services.js'
@@ -37,6 +37,12 @@ const username = ref('admin')
 const password = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
+
+onMounted(() => {
+  if (route.query.error === 'unreachable') {
+    errorMsg.value = t('login.deviceUnreachable')
+  }
+})
 
 const onSubmit = async () => {
   errorMsg.value = ''

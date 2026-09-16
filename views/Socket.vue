@@ -37,8 +37,7 @@
             <select v-model.number="socketList[activeTab].mode">
               <option :value="0">{{ t('socket.tcpClient') }}</option>
               <option :value="1">{{ t('socket.tcpServer') }}</option>
-              <option :value="2">{{ t('socket.udpClient') }}</option>
-              <option :value="3">{{ t('socket.httpClient') }}</option>
+              <!-- 边缘暂未实现 UDP/HTTP，数传页自有通道 -->
             </select>
           </div>
         </div>
@@ -766,6 +765,8 @@ const loadData = async () => {
     if (socketConfig?.SOCK && Array.isArray(socketConfig.SOCK)) {
       socketList.value = socketConfig.SOCK.slice(0, 2).map(s => ({
         ...s,
+        // 边缘暂不支持 UDP/HTTP，旧配置回退为 TCP Client
+        mode: (Number(s.mode) === 2 || Number(s.mode) === 3) ? 0 : Number(s.mode) || 0,
         udpc: {
           server_ip: '192.168.20.21',
           local_port: 0,

@@ -2762,7 +2762,389 @@ local function set_network_config_values(args)
 end
 
 -- ==========================================================
+-- 数传专用 Socket（/etc/config/dtu_tunnel，与边缘 SOCKA/B 分离）
+-- ==========================================================
+
+local function default_dtu_sock_item(index)
+    local idx = index or 0
+    return {
+        enable = 0,
+        name = "SOCK_DTU" .. idx,
+        mode = 0,
+        tcpc = {
+            server_ip = "",
+            local_port = 0,
+            server_port = 8234,
+            dns_timeout = 30,
+            reconn_interval = 5,
+            ssl_mode = 0,
+            ssl_verify = 0,
+            ssl_server_name = "null",
+            ssl_client_name = "null",
+            ssl_client_key = "null",
+            regp_en = 0,
+            regp_fmt = 0,
+            regp_ctx = "",
+            regp_tim = 0,
+            hrtp_en = 0,
+            hrtp_fmt = 0,
+            hrtp_ctx = "",
+            hrtp_tim = 60
+        },
+        tcps = {
+            local_port = 8029,
+            conn_max_num = 4,
+            timeout_handling = 0,
+            idle_handling = 0,
+            idle_timeout = 3600
+        },
+        udpc = {
+            server_ip = "192.168.20.21",
+            local_port = 0,
+            server_port = 1593,
+            dns_timeout = 30,
+            ip_port_verify = 0,
+            short_en = 0,
+            short_timeout = 60,
+            keepalive = 0,
+            sock_timeout = 5
+        },
+        httpc = {
+            mode = 0,
+            url = "/Api/echo?",
+            header = "Connection: close\r\n",
+            cut_header = 1,
+            server_ip = "test.hlktech.com",
+            server_port = 80,
+            resp_timeout = 10,
+            local_port = 0
+        }
+    }
+end
+
+local function parse_sock_section_to_item(section)
+    if not section then return nil end
+    return {
+        enable = tonumber(section.enable) or 0,
+        name = section.name or section[".name"],
+        mode = tonumber(section.mode) or 0,
+        tcpc = {
+            server_ip = section.tcpc_server_ip or "",
+            local_port = tonumber(section.tcpc_local_port) or 0,
+            server_port = tonumber(section.tcpc_server_port) or 8234,
+            dns_timeout = tonumber(section.tcpc_dns_timeout) or 30,
+            reconn_interval = tonumber(section.tcpc_reconn_interval) or 5,
+            ssl_mode = tonumber(section.tcpc_ssl_mode) or 0,
+            ssl_verify = tonumber(section.tcpc_ssl_verify) or 0,
+            ssl_server_name = section.tcpc_ssl_server_name or "null",
+            ssl_client_name = section.tcpc_ssl_client_name or "null",
+            ssl_client_key = section.tcpc_ssl_client_key or "null",
+            regp_en = tonumber(section.tcpc_regp_en) or 0,
+            regp_fmt = tonumber(section.tcpc_regp_fmt) or 0,
+            regp_ctx = section.tcpc_regp_ctx or "",
+            regp_tim = tonumber(section.tcpc_regp_tim) or 0,
+            hrtp_en = tonumber(section.tcpc_hrtp_en) or 0,
+            hrtp_fmt = tonumber(section.tcpc_hrtp_fmt) or 0,
+            hrtp_ctx = section.tcpc_hrtp_ctx or "",
+            hrtp_tim = tonumber(section.tcpc_hrtp_tim) or 60
+        },
+        tcps = {
+            local_port = tonumber(section.tcps_local_port) or 8029,
+            conn_max_num = tonumber(section.tcps_conn_max_num) or 4,
+            timeout_handling = tonumber(section.tcps_timeout_handling) or 0,
+            idle_handling = tonumber(section.tcps_idle_handling) or 0,
+            idle_timeout = tonumber(section.tcps_idle_timeout) or 3600
+        },
+        udpc = {
+            server_ip = section.udpc_server_ip or "192.168.20.21",
+            local_port = tonumber(section.udpc_local_port) or 0,
+            server_port = tonumber(section.udpc_server_port) or 1593,
+            dns_timeout = tonumber(section.udpc_dns_timeout) or 30,
+            ip_port_verify = tonumber(section.udpc_ip_port_verify) or 0,
+            short_en = tonumber(section.udpc_short_en) or 0,
+            short_timeout = tonumber(section.udpc_short_timeout) or 60,
+            keepalive = tonumber(section.udpc_keepalive) or 0,
+            sock_timeout = tonumber(section.udpc_sock_timeout) or 5
+        },
+        httpc = {
+            mode = tonumber(section.httpc_mode) or 0,
+            url = section.httpc_url or "/Api/echo?",
+            header = section.httpc_header or "Connection: close\r\n",
+            cut_header = tonumber(section.httpc_cut_header) or 1,
+            server_ip = section.httpc_server_ip or "test.hlktech.com",
+            server_port = tonumber(section.httpc_server_port) or 80,
+            resp_timeout = tonumber(section.httpc_resp_timeout) or 10,
+            local_port = tonumber(section.httpc_local_port) or 0
+        }
+    }
+end
+
+local function write_sock_item_to_uci(cursor, pkg, section_name, uci_type, sock_item)
+    cursor:set(pkg, section_name, uci_type)
+    cursor:set(pkg, section_name, "enable", tostring(sock_item.enable or 0))
+    cursor:set(pkg, section_name, "name", sock_item.name or section_name)
+    cursor:set(pkg, section_name, "mode", tostring(sock_item.mode or 0))
+    if sock_item.tcpc then
+        cursor:set(pkg, section_name, "tcpc_server_ip", sock_item.tcpc.server_ip or "")
+        cursor:set(pkg, section_name, "tcpc_local_port", tostring(sock_item.tcpc.local_port or 0))
+        cursor:set(pkg, section_name, "tcpc_server_port", tostring(sock_item.tcpc.server_port or 8234))
+        cursor:set(pkg, section_name, "tcpc_dns_timeout", tostring(sock_item.tcpc.dns_timeout or 30))
+        cursor:set(pkg, section_name, "tcpc_reconn_interval", tostring(sock_item.tcpc.reconn_interval or 5))
+        cursor:set(pkg, section_name, "tcpc_ssl_mode", tostring(sock_item.tcpc.ssl_mode or 0))
+        cursor:set(pkg, section_name, "tcpc_ssl_verify", tostring(sock_item.tcpc.ssl_verify or 0))
+        cursor:set(pkg, section_name, "tcpc_ssl_server_name", sock_item.tcpc.ssl_server_name or "null")
+        cursor:set(pkg, section_name, "tcpc_ssl_client_name", sock_item.tcpc.ssl_client_name or "null")
+        cursor:set(pkg, section_name, "tcpc_ssl_client_key", sock_item.tcpc.ssl_client_key or "null")
+        cursor:set(pkg, section_name, "tcpc_regp_en", tostring(sock_item.tcpc.regp_en or 0))
+        cursor:set(pkg, section_name, "tcpc_regp_fmt", tostring(sock_item.tcpc.regp_fmt or 0))
+        cursor:set(pkg, section_name, "tcpc_regp_ctx", sock_item.tcpc.regp_ctx or "")
+        cursor:set(pkg, section_name, "tcpc_regp_tim", tostring(sock_item.tcpc.regp_tim or 0))
+        cursor:set(pkg, section_name, "tcpc_hrtp_en", tostring(sock_item.tcpc.hrtp_en or 0))
+        cursor:set(pkg, section_name, "tcpc_hrtp_fmt", tostring(sock_item.tcpc.hrtp_fmt or 0))
+        cursor:set(pkg, section_name, "tcpc_hrtp_ctx", sock_item.tcpc.hrtp_ctx or "")
+        cursor:set(pkg, section_name, "tcpc_hrtp_tim", tostring(sock_item.tcpc.hrtp_tim or 60))
+    end
+    if sock_item.tcps then
+        cursor:set(pkg, section_name, "tcps_local_port", tostring(sock_item.tcps.local_port or 8029))
+        cursor:set(pkg, section_name, "tcps_conn_max_num", tostring(sock_item.tcps.conn_max_num or 4))
+        cursor:set(pkg, section_name, "tcps_timeout_handling", tostring(sock_item.tcps.timeout_handling or 0))
+        cursor:set(pkg, section_name, "tcps_idle_handling", tostring(sock_item.tcps.idle_handling or 0))
+        cursor:set(pkg, section_name, "tcps_idle_timeout", tostring(sock_item.tcps.idle_timeout or 3600))
+    end
+    if sock_item.udpc then
+        cursor:set(pkg, section_name, "udpc_server_ip", sock_item.udpc.server_ip or "192.168.20.21")
+        cursor:set(pkg, section_name, "udpc_local_port", tostring(sock_item.udpc.local_port or 0))
+        cursor:set(pkg, section_name, "udpc_server_port", tostring(sock_item.udpc.server_port or 1593))
+        cursor:set(pkg, section_name, "udpc_dns_timeout", tostring(sock_item.udpc.dns_timeout or 30))
+        cursor:set(pkg, section_name, "udpc_ip_port_verify", tostring(sock_item.udpc.ip_port_verify or 0))
+        cursor:set(pkg, section_name, "udpc_short_en", tostring(sock_item.udpc.short_en or 0))
+        cursor:set(pkg, section_name, "udpc_short_timeout", tostring(sock_item.udpc.short_timeout or 60))
+        cursor:set(pkg, section_name, "udpc_keepalive", tostring(sock_item.udpc.keepalive or 0))
+        cursor:set(pkg, section_name, "udpc_sock_timeout", tostring(sock_item.udpc.sock_timeout or 5))
+    end
+    if sock_item.httpc then
+        cursor:set(pkg, section_name, "httpc_mode", tostring(sock_item.httpc.mode or 0))
+        cursor:set(pkg, section_name, "httpc_url", sock_item.httpc.url or "/Api/echo?")
+        cursor:set(pkg, section_name, "httpc_header", sock_item.httpc.header or "Connection: close\r\n")
+        cursor:set(pkg, section_name, "httpc_cut_header", tostring(sock_item.httpc.cut_header or 1))
+        cursor:set(pkg, section_name, "httpc_server_ip", sock_item.httpc.server_ip or "test.hlktech.com")
+        cursor:set(pkg, section_name, "httpc_server_port", tostring(sock_item.httpc.server_port or 80))
+        cursor:set(pkg, section_name, "httpc_resp_timeout", tostring(sock_item.httpc.resp_timeout or 10))
+        cursor:set(pkg, section_name, "httpc_local_port", tostring(sock_item.httpc.local_port or 0))
+    end
+end
+
+-- 数传隧道独立 UCI 包（与边缘 /etc/config/comm_tunnel 分离）
+local DTU_TUNNEL_PKG = "dtu_tunnel"
+
+local function load_dtu_sock_from_uci()
+    os.execute("[ -f /etc/config/" .. DTU_TUNNEL_PKG .. " ] || touch /etc/config/" .. DTU_TUNNEL_PKG)
+    local cursor = uci_lib.cursor()
+    local list = {
+        default_dtu_sock_item(0),
+        default_dtu_sock_item(1)
+    }
+    for i = 0, 1 do
+        local name = "SOCK_DTU" .. i
+        local section = cursor:get_all(DTU_TUNNEL_PKG, name)
+        if not section then
+            -- 兼容：曾写在 comm_tunnel 的 SOCK_DTU*
+            section = cursor:get_all("comm_tunnel", name)
+        end
+        if section then
+            local item = parse_sock_section_to_item(section)
+            item.name = name
+            list[i + 1] = item
+        else
+            -- 再兼容：从边缘 SOCKA/B 拷贝初始值
+            local edge_name = (i == 0) and "SOCKA" or "SOCKB"
+            local edge = cursor:get_all("comm_tunnel", edge_name)
+            if edge then
+                local item = parse_sock_section_to_item(edge)
+                item.name = name
+                list[i + 1] = item
+            end
+        end
+    end
+    return list
+end
+
+local function save_dtu_sock_to_uci(sock_list)
+    os.execute("[ -f /etc/config/" .. DTU_TUNNEL_PKG .. " ] || touch /etc/config/" .. DTU_TUNNEL_PKG)
+    local cursor = uci_lib.cursor()
+    for i = 0, 1 do
+        local name = "SOCK_DTU" .. i
+        local item = (sock_list and sock_list[i + 1]) or default_dtu_sock_item(i)
+        item.name = name
+        write_sock_item_to_uci(cursor, DTU_TUNNEL_PKG, name, "sock", item)
+    end
+    cursor:commit(DTU_TUNNEL_PKG)
+    os.execute("touch /tmp/dtu_tunnel_commit")
+    os.execute("touch /tmp/dtu_commit")
+    return true
+end
+
+local function apply_nested_sock_param(target, key, v)
+    local parts = {}
+    for part in string.gmatch(key, "[^%.]+") do
+        table.insert(parts, part)
+    end
+    if #parts == 0 then return end
+    if #parts == 1 then
+        target[parts[1]] = tonumber(v) or v
+        return
+    end
+    local cur = target
+    for i = 1, #parts - 1 do
+        if type(cur[parts[i]]) ~= "table" then
+            cur[parts[i]] = {}
+        end
+        cur = cur[parts[i]]
+    end
+    cur[parts[#parts]] = tonumber(v) or v
+end
+
+-- 数传专用 MQTT（独立包 dtu_tunnel，与边缘 MQTT1/2 分离）
+-- ==========================================================
+
+local function default_dtu_mqtt_item(index)
+    local idx = index or 0
+    return {
+        enable = 0,
+        name = "MQTT_DTU" .. idx,
+        mqtt_ver = 4,
+        server_ip = "",
+        server_port = 1883,
+        loacl_port = 0,
+        keepalive = 60,
+        reconn_space = 5,
+        clean_session = 1,
+        client_id = "",
+        conn_verify = 0,
+        conn_user_name = "",
+        conn_user_password = "",
+        ssl_mode = 0,
+        ssl_verify = 0,
+        ssl_server_name = "null",
+        ssl_client_name = "null",
+        ssl_client_key = "null",
+        will_flag = 0,
+        will = {
+            topic = "/will",
+            msg = "offline",
+            qos = 0,
+            retention = 0
+        }
+    }
+end
+
+local function parse_mqtt_section_to_item(section)
+    if not section then return nil end
+    return {
+        enable = tonumber(section.enable) or 0,
+        name = section.name or section[".name"],
+        mqtt_ver = tonumber(section.mqtt_ver) or 4,
+        server_ip = section.server_ip or "",
+        server_port = tonumber(section.server_port) or 1883,
+        loacl_port = tonumber(section.local_port) or 0,
+        keepalive = tonumber(section.keepalive) or 60,
+        reconn_space = tonumber(section.reconn_space) or 5,
+        clean_session = tonumber(section.clean_session) or 0,
+        client_id = section.client_id or "",
+        conn_verify = tonumber(section.conn_verify) or 0,
+        conn_user_name = section.conn_user_name or "",
+        conn_user_password = section.conn_password or "",
+        ssl_mode = tonumber(section.ssl_mode) or 0,
+        ssl_verify = tonumber(section.ssl_verify) or 0,
+        ssl_server_name = section.ssl_server_name or "null",
+        ssl_client_name = section.ssl_client_name or "null",
+        ssl_client_key = section.ssl_client_key or "null",
+        will_flag = tonumber(section.will_flag) or 0,
+        will = {
+            topic = section.will_topic or "/will",
+            msg = section.will_msg or "offline",
+            qos = tonumber(section.will_qos) or 0,
+            retention = tonumber(section.will_retention) or 0
+        }
+    }
+end
+
+local function write_mqtt_item_to_uci(cursor, pkg, section_name, uci_type, mqtt_item)
+    cursor:set(pkg, section_name, uci_type)
+    cursor:set(pkg, section_name, "enable", tostring(mqtt_item.enable or 0))
+    cursor:set(pkg, section_name, "name", mqtt_item.name or section_name)
+    cursor:set(pkg, section_name, "mqtt_ver", tostring(mqtt_item.mqtt_ver or 4))
+    cursor:set(pkg, section_name, "server_ip", mqtt_item.server_ip or "")
+    cursor:set(pkg, section_name, "server_port", tostring(mqtt_item.server_port or 1883))
+    cursor:set(pkg, section_name, "local_port", tostring(mqtt_item.loacl_port or 0))
+    cursor:set(pkg, section_name, "keepalive", tostring(mqtt_item.keepalive or 60))
+    cursor:set(pkg, section_name, "reconn_space", tostring(mqtt_item.reconn_space or 5))
+    cursor:set(pkg, section_name, "clean_session", tostring(mqtt_item.clean_session or 0))
+    cursor:set(pkg, section_name, "client_id", mqtt_item.client_id or "")
+    cursor:set(pkg, section_name, "conn_verify", tostring(mqtt_item.conn_verify or 0))
+    cursor:set(pkg, section_name, "conn_user_name", mqtt_item.conn_user_name or "")
+    cursor:set(pkg, section_name, "conn_password", mqtt_item.conn_user_password or "")
+    cursor:set(pkg, section_name, "ssl_mode", tostring(mqtt_item.ssl_mode or 0))
+    cursor:set(pkg, section_name, "ssl_verify", tostring(mqtt_item.ssl_verify or 0))
+    cursor:set(pkg, section_name, "ssl_server_name", mqtt_item.ssl_server_name or "null")
+    cursor:set(pkg, section_name, "ssl_client_name", mqtt_item.ssl_client_name or "null")
+    cursor:set(pkg, section_name, "ssl_client_key", mqtt_item.ssl_client_key or "null")
+    cursor:set(pkg, section_name, "will_flag", tostring(mqtt_item.will_flag or 0))
+    if mqtt_item.will then
+        cursor:set(pkg, section_name, "will_topic", mqtt_item.will.topic or "/will")
+        cursor:set(pkg, section_name, "will_msg", mqtt_item.will.msg or "offline")
+        cursor:set(pkg, section_name, "will_qos", tostring(mqtt_item.will.qos or 0))
+        cursor:set(pkg, section_name, "will_retention", tostring(mqtt_item.will.retention or 0))
+    end
+end
+
+local function load_dtu_mqtt_from_uci()
+    os.execute("[ -f /etc/config/" .. DTU_TUNNEL_PKG .. " ] || touch /etc/config/" .. DTU_TUNNEL_PKG)
+    local cursor = uci_lib.cursor()
+    local list = {
+        default_dtu_mqtt_item(0),
+        default_dtu_mqtt_item(1)
+    }
+    for i = 0, 1 do
+        local name = "MQTT_DTU" .. i
+        local section = cursor:get_all(DTU_TUNNEL_PKG, name)
+        if not section then
+            section = cursor:get_all("comm_tunnel", name)
+        end
+        if section then
+            local item = parse_mqtt_section_to_item(section)
+            item.name = name
+            list[i + 1] = item
+        else
+            local edge_name = "MQTT" .. (i + 1)
+            local edge = cursor:get_all("comm_tunnel", edge_name)
+            if edge then
+                local item = parse_mqtt_section_to_item(edge)
+                item.name = name
+                list[i + 1] = item
+            end
+        end
+    end
+    return list
+end
+
+local function save_dtu_mqtt_to_uci(mqtt_list)
+    os.execute("[ -f /etc/config/" .. DTU_TUNNEL_PKG .. " ] || touch /etc/config/" .. DTU_TUNNEL_PKG)
+    local cursor = uci_lib.cursor()
+    for i = 0, 1 do
+        local name = "MQTT_DTU" .. i
+        local item = (mqtt_list and mqtt_list[i + 1]) or default_dtu_mqtt_item(i)
+        item.name = name
+        write_mqtt_item_to_uci(cursor, DTU_TUNNEL_PKG, name, "mqtt", item)
+    end
+    cursor:commit(DTU_TUNNEL_PKG)
+    os.execute("touch /tmp/dtu_tunnel_commit")
+    os.execute("touch /tmp/dtu_commit")
+    return true
+end
+
 -- 数传 (DTU) 配置：固定两路，对应 Uart1 / Uart2
+-- 串口参数在 dtu；Socket/MQTT 在 /etc/config/dtu_tunnel（与边缘 comm_tunnel 隔离）
 -- ==========================================================
 
 local function default_dtu_channel(uart_index)
@@ -2775,7 +3157,7 @@ local function default_dtu_channel(uart_index)
         enable = 0,
         wkmod = 0,          -- 0=NET 1=HTTP 2=MQTT
         uart_index = idx,
-        -- 默认 Uart1→SOCKA/MQTT1，Uart2→SOCKB/MQTT2，避免双路抢同一通道
+        -- 绑定 dtu_tunnel.SOCK_DTU{i} / MQTT_DTU{i}
         sock_index = idx,
         mqtt_index = idx,
         pack_len = 1024,
@@ -2948,7 +3330,10 @@ end
 
 local function set_dtu_config_values(args)
     local list = load_dtu_config_from_uci()
+    local dtu_socks = load_dtu_sock_from_uci()
+    local dtu_mqtts = load_dtu_mqtt_from_uci()
     local roles = nil
+    local uart_touched = false
 
     for k, v in pairs(args) do
         -- 网关页角色：n_role[0]=0|1|2
@@ -2958,6 +3343,47 @@ local function set_dtu_config_values(args)
             if role_index >= 1 and role_index <= 2 then
                 if not roles then roles = {} end
                 roles[role_index] = tonumber(v) or 0
+            end
+        end
+
+        -- 数传专用 SOCK：n_DTU_SOCK[0].mode / s_DTU_SOCK[0].tcpc.server_ip
+        local sp, si, skey = string.match(k, "([ns])_DTU_SOCK%[(%d+)%]%.(.+)")
+        if sp and si and skey then
+            si = tonumber(si) + 1
+            if si >= 1 and si <= 2 then
+                if not dtu_socks[si] then
+                    dtu_socks[si] = default_dtu_sock_item(si - 1)
+                end
+                apply_nested_sock_param(dtu_socks[si], skey, v)
+            end
+        end
+
+        -- 数传页内联串口：n_UART[0].baud_rate 等（仅更新对应口，不整表重写角色）
+        local ui, ukey = string.match(k, "n_UART%[(%d+)%]%.(.+)")
+        if ui and ukey then
+            ui = tonumber(ui) + 1
+            if not uart_config_loaded then
+                local loaded = load_uart_config_from_uci()
+                if loaded then
+                    uart_config = loaded
+                    uart_config_loaded = true
+                end
+            end
+            if uart_config.UART and uart_config.UART[ui] then
+                uart_config.UART[ui][ukey] = tonumber(v) or v
+                uart_touched = true
+            end
+        end
+
+        -- 数传专用 MQTT：n_DTU_MQTT[0].server_ip（与边缘 MQTT1/2 分离）
+        local mp, mi, mkey = string.match(k, "([ns])_DTU_MQTT%[(%d+)%]%.(.+)")
+        if mp and mi and mkey then
+            mi = tonumber(mi) + 1
+            if mi >= 1 and mi <= 2 then
+                if not dtu_mqtts[mi] then
+                    dtu_mqtts[mi] = default_dtu_mqtt_item(mi - 1)
+                end
+                apply_nested_sock_param(dtu_mqtts[mi], mkey, v)
             end
         end
 
@@ -2988,15 +3414,15 @@ local function set_dtu_config_values(args)
                 elseif key == "prefix_enable" then
                     ch.prefix_enable = tonumber(v) or 0
                 else
-                    local si, f2 = string.match(key, "sub(%d+)_(.+)")
-                    if si and f2 then
-                        si = tonumber(si)
-                        if si >= 1 and si <= 15 then
-                            if not ch.subs[si] then ch.subs[si] = { topic = "", qos = 0 } end
+                    local subi, f2 = string.match(key, "sub(%d+)_(.+)")
+                    if subi and f2 then
+                        subi = tonumber(subi)
+                        if subi >= 1 and subi <= 15 then
+                            if not ch.subs[subi] then ch.subs[subi] = { topic = "", qos = 0 } end
                             if f2 == "topic" then
-                                ch.subs[si].topic = tostring(v or "")
+                                ch.subs[subi].topic = tostring(v or "")
                             elseif f2 == "qos" then
-                                ch.subs[si].qos = tonumber(v) or 0
+                                ch.subs[subi].qos = tonumber(v) or 0
                             end
                         end
                     end
@@ -3014,19 +3440,29 @@ local function set_dtu_config_values(args)
         end
     end
 
-    -- 通道固定：Uart1→SOCKA/MQTT1，Uart2→SOCKB/MQTT2（纠正历史交叉绑定）
+    -- 通道固定：Uart1→SOCK_DTU0/MQTT_DTU0，Uart2→SOCK_DTU1/MQTT_DTU1
     for i = 1, 2 do
         if list.DTU[i] then
             list.DTU[i].uart_index = i - 1
             list.DTU[i].sock_index = i - 1
             list.DTU[i].mqtt_index = i - 1
         end
+        if dtu_socks[i] then
+            dtu_socks[i].name = "SOCK_DTU" .. (i - 1)
+        end
+        if dtu_mqtts[i] then
+            dtu_mqtts[i].name = "MQTT_DTU" .. (i - 1)
+        end
     end
 
     local ok = save_dtu_config_to_uci(list)
     if ok then
-        -- 数传使能口强制 work_mode=0；若带 n_role 则按角色写 work_mode
+        save_dtu_sock_to_uci(dtu_socks)
+        save_dtu_mqtt_to_uci(dtu_mqtts)
         apply_dtu_uart_side_effects(list, roles)
+        if uart_touched then
+            save_uart_config_to_uci(uart_config)
+        end
     end
     return ok
 end
@@ -4166,6 +4602,8 @@ local methods = {
         get_dtu_config = {
             function(req, msg)
                 local cfg = load_dtu_config_from_uci()
+                cfg.SOCK = load_dtu_sock_from_uci()
+                cfg.MQTT = load_dtu_mqtt_from_uci()
                 reply(req, cfg)
             end,
             {}
@@ -4514,7 +4952,8 @@ local methods = {
                     (os.execute("test -f /tmp/uart_commit") == 0) or
                     (os.execute("test -f /tmp/comm_commit") == 0) or
                     (os.execute("test -f /tmp/edge_commit") == 0) or
-                    (os.execute("test -f /tmp/dtu_commit") == 0)
+                    (os.execute("test -f /tmp/dtu_commit") == 0) or
+                    (os.execute("test -f /tmp/dtu_tunnel_commit") == 0)
 
                 if not has_any_commit then
                     log_info("No configuration changes detected, skipping restart.")
@@ -4550,10 +4989,10 @@ local methods = {
                 os.execute("rm -f /tmp/cloud_CLOUD_status")
                 table.insert(cmd_parts, "/etc/init.d/cron restart")
 
-                -- 数传：UCI -> bin 后重启 hlk_dtu（init 内也会再 sync 一次）
+                -- 数传：仅 dtu/dtu_tunnel/uart 变更时 UCI→bin 并重启（不因边缘 comm_commit 联动）
                 if (os.execute("test -f /tmp/dtu_commit") == 0) or
-                   (os.execute("test -f /tmp/uart_commit") == 0) or
-                   (os.execute("test -f /tmp/comm_commit") == 0) then
+                   (os.execute("test -f /tmp/dtu_tunnel_commit") == 0) or
+                   (os.execute("test -f /tmp/uart_commit") == 0) then
                     table.insert(cmd_parts, "/usr/sbin/hlk_dtu_sync uci2bin all")
                     table.insert(cmd_parts, "/etc/init.d/hlk_dtu restart")
                 end

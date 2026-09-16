@@ -355,11 +355,13 @@ function _M.decrypt_login_payload(password_enc, expect_nonce)
     if nonce ~= expect_nonce then
         return nil
     end
+    --[[
     local ts = tonumber(ts_str)
     local now = ngx.time()
     if not ts or math.abs(now - ts) > TS_SKEW then
         return nil
     end
+    ]]--
     if not _M.consume_nonce(nonce) then
         return nil
     end

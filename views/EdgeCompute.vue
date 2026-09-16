@@ -1124,7 +1124,8 @@ import { useServiceControl } from '../composables/useServiceControl.js'
 const props = defineProps({
   hideGatewayEnable: { type: Boolean, default: false },
   // 嵌入网关页时仅允许选择「边缘」角色串口，如 [1] / [2] / [1,2]；空/未传则两路都可选
-  allowedSerialPorts: { type: Array, default: null }
+  allowedSerialPorts: { type: Array, default: null },
+  autoLoad: { type: Boolean, default: true }
 })
 
 // 使用 i18n
@@ -1132,7 +1133,7 @@ const { t } = useI18n()
 const { isServiceRestarting, restartService } = useServiceControl()
 
 // 响应式数据
-const loading = ref(true)
+const loading = ref(props.autoLoad)
 const error = ref(null)
 const importing = ref(false)
 const activeTab = ref(props.hideGatewayEnable ? 1 : 0)
@@ -4444,6 +4445,7 @@ const loadData = async () => {
   } catch (err) {
     error.value = t('common.loadError') + ': ' + err.message
     console.error('配置加载错误:', err)
+    throw err
   } finally {
     loading.value = false
   }
@@ -4455,8 +4457,14 @@ onMounted(() => {
   if (slaveList.value[0] && slaveList.value[0].isSystem) {
     slaveList.value[0].points = [...systemPoints.value]
   }
-  
-  loadData()
+
+  if (props.autoLoad) {
+    loadData()
+  }
+})
+
+defineExpose({
+  loadData
 })
 </script>
 
